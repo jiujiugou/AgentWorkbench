@@ -1,0 +1,17 @@
+**/bin
+**/obj
+**/node_modules
+web/dist
+.git
+.gitignore
+.vs
+.vscode
+.idea
+data
+logs
+*.db
+*.db-shm
+*.db-wal
+.env
+docs
+README.md

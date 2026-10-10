@@ -1,0 +1,401 @@
+{
+  "milestone": "industrial-rag",
+  "generatedAt": "2026-10-08T10:54:49.911751+00:00",
+  "engine": "local",
+  "embedding": "ollama/bge-m3",
+  "embeddingLive": true,
+  "corpus": {
+    "documents": 49,
+    "chunks": 423
+  },
+  "evalSet": {
+    "version": "0.1",
+    "positive": 30,
+    "negative": 5
+  },
+  "settings": {
+    "topK": 5,
+    "candidateK": 20,
+    "corpusDirs": "industrial,vendor"
+  },
+  "metrics": {
+    "recallAt5": {
+      "fts": 0.3,
+      "vector": 0.8,
+      "fusion": 0.8,
+      "threshold": 0.9,
+      "pass": false
+    },
+    "mrr": {
+      "fts": 0.2233,
+      "vector": 0.7139,
+      "fusion": 0.6678,
+      "threshold": 0.7,
+      "pass": false
+    },
+    "negativeFalseHitRate": {
+      "value": 1.0,
+      "threshold": 0.2,
+      "pass": false,
+      "falseHits": 5,
+      "total": 5
+    },
+    "vectorContribution": {
+      "recallDelta": 0.5,
+      "mrrDelta": 0.4445
+    }
+  },
+  "perQuery": [
+    {
+      "id": "MB-001",
+      "kind": "positive",
+      "query": "读保持寄存器返回 02 异常码，怎么办",
+      "expected": "MB-001",
+      "rankFusion": 2,
+      "rankFts": 5,
+      "rankVector": 3,
+      "top1": "汇川H5U-Modbus协议与异常码.pdf"
+    },
+    {
+      "id": "MB-002",
+      "kind": "positive",
+      "query": "写多个寄存器时报 01 异常码是什么意思",
+      "expected": "MB-002",
+      "rankFusion": 2,
+      "rankFts": 2,
+      "rankVector": 4,
+      "top1": "MB-001-异常码 0x02 非法数据地址.pdf"
+    },
+    {
+      "id": "MB-003",
+      "kind": "positive",
+      "query": "写入时报 03 异常码，数据看起来没问题啊",
+      "expected": "MB-003",
+      "rankFusion": 2,
+      "rankFts": 0,
+      "rankVector": 1,
+      "top1": "MB-001-异常码 0x02 非法数据地址.pdf"
+    },
+    {
+      "id": "MB-004",
+      "kind": "positive",
+      "query": "报 04 异常码，设备是不是坏了",
+      "expected": "MB-004",
+      "rankFusion": 2,
+      "rankFts": 0,
+      "rankVector": 1,
+      "top1": "MB-001-异常码 0x02 非法数据地址.pdf"
+    },
+    {
+      "id": "MB-005",
+      "kind": "positive",
+      "query": "时不时报 06 从站忙，需要重试吗",
+      "expected": "MB-005",
+      "rankFusion": 1,
+      "rankFts": 1,
+      "rankVector": 1,
+      "top1": "MB-005-异常码 0x06 从站忙.pdf"
+    },
+    {
+      "id": "MB-006",
+      "kind": "positive",
+      "query": "经过网关后读不到数据，报 0B",
+      "expected": "MB-006",
+      "rankFusion": 1,
+      "rankFts": 0,
+      "rankVector": 1,
+      "top1": "MB-006-异常码 0x0B 网关目标设备无响应（串口网关场景）.pdf"
+    },
+    {
+      "id": "NET-001",
+      "kind": "positive",
+      "query": "TCP 连不上从站，超时",
+      "expected": "NET-001",
+      "rankFusion": 0,
+      "rankFts": 0,
+      "rankVector": 0,
+      "top1": "汇川H5U-以太网与ModbusTCP通信.pdf"
+    },
+    {
+      "id": "NET-002",
+      "kind": "positive",
+      "query": "TCP 连接正常，但发什么都没回应",
+      "expected": "NET-002",
+      "rankFusion": 5,
+      "rankFts": 0,
+      "rankVector": 2,
+      "top1": "汇川H5U-以太网与ModbusTCP通信.pdf"
+    },
+    {
+      "id": "NET-003",
+      "kind": "positive",
+      "query": "程序下载完了但读不到数据",
+      "expected": "NET-003",
+      "rankFusion": 0,
+      "rankFts": 0,
+      "rankVector": 0,
+      "top1": "汇川H5U-指令错误代码附录.pdf"
+    },
+    {
+      "id": "NET-004",
+      "kind": "positive",
+      "query": "设备偶尔显示离线，但过一会又好了",
+      "expected": "NET-004",
+      "rankFusion": 1,
+      "rankFts": 0,
+      "rankVector": 1,
+      "top1": "NET-004-超时时间设置过短导致误判离线.pdf"
+    },
+    {
+      "id": "NET-005",
+      "kind": "positive",
+      "query": "网络恢复后数据不刷新了",
+      "expected": "NET-005",
+      "rankFusion": 1,
+      "rankFts": 0,
+      "rankVector": 1,
+      "top1": "NET-005-断线重连后未复位会话状态.pdf"
+    },
+    {
+      "id": "ADDR-001",
+      "kind": "positive",
+      "query": "读 40001 读到的值不对，像是隔壁寄存器",
+      "expected": "ADDR-001",
+      "rankFusion": 1,
+      "rankFts": 1,
+      "rankVector": 1,
+      "top1": "ADDR-001-4xxxx 基准偏移差 1.pdf"
+    },
+    {
+      "id": "ADDR-002",
+      "kind": "positive",
+      "query": "读上来的数值大得离谱或者完全对不上",
+      "expected": "ADDR-002",
+      "rankFusion": 3,
+      "rankFts": 0,
+      "rankVector": 3,
+      "top1": "ADDR-006-量程转换未做（工程值 vs 原始值）.pdf"
+    },
+    {
+      "id": "ADDR-003",
+      "kind": "positive",
+      "query": "浮点数读出来是天文数字",
+      "expected": "ADDR-003",
+      "rankFusion": 1,
+      "rankFts": 0,
+      "rankVector": 1,
+      "top1": "ADDR-003-32 位值的字序反了（高低字颠倒）.pdf"
+    },
+    {
+      "id": "ADDR-004",
+      "kind": "positive",
+      "query": "负值读出来变成 65535 附近的大数",
+      "expected": "ADDR-004",
+      "rankFusion": 1,
+      "rankFts": 1,
+      "rankVector": 1,
+      "top1": "ADDR-004-有符号_无符号解析错误.pdf"
+    },
+    {
+      "id": "ADDR-005",
+      "kind": "positive",
+      "query": "读线圈状态全是 0，但设备明明有输出",
+      "expected": "ADDR-005",
+      "rankFusion": 0,
+      "rankFts": 0,
+      "rankVector": 0,
+      "top1": "汇川H5U-Modbus协议与异常码.pdf"
+    },
+    {
+      "id": "ADDR-006",
+      "kind": "positive",
+      "query": "温度读出来是 8500，实际应该是 85 度",
+      "expected": "ADDR-006",
+      "rankFusion": 1,
+      "rankFts": 1,
+      "rankVector": 1,
+      "top1": "ADDR-006-量程转换未做（工程值 vs 原始值）.pdf"
+    },
+    {
+      "id": "RTU-001",
+      "kind": "positive",
+      "query": "串口读不到数据，全是乱码或者超时",
+      "expected": "RTU-001",
+      "rankFusion": 0,
+      "rankFts": 0,
+      "rankVector": 0,
+      "top1": "汇川H5U-指令错误代码附录.pdf"
+    },
+    {
+      "id": "RTU-002",
+      "kind": "positive",
+      "query": "波特率对了还是读不到",
+      "expected": "RTU-002",
+      "rankFusion": 0,
+      "rankFts": 0,
+      "rankVector": 0,
+      "top1": "RTU-001-波特率不匹配.pdf"
+    },
+    {
+      "id": "RTU-003",
+      "kind": "positive",
+      "query": "偶尔丢包，偶发 CRC 错误",
+      "expected": "RTU-003",
+      "rankFusion": 1,
+      "rankFts": 1,
+      "rankVector": 1,
+      "top1": "RTU-003-CRC 校验失败（线路干扰）.pdf"
+    },
+    {
+      "id": "RTU-004",
+      "kind": "positive",
+      "query": "一个从站都读不到，线明明接好了",
+      "expected": "RTU-004",
+      "rankFusion": 0,
+      "rankFts": 0,
+      "rankVector": 0,
+      "top1": "汇川H5U-指令错误代码附录.pdf"
+    },
+    {
+      "id": "RTU-005",
+      "kind": "positive",
+      "query": "距离一远就不稳定，加中继又好",
+      "expected": "RTU-005",
+      "rankFusion": 1,
+      "rankFts": 0,
+      "rankVector": 1,
+      "top1": "RTU-005-缺少终端电阻导致长距离通信不稳定.pdf"
+    },
+    {
+      "id": "OPC-001",
+      "kind": "positive",
+      "query": "OPC UA 读取报节点不存在",
+      "expected": "OPC-001",
+      "rankFusion": 1,
+      "rankFts": 2,
+      "rankVector": 1,
+      "top1": "OPC-001-节点不存在（BadNodeIdUnknown）.pdf"
+    },
+    {
+      "id": "OPC-002",
+      "kind": "positive",
+      "query": "OPC UA 连不上，报证书错误",
+      "expected": "OPC-002",
+      "rankFusion": 1,
+      "rankFts": 2,
+      "rankVector": 1,
+      "top1": "OPC-002-证书不受信导致连接被拒.pdf"
+    },
+    {
+      "id": "OPC-003",
+      "kind": "positive",
+      "query": "证书都配好了还是握手失败",
+      "expected": "OPC-003",
+      "rankFusion": 1,
+      "rankFts": 0,
+      "rankVector": 1,
+      "top1": "OPC-003-安全策略_安全模式不匹配.pdf"
+    },
+    {
+      "id": "OPC-004",
+      "kind": "positive",
+      "query": "订阅建立了但一直收不到数据变化",
+      "expected": "OPC-004",
+      "rankFusion": 1,
+      "rankFts": 0,
+      "rankVector": 1,
+      "top1": "OPC-004-订阅无数据 _ 状态为坏（BadWaitingForInitialData）.pdf"
+    },
+    {
+      "id": "ENG-001",
+      "kind": "positive",
+      "query": "写入一直失败，地址是对的",
+      "expected": "ENG-001",
+      "rankFusion": 1,
+      "rankFts": 0,
+      "rankVector": 1,
+      "top1": "ENG-001-对只读寄存器执行写入.pdf"
+    },
+    {
+      "id": "ENG-002",
+      "kind": "positive",
+      "query": "写入的值过一会自己变了",
+      "expected": "ENG-002",
+      "rankFusion": 1,
+      "rankFts": 0,
+      "rankVector": 1,
+      "top1": "ENG-002-多个主站同时写同一寄存器.pdf"
+    },
+    {
+      "id": "ENG-003",
+      "kind": "positive",
+      "query": "写入后 PLC 侧显示的值完全不对",
+      "expected": "ENG-003",
+      "rankFusion": 2,
+      "rankFts": 0,
+      "rankVector": 1,
+      "top1": "ENG-002-多个主站同时写同一寄存器.pdf"
+    },
+    {
+      "id": "ENG-004",
+      "kind": "positive",
+      "query": "数据跳动很厉害，或者看起来慢半拍",
+      "expected": "ENG-004",
+      "rankFusion": 1,
+      "rankFts": 0,
+      "rankVector": 1,
+      "top1": "ENG-004-轮询周期短于 PLC 扫描周期导致数据滞后_抖动.pdf"
+    },
+    {
+      "id": "NEG-01",
+      "kind": "negative",
+      "query": "空压机排气温度高报警的可能原因",
+      "expected": null,
+      "rankFusion": 0,
+      "rankFts": 0,
+      "rankVector": 0,
+      "top1": "汇川H5U用户手册.pdf"
+    },
+    {
+      "id": "NEG-02",
+      "kind": "negative",
+      "query": "伺服驱动器过载报警 AL.32 怎么复位",
+      "expected": null,
+      "rankFusion": 0,
+      "rankFts": 0,
+      "rankVector": 0,
+      "top1": "ADDR-003-32 位值的字序反了（高低字颠倒）.pdf"
+    },
+    {
+      "id": "NEG-03",
+      "kind": "negative",
+      "query": "锅炉水位低于低低限联锁动作值是多少",
+      "expected": null,
+      "rankFusion": 0,
+      "rankFts": 0,
+      "rankVector": 0,
+      "top1": "点位表-电气样例S7-Modbus.pdf"
+    },
+    {
+      "id": "NEG-04",
+      "kind": "negative",
+      "query": "注塑机料筒温度波动怎么处理",
+      "expected": null,
+      "rankFusion": 0,
+      "rankFts": 0,
+      "rankVector": 0,
+      "top1": "ADDR-006-量程转换未做（工程值 vs 原始值）.pdf"
+    },
+    {
+      "id": "NEG-05",
+      "kind": "negative",
+      "query": "AGV 小车导航偏离路径如何校准",
+      "expected": null,
+      "rankFusion": 0,
+      "rankFts": 0,
+      "rankVector": 0,
+      "top1": "汇川H5U-指令错误代码附录.pdf"
+    }
+  ],
+  "pass": false
+}

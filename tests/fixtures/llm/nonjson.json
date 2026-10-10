@@ -1,0 +1,6 @@
+{
+  "scenario": "nonjson",
+  "kind": "raw",
+  "content": "这不是合法的 JSON 响应",
+  "_comment": "N5 负控：模型返回非 JSON，必须降级 insufficient，不落脏数据。"
+}

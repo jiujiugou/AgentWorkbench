@@ -1,0 +1,6 @@
+{
+  "scenario": "extract",
+  "kind": "raw",
+  "content": "{}",
+  "_comment": "P2 要素抽取走 mock 时返回空对象，保证规则抽取结果不被覆盖。"
+}

@@ -1,0 +1,21 @@
+﻿序号,地址,符号名,数据类型,读写,初值,用途,触发故障,备注
+1,D0,gvInt16_Known,INT16,读写,4660,字节序与地址偏移校验,ADDR-001;ADDR-002,4660=0x1234 解析为 0x1234 则字节序正确
+2,D1,gvInt16_Negative,INT16,读写,-1,有符号/无符号解析校验,ADDR-004,上位机若显示 65535 即为无符号解析
+3,D2,gvReal_Known,REAL32,读写,1.0,浮点与32位字序校验,ADDR-003,1.0=0x3F800000 占 D2-D3 两寄存器
+4,D4,gvDint_Known,DINT32,读写,100000,32位整数字序校验,ADDR-003,占 D4-D5 两寄存器
+5,D6,gvScaled_Temp,UINT16,读写,8500,量程缩放校验,ADDR-006,表示 85.00℃ 即放大100倍存储
+6,D7,gvReadOnly,INT16,只读,123,写入只读区测试,ENG-001,程序中只做读取 不提供写入口
+7,D8,gvCycleCounter,UINT16,读写,0,扫描周期与订阅滞后测试,ENG-004;OPC-004,由程序每扫描周期自增
+8,D9,gvProgramWrite,UINT16,读写,0,多主站写冲突测试,ENG-002,程序周期性写入 与上位机写竞争
+9,D10,gvBulkStart,UINT16,读写,0,长帧批量读与超时测试,NET-004,与 D10-D109 组成 100 寄存器批量读
+10,D20,gvTypeGuard,INT16,读写,0,数据类型写坏相邻寄存器测试,ENG-003,紧邻 D21 观察是否被误改
+11,D21,gvTypeNeighbor,INT16,读写,7777,相邻寄存器破坏检测,ENG-003,D20 被按32位写入时观察此值
+12,M0,gvCoil0,BOOL,读写,0,线圈与位地址混淆测试,ADDR-005,位区对应 0xxxx
+13,M1,gvCoil1,BOOL,读写,1,线圈批量读测试,ADDR-005,
+14,M2,gvCoil2,BOOL,读写,0,线圈批量读测试,ADDR-005,
+15,M3,gvCoil3,BOOL,读写,1,线圈批量读测试,ADDR-005,
+16,D100,gvUnmappedProbe,INT16,读写,0,地址越界触发 0x02 用,MB-001,故意不配置到 Modbus 映射区
+17,D101,gvValueOutOfRange,UINT16,读写,0,非法数据值触发 0x03 用,MB-003,量程限制 0-100 写 5000 触发
+18,D102,gvSlowProcess,UINT16,读写,0,从站忙触发 0x06 用,MB-005,配合长耗时程序段
+19,D103,gvFuncGuard,INT16,只读,0,非法功能触发 0x01 用,MB-002,配置为不支持写
+20,D104,gvStopFlag,INT16,读写,0,CPU STOP 状态观察用,MB-004;NET-003,CPU 切 STOP 后读此值

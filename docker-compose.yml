@@ -1,0 +1,28 @@
+services:
+  agentworkbench:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: agentworkbench:latest
+    container_name: agentworkbench
+    env_file:
+      - .env
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_ENVIRONMENT: Production
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    restart: unless-stopped
+
+  # RAG 本地向量（离线/私有化场景启用，需要时取消注释）
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: agentworkbench-ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama:/root/.ollama
+  #   restart: unless-stopped

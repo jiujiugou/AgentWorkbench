@@ -1,0 +1,78 @@
+{
+  "version": "0.1",
+  "domain": "trade-docs",
+  "principle": "系统只做机械比对与异常定位，不做最终合规判定。UCP600 下审单责任在审单员，系统的产出是「差异清单 + 原文坐标」，不是「合格/不合格」。",
+
+  "documentTypes": {
+    "commercial_invoice": { "label": "商业发票", "aliases": ["COMMERCIAL INVOICE", "发票", "INVOICE"] },
+    "packing_list": { "label": "装箱单", "aliases": ["PACKING LIST", "装箱单", "WEIGHT LIST"] },
+    "bill_of_lading": { "label": "提单", "aliases": ["BILL OF LADING", "B/L", "提单", "海运提单"] },
+    "certificate_of_origin": { "label": "原产地证", "aliases": ["CERTIFICATE OF ORIGIN", "C/O", "原产地证", "FORM E", "FORM A"] },
+    "customs_declaration": { "label": "报关单", "aliases": ["CUSTOMS DECLARATION", "报关单", "DECLARATION"] },
+    "letter_of_credit": { "label": "信用证", "aliases": ["LETTER OF CREDIT", "L/C", "信用证", "DOCUMENTARY CREDIT"] },
+    "insurance_policy": { "label": "保险单", "aliases": ["INSURANCE POLICY", "保险单", "MARINE INSURANCE"] }
+  },
+
+  "fields": [
+    { "key": "invoice_no", "label": "发票号", "type": "text", "hints": ["Invoice No", "Invoice Number", "发票号", "发票号码"] },
+    { "key": "invoice_date", "label": "发票日期", "type": "date", "hints": ["Invoice Date", "Date", "发票日期"] },
+    { "key": "seller", "label": "卖方/受益人", "type": "text", "hints": ["Seller", "Beneficiary", "Shipper", "卖方", "受益人", "发货人"] },
+    { "key": "buyer", "label": "买方/开证申请人", "type": "text", "hints": ["Buyer", "Applicant", "Consignee", "买方", "开证申请人", "收货人"] },
+    { "key": "total_amount", "label": "总金额", "type": "money", "hints": ["Total Amount", "Amount", "Total Value", "总金额", "合计", "总价"] },
+    { "key": "currency", "label": "币种", "type": "text", "hints": ["Currency", "USD", "EUR", "币种", "币制"] },
+    { "key": "incoterm", "label": "贸易术语", "type": "text", "hints": ["FOB", "CIF", "CFR", "EXW", "DDP", "贸易术语", "成交方式"] },
+    { "key": "total_quantity", "label": "总数量", "type": "number", "hints": ["Total Quantity", "Quantity", "QTY", "总数量", "数量合计"] },
+    { "key": "total_packages", "label": "件数", "type": "number", "hints": ["Total Packages", "Packages", "Pcs", "件数", "包装件数"] },
+    { "key": "gross_weight", "label": "毛重", "type": "number", "unit": "kg", "hints": ["Gross Weight", "G.W.", "毛重"] },
+    { "key": "net_weight", "label": "净重", "type": "number", "unit": "kg", "hints": ["Net Weight", "N.W.", "净重"] },
+    { "key": "hs_code", "label": "海关编码", "type": "text", "hints": ["HS Code", "HSCODE", "海关编码", "商品编号", "Tariff"] },
+    { "key": "goods_description", "label": "货物描述", "type": "text", "hints": ["Description of Goods", "Goods", "货物描述", "品名"] },
+    { "key": "port_of_loading", "label": "装货港", "type": "text", "hints": ["Port of Loading", "POL", "装货港", "起运港"] },
+    { "key": "port_of_discharge", "label": "卸货港", "type": "text", "hints": ["Port of Discharge", "POD", "卸货港", "目的港"] },
+    { "key": "vessel_name", "label": "船名", "type": "text", "hints": ["Vessel", "Vessel Name", "船名", "船名航次"] },
+    { "key": "bl_no", "label": "提单号", "type": "text", "hints": ["B/L No", "Bill of Lading No", "提单号", "提单号码"] },
+    { "key": "container_no", "label": "集装箱号", "type": "text", "hints": ["Container No", "CNTR", "集装箱号", "柜号"] },
+    { "key": "shipment_date", "label": "装运日期", "type": "date", "hints": ["On Board Date", "Shipment Date", "装运日期", "装船日期"] },
+    { "key": "country_of_origin", "label": "原产国", "type": "text", "hints": ["Country of Origin", "Origin", "原产国", "原产地"] },
+    { "key": "lc_no", "label": "信用证号", "type": "text", "hints": ["L/C No", "Credit No", "信用证号", "信用证号码"] },
+    { "key": "latest_shipment_date", "label": "最迟装运日", "type": "date", "hints": ["Latest Shipment Date", "Lastest Date of Shipment", "最迟装运日", "最迟装船日"] },
+    { "key": "expiry_date", "label": "信用证有效期", "type": "date", "hints": ["Expiry Date", "Date of Expiry", "有效期", "失效日期"] }
+  ],
+
+  "crossDocumentRules": [
+    { "id": "X01", "name": "发票金额 = 报关单金额", "field": "total_amount", "from": ["commercial_invoice", "customs_declaration"], "op": "eq_money", "tolerance": 0.01, "severity": "critical", "judge": "deterministic" },
+    { "id": "X02", "name": "装箱单毛重 = 提单毛重", "field": "gross_weight", "from": ["packing_list", "bill_of_lading"], "op": "eq_number", "tolerance": 0.005, "severity": "critical", "judge": "deterministic" },
+    { "id": "X03", "name": "发票数量 = 装箱单数量", "field": "total_quantity", "from": ["commercial_invoice", "packing_list"], "op": "eq_number", "tolerance": 0, "severity": "critical", "judge": "deterministic" },
+    { "id": "X04", "name": "装箱单件数 = 提单件数", "field": "total_packages", "from": ["packing_list", "bill_of_lading"], "op": "eq_number", "tolerance": 0, "severity": "critical", "judge": "deterministic" },
+    { "id": "X05", "name": "发票币种 = 信用证币种", "field": "currency", "from": ["commercial_invoice", "letter_of_credit"], "op": "eq_text", "severity": "critical", "judge": "deterministic" },
+    { "id": "X06", "name": "提单收货人 = 信用证收货人", "field": "buyer", "from": ["bill_of_lading", "letter_of_credit"], "op": "eq_text_normalized", "severity": "critical", "judge": "deterministic", "note": "需归一 Co., Ltd / Company Limited / CO LTD 等写法" },
+    { "id": "X07", "name": "原产地证原产国 = 报关单原产国", "field": "country_of_origin", "from": ["certificate_of_origin", "customs_declaration"], "op": "eq_text", "severity": "major", "judge": "deterministic" },
+    { "id": "X08", "name": "装运日期 ≤ 最迟装运日", "field": "shipment_date", "from": ["bill_of_lading", "letter_of_credit"], "op": "date_le", "severity": "critical", "judge": "deterministic" },
+    { "id": "X09", "name": "交单日期 ≤ 信用证有效期", "field": "invoice_date", "from": ["commercial_invoice", "letter_of_credit"], "op": "date_le", "compareToField": "expiry_date", "severity": "critical", "judge": "deterministic" },
+    { "id": "X10", "name": "发票货物描述与信用证实质一致", "field": "goods_description", "from": ["commercial_invoice", "letter_of_credit"], "op": "semantic_eq", "severity": "major", "judge": "llm-assisted", "note": "唯一需要语义比对的规则，先不做，等 X01-X09 全部达标后再开" }
+  ],
+
+  "withinDocumentRules": [
+    { "id": "W01", "name": "发票必备字段齐全", "doc": "commercial_invoice", "required": ["invoice_no", "invoice_date", "seller", "buyer", "total_amount", "currency"], "severity": "critical", "judge": "deterministic" },
+    { "id": "W02", "name": "提单必备字段齐全", "doc": "bill_of_lading", "required": ["bl_no", "shipper", "consignee", "port_of_loading", "port_of_discharge", "vessel_name"], "severity": "critical", "judge": "deterministic" },
+    { "id": "W03", "name": "装箱单必备字段齐全", "doc": "packing_list", "required": ["total_packages", "gross_weight", "net_weight", "total_quantity"], "severity": "major", "judge": "deterministic" },
+    { "id": "W04", "name": "毛重 ≥ 净重", "doc": "packing_list", "op": "gte", "left": "gross_weight", "right": "net_weight", "severity": "major", "judge": "deterministic" },
+    { "id": "W05", "name": "HS 编码格式合法", "doc": "customs_declaration", "field": "hs_code", "op": "regex", "pattern": "^[0-9]{8,10}$", "severity": "major", "judge": "deterministic" }
+  ],
+
+  "severityLevels": {
+    "critical": "会导致银行拒付 / 海关退单，必须人工确认后才能放行",
+    "major": "需人工复核，通常不阻断",
+    "minor": "提示性信息"
+  },
+
+  "acceptanceTargets": {
+    "note": "阈值取自 2026 行业实测区间（数字原生单证 field-level 95-99%；扫描件 85-95%）。低于下限即视为不合格，不接受「差不多能用」。",
+    "field_f1_digital_born": 0.95,
+    "field_f1_scanned": 0.85,
+    "discrepancy_recall": 0.95,
+    "false_positive_rate_max": 0.10,
+    "evidence_binding_rate": 1.0,
+    "note2": "discrepancy_recall 定 0.95 而非 0.99：漏报 = 拒付（真金白银损失），误报 = 人工多看一眼。宁可误报，不可漏报。"
+  }
+}

@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtools</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="TngTech.ArchUnitNET" Version="0.13.4" />
+    <PackageReference Include="TngTech.ArchUnitNET.xUnit" Version="0.13.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AgentWorkbench.Shared\AgentWorkbench.Shared.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.Domain\AgentWorkbench.Domain.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.Persistence\AgentWorkbench.Persistence.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.Documents\AgentWorkbench.Documents.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.Knowledge.Abstractions\AgentWorkbench.Knowledge.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.Knowledge.Local\AgentWorkbench.Knowledge.Local.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.Knowledge\AgentWorkbench.Knowledge.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.Providers\AgentWorkbench.Providers.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.Agent\AgentWorkbench.Agent.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.Webapi\AgentWorkbench.Webapi.csproj" />
+  </ItemGroup>
+</Project>

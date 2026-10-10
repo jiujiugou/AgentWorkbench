@@ -1,0 +1,7 @@
+{
+  "scenario": "illegal",
+  "kind": "agent-tool",
+  "tool": "drop_table",
+  "keyword": "x",
+  "_comment": "AL3/N7 负控：模型请求白名单外工具，必须拒绝并留痕。"
+}

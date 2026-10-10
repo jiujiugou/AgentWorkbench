@@ -1,0 +1,31 @@
+{
+  "stryker-config": {
+    "test-projects": [
+      "tests/AgentWorkbench.UnitTests/AgentWorkbench.UnitTests.csproj"
+    ],
+    "project": "AgentWorkbench.Review.csproj",
+    "solution": "AgentWorkbench.slnx",
+    "mutate": [
+      "src/AgentWorkbench.Review/Comparison/*.cs",
+      "src/AgentWorkbench.Review/Extraction/*.cs",
+      "src/AgentWorkbench.Review/ReviewService.cs",
+      "src/AgentWorkbench.Review/ReviewReportWriter.cs",
+      "src/AgentWorkbench.Review/ReviewRunQueue.cs",
+      "src/AgentWorkbench.Review/IReviewProgressNotifier.cs",
+      "src/AgentWorkbench.Review/ReviewModels.cs"
+    ],
+    "reporters": [
+      "Progress",
+      "Json",
+      "Markdown"
+    ],
+    "concurrency": 4,
+    "coverage-analysis": "perTest",
+    "thresholds": {
+      "high": 80,
+      "low": 60,
+      "break": 0
+    },
+    "verbosity": "info"
+  }
+}

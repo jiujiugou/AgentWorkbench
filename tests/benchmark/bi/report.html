@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>中文问数评测报告 · DuSQL</title>
+<style>
+:root{
+  --text:#1f2328; --muted:#656d76; --border:#d0d7de; --accent:#0969da;
+  --bg:#ffffff; --soft:#f6f8fa; --green:#1a7f37; --red:#cf222e; --amber:#9a6700;
+  --mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;padding:40px 24px;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  font-size:14px;line-height:1.75}
+.wrap{max-width:820px;margin:0 auto}
+h1{font-size:22px;font-weight:600;margin:0 0 6px}
+.lead{color:var(--muted);font-size:14px;margin:0 0 4px}
+h2{font-size:16px;font-weight:600;margin:34px 0 12px;padding-bottom:6px;
+  border-bottom:1px solid var(--border)}
+h3{font-size:14px;font-weight:600;margin:18px 0 6px}
+p{margin:8px 0}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13.5px}
+th{text-align:left;padding:7px 10px;border-bottom:1px solid var(--border);
+  color:var(--muted);font-weight:500}
+td{padding:7px 10px;border-bottom:1px solid #eaeef2;vertical-align:top}
+tr:last-child td{border-bottom:none}
+.num{font-family:var(--mono);text-align:right}
+code{font-family:var(--mono);font-size:12.5px;background:var(--soft);
+  padding:1px 5px;border-radius:4px}
+pre{background:var(--soft);border:1px solid var(--border);border-radius:6px;
+  padding:12px 14px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.7}
+.big{font-family:var(--mono);font-size:20px;font-weight:600}
+.ok{color:var(--green)} .bad{color:var(--red)} .warn{color:var(--amber)}
+.card{border:1px solid var(--border);border-radius:8px;padding:14px 18px;margin:12px 0}
+.card.g{background:#f0faf2;border-color:#b7e4c7}
+.card.r{background:#fff5f5;border-color:#ffc9c9}
+.card.a{background:#fffbf0;border-color:#ffe4a3}
+.kv{display:flex;justify-content:space-between;padding:4px 0;font-size:13.5px}
+.kv span:last-child{font-family:var(--mono)}
+footer{margin-top:40px;padding-top:14px;border-top:1px solid var(--border);
+  color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>中文问数评测报告 · DuSQL</h1>
+<p class="lead">可复算的执行准确率基线，与评测链本身的可信度验证</p>
+<p class="lead" style="font-size:12.5px">数据集：DuSQL dev（百度千言）· 2482 条标注 · 201 个数据库 · 813 张表</p>
+
+<h2>结论</h2>
+<div class="card g">
+  <p style="margin:0"><b>这条评测链可信。</b>
+  把标准答案当预测喂进去得满分 <span class="big ok">1.0000</span>；
+  把恒空查询喂进去、剔除空结果后得零分 <span class="big ok">0.0000</span>。
+  正例绿、负控红 —— 它不是恒绿的自欺工具。</p>
+</div>
+
+<h2>怎么复算</h2>
+<pre>cd tests/benchmark/bi
+python build_db.py                                        # 建 201 个 SQLite 库
+python eval_dusql.py --pred data/DuSQL/gold_dev.sql       # oracle 自检
+python acceptance_bi.py                                   # 判定型验收（含负控）</pre>
+<p>数据集只给 <code>db_schema.json</code> + <code>db_content.json</code>，不含数据库文件，必须先建库。
+官方评测脚本没有公开直链（千言是线上提交制），所以评测为自建，指标采用学术界通用的
+<b>Execution Accuracy</b>（执行结果集一致性）。</p>
+
+<h2>核心结果</h2>
+<table>
+<tr><th>项</th><th class="num">值</th><th>说明</th></tr>
+<tr><td>标注问题</td><td class="num">2482</td><td>DuSQL dev 全集</td></tr>
+<tr><td>可执行样本</td><td class="num">2441（98.35%）</td><td>剩余 41 条为数据集自身标注错误</td></tr>
+<tr><td>oracle 准确率</td><td class="num ok">1.0000</td><td>gold 当 pred，必须满分</td></tr>
+<tr><td>负控 · 恒空查询</td><td class="num warn">0.2819</td><td>暴露了评测盲区，见发现 2</td></tr>
+<tr><td>负控 · 非空口径</td><td class="num ok">0.0000</td><td>剔除空 gold 后，恒空 SQL 得 0 分</td></tr>
+<tr><td>gold 返回空结果</td><td class="num">688（28.2%）</td><td>数据集本身特性</td></tr>
+</table>
+
+<h2>发现 1：gold SQL 是 MySQL 方言，裸跑 SQLite 失败率 90%</h2>
+<p>这是本轮最大的坑。DuSQL 的标准答案按 MySQL 书写，直接在 SQLite 上执行，2482 条里
+<b>只有约 10% 能跑通</b>。写了 <code>sql_dialect.py</code> 做纯语法层适配（对 gold 与 pred 施加同一套规则，
+不改变二者可比性）：</p>
+<table>
+<tr><th>适配项</th><th class="num">影响条数</th><th>示例</th></tr>
+<tr><td>TIME_NOW 自定义函数</td><td class="num">100</td><td><code>where TIME_NOW - 成立时间 != 18</code></td></tr>
+<tr><td>复合查询不允许括号包裹</td><td class="num">72</td><td><code>( select ... ) union ( select ... )</code></td></tr>
+<tr><td>标识符需引号</td><td class="num">22</td><td><code>T2.2018年营业额</code>、<code>GDP总计(亿)</code></td></tr>
+<tr><td>起别名后仍用原表名限定列</td><td class="num">大量</td><td><code>from 比赛记录 as T1 ... on 比赛记录.球员id</code></td></tr>
+<tr><td>limit 缺空格（数据集笔误）</td><td class="num">2</td><td><code>limit3</code></td></tr>
+</table>
+<p>修完失败率 <b>90% → 1.65%</b>。</p>
+
+<h2>发现 2：28.2% 的 gold 查询返回空，恒空 SQL 能白拿 28 分</h2>
+<div class="card a">
+  <p style="margin:0">负控第一次跑出 <b>0.2819</b>，远超阈值。根因不是 bug：688 条 gold 查询本身结果就是空的，
+  而 Execution Accuracy 对「什么都查不出来」根本不设防 —— 一条恒空 SQL 能白拿 28 分。
+  <b>这是评测设计层面的真缺陷。</b></p>
+</div>
+<p>处理方式：报告同时给出 <code>execution_accuracy_nonempty</code>（只在 gold 非空的样本上计算）。
+该口径下负控为 <span class="ok">0.0000</span>，正确变红。<b>没有改数据让它变绿。</b></p>
+
+<h2>发现 3：剩余 41 条是数据集自身的标注错误</h2>
+<table>
+<tr><th>类型</th><th class="num">条数</th></tr>
+<tr><td>子查询写 <code>from T1</code>（应为原表名）</td><td class="num">28</td></tr>
+<tr><td>子查询聚合列未起别名</td><td class="num">9</td></tr>
+<tr><td>引用未 join 的表</td><td class="num">4</td></tr>
+</table>
+<p>任何模型都拿不到分，只能排除。<b>没有修改数据集让它变绿。</b></p>
+
+<h2>已知边界</h2>
+<ul>
+<li>指标是 Execution Accuracy（执行结果一致），不是 SQL 字符串匹配 —— 不同写法但结果相同算对。</li>
+<li>201 个库中只有 17 个有标注问题，dev 集 2482 条全部落在这 17 个库上。</li>
+<li>本轮只做了 oracle 与负控，<b>还没有跑真实模型的预测</b>（需要 API key）。</li>
+</ul>
+
+<footer>
+生成时间 2026-10-09 · 全部数字可复算 · <code>tests/benchmark/bi/</code>
+</footer>
+
+</div>
+</body>
+</html>

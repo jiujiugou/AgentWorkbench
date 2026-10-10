@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AgentWorkbench.Documents\AgentWorkbench.Documents.csproj" />
+    <ProjectReference Include="..\AgentWorkbench.Knowledge\AgentWorkbench.Knowledge.csproj" />
+    <ProjectReference Include="..\AgentWorkbench.Agent\AgentWorkbench.Agent.csproj" />
+    <ProjectReference Include="..\AgentWorkbench.Review\AgentWorkbench.Review.csproj" />
+    <ProjectReference Include="..\AgentWorkbench.ReviewAdvisor\AgentWorkbench.ReviewAdvisor.csproj" />
+    <ProjectReference Include="..\AgentWorkbench.AgentHarness\AgentWorkbench.AgentHarness.csproj" />
+    <ProjectReference Include="..\AgentWorkbench.Workflow\AgentWorkbench.Workflow.csproj" />
+    <ProjectReference Include="..\AgentWorkbench.Providers\AgentWorkbench.Providers.csproj" />
+    <ProjectReference Include="..\AgentWorkbench.Persistence\AgentWorkbench.Persistence.csproj" />
+    <ProjectReference Include="..\AgentWorkbench.Domain\AgentWorkbench.Domain.csproj" />
+    <ProjectReference Include="..\AgentWorkbench.Shared\AgentWorkbench.Shared.csproj" />
+  </ItemGroup>
+</Project>

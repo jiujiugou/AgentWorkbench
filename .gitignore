@@ -1,0 +1,26 @@
+# .NET
+bin/
+obj/
+*.user
+
+# Node
+node_modules/
+dist/
+
+# Runtime data / logs
+data/
+logs/
+*.db
+*.db-shm
+*.db-wal
+
+# Env / secrets
+.env
+
+# IDE
+.vs/
+.vscode/
+.idea/
+
+# Cleanup trash (safe to discard after review)
+.cleanup-trash/
