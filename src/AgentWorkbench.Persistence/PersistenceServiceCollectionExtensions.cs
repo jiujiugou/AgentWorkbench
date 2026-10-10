@@ -26,9 +26,6 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<IDbConnectionFactory, SqliteDbConnectionFactory>();
         services.AddSingleton<IDocumentRepository, DocumentRepository>();
         services.AddSingleton<IProviderRepository, ProviderRepository>();
-        services.AddSingleton<IRuleRepository, RuleRepository>();
-        services.AddSingleton<IReviewRepository, ReviewRepository>();
-        services.AddSingleton<IAdvisorRepository, AdvisorRepository>();
         services.AddSingleton<IAgentRunRepository, AgentRunRepository>();
         services.AddSingleton<IConversationRepository, ConversationRepository>();
         services.AddSingleton<IWorkflowRepository, WorkflowRepository>();

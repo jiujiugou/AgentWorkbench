@@ -25,7 +25,7 @@ public sealed class KnowledgeEngineRegistry
     };
 }
 
-/// <summary>未接入引擎（anythingllm / ragflow / opencontracts）的占位实现。</summary>
+/// <summary>未接入的第三方知识引擎占位实现（能力位全 false，调用即抛 NotImplemented）。</summary>
 public sealed class UnavailableKnowledgeEngine : IKnowledgeEngine
 {
     public UnavailableKnowledgeEngine(string provider) => Provider = provider;

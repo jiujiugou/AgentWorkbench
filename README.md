@@ -1,49 +1,42 @@
 # AgentWorkbench
 
-通用 AI Agent 工作台（MVP）：接任意 OpenAI 兼容大模型，支持**流式对话**与**在线增删供应商/模型、免重启切换**，包含 **P0 PDF 数据管道**（上传→解析→清洗→切分→预览）与 **P1 知识库 RAG**，后续扩展**工具调用**。
+通用 AI Agent 工作台底座（MVP）：接任意 OpenAI 兼容大模型，提供**流式对话**、**在线增删供应商/模型并免重启切换**、**PDF 数据管道（上传→解析→清洗→切分→预览）**、**知识库 RAG（FTS5 + sqlite-vec 混合检索 + 带引用问答）**，以及基于 Microsoft Agent Framework 的 **Agent Harness**（循环/预算/工具/轨迹）与 **Workflow**（步骤编排/单步重跑/提示词版本/重试/检查点）。
+
+定位：**通用底座，零垂直业务语义**。新增能力 = 新增模块，模块间只依赖对方契约。
 
 - 后端：ASP.NET Core (.NET 10) + Microsoft Agent Framework + Microsoft.Extensions.AI + SignalR
 - 前端：Vue 3 + Vite + TypeScript + Element Plus
-- 存储：SQLite（Dapper + FluentMigrator）
-- 部署：本地开发 / Docker Compose（稍后）
+- 存储：SQLite（Dapper + FluentMigrator）/ FTS5 + sqlite-vec
 
-## 垂直落地 · 工业设备报警处置（当前主线）
-
-一条真实工业报警 → 检索设备手册与历史处置记录 → 要素抽取 → 规则比对 → 结构化处置工单。
-报警处置工作流（`extract → compare → agent → report`）的 `agent` 步骤**会真的去查知识库**，
-并把命中的手册片段带 `[编号]` 一起喂给模型；手册没写的要求模型明确标注
-「手册未覆盖，需现场确认」，禁止编造根因。
-
-- 场景与语料：[`docs/工业文档RAG与要素抽取.md`](docs/工业文档RAG与要素抽取.md)
-- 检索效果实测（三路对比）：[`docs/验收标准/工业报警处置-检索评测报告.md`](docs/验收标准/工业报警处置-检索评测报告.md)
-- 一键复现：`python scripts/build-industrial-corpus.py` → 上传 `tests/corpus/industrial/*.pdf` → `python scripts/eval-industrial.py`
-
-> 详细设计见 [`docs/MVP设计文档.md`](docs/MVP设计文档.md)（通用平台）。
-> P0 数据管道见 [`docs/设计步骤/P0数据管道.md`](docs/设计步骤/P0数据管道.md)，验收标准与报告见 [`docs/验收标准/`](docs/验收标准/)。
-> 法律文件场景（历史垂直场景，机制层仍沿用）见 [`docs/法律文件Agent-MVP与实施指南.md`](docs/法律文件Agent-MVP与实施指南.md)。
+> 架构决策见 [`docs/adr/`](docs/adr/)；测试与验收标准见 [`docs/测试标准/Agent-测试与验收标准.md`](docs/测试标准/Agent-测试与验收标准.md)。
 
 ## 目录结构
 
-多项目模块化单体（参考 NitroGateway）：模块间只依赖对方 `Contracts/`，新增能力 = 新增模块。
+多项目模块化单体：模块间只依赖对方契约，新增能力 = 新增模块。
 
 ```
 AgentWorkbench/
 ├─ AgentWorkbench.slnx
+├─ global.json                        # 固定 .NET SDK 版本
 ├─ Directory.Build.props
-├─ Dockerfile / docker-compose.yml / .env.example
-├─ docs/
+├─ docs/                              # 设计 / 验收 / 测试标准 / ADR
 ├─ src/
 │  ├─ AgentWorkbench.Shared/          # 配置/常量（被所有模块依赖）
 │  ├─ AgentWorkbench.Domain/          # 纯领域：Records / ChatTurn
 │  ├─ AgentWorkbench.Persistence/     # 连接 + FluentMigrator 迁移 + 仓储
-│  ├─ AgentWorkbench.Documents/       # P0 数据管道（上传/解析/清洗/切分）
+│  ├─ AgentWorkbench.Documents/       # PDF 数据管道（上传/解析/清洗/切分）
 │  ├─ AgentWorkbench.Knowledge.Abstractions/  # 知识契约：IKnowledgeEngine/IEmbeddingProvider/IReranker
 │  ├─ AgentWorkbench.Knowledge.Local/ # 本地实现：FTS5 + sqlite-vec + RRF + RAG
 │  ├─ AgentWorkbench.Knowledge/       # 聚合：AddNitroKnowledge()
 │  ├─ AgentWorkbench.Providers/       # 模型网关：供应商/模型 + IChatClient
 │  ├─ AgentWorkbench.Agent/           # 对话 Agent 运行时（Microsoft Agent Framework）+ 工具扩展点
+│  ├─ AgentWorkbench.AgentHarness/    # Agent Harness：loop/context/memory/tools/trace
+│  ├─ AgentWorkbench.Workflow/        # 步骤编排：重跑/提示词版本/重试/检查点
+│  ├─ AgentWorkbench.MockLlm/         # 确定性 OpenAI 兼容 Mock 模型（测试替身，永不调真模型）
 │  └─ AgentWorkbench.Webapi/          # 组合根：Controllers / Hubs / Program.cs
-├─ tests/AgentWorkbench.ArchitectureTests/  # ArchUnitNET 边界强制
+├─ tests/
+│  ├─ AgentWorkbench.ArchitectureTests/  # ArchUnitNET 边界强制
+│  └─ AgentWorkbench.UnitTests/          # 确定性纯逻辑测试
 └─ web/                               # Vue 3 前端
 ```
 
@@ -52,7 +45,7 @@ AgentWorkbench/
 ### 1. 配置模型（Key 不要提交到仓库）
 
 方式 C · 前端「设置」页在线添加（推荐，**无需重启**）：填名称 / BaseUrl / Key → 添加模型 → 启用。
-支持同一供应商下多模型，随时切换；Key 目前**明文存于本地 SQLite**（P2 再加密）。
+支持同一供应商下多模型，随时切换；Key 目前**明文存于本地 SQLite**（待加密）。
 下方方式 A/B 仅在**首次启动时**作为种子写入，之后以页面配置为准。
 
 方式 A · 环境变量（当前终端会话生效）：
@@ -92,6 +85,8 @@ npm run dev
 
 ## 接口
 
+### 基础 / 模型配置
+
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/health` | 健康检查 + 模型是否已配置 |
@@ -106,19 +101,9 @@ npm run dev
 | POST | `/api/settings/providers/{id}/test` | 连通性测试 |
 | SignalR | `/hubs/agent` | `Send/Ask({conversationId,text,history})`，事件 `ReceiveSources/ReceiveDelta/ReceiveDone/Error`，`Stop()` 停止生成 |
 
-## Docker（稍后再跑）
-
-```bash
-cp .env.example .env   # 填 Provider__ApiKey
-docker compose up -d --build
-# http://localhost:8080
-```
-
-## P0 数据管道
+### 文档管道（PDF）
 
 上传 PDF → PdfPig 抽取 → 清洗（去页眉页脚/合并断行）→ 按条款切分 → SQLite 入库 → 前端预览。
-
-API：
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
@@ -131,15 +116,11 @@ API：
 | DELETE | `/api/documents/{id}` | 删除（含文件与级联数据） |
 | GET | `/api/documents/{id}/file` | 原始 PDF |
 
-测试集：`tests/corpus/`（公开合同示范文本，`fetch-corpus.ps1` 下载）。验收标准与报告见 [`docs/验收标准/`](docs/验收标准/)；自动化验收：`pwsh -File scripts/acceptance-p0.ps1`（A1/A2/A4/A6/A7 + Q1 + 负控 N1/N2/N3，全过退出码 0）。
+> 仅支持 PDF **文本层**；扫描件会判失败并提示（不含 OCR）。
 
-> 说明：仅支持 PDF **文本层**；扫描件会判失败并提示（不含 OCR）。
+### 知识库（RAG）
 
-## P1 知识库（RAG）
-
-P0 切分的 `chunks` → **FTS5(trigram) 全文 + sqlite-vec 向量** → 混合检索（向量 ∪ BM25 → RRF 融合）→ **带引用问答**。设计见 [`docs/设计步骤/P1知识库.md`](docs/设计步骤/P1知识库.md)。
-
-API：
+`chunks` → **FTS5(trigram) 全文 + sqlite-vec 向量** → 混合检索（向量 ∪ BM25 → RRF 融合）→ **带引用问答**。设计见 [`docs/设计步骤/P1知识库.md`](docs/设计步骤/P1知识库.md)。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
@@ -148,7 +129,6 @@ API：
 | POST | `/api/knowledge/documents/{id}/index` | 手动/重建索引 |
 | POST | `/api/knowledge/retrieve` | 检索 `{ query, topK }` → 片段 + 来源 + 分数 |
 | POST | `/api/knowledge/ask` | 带引用问答（非流式）；流式走 SignalR `Ask` |
-| GET/POST/DELETE | `/api/knowledge/rules` | 规则库管理入口（内容 P2 填充） |
 
 配置（`Knowledge` 段 / 环境变量）：
 
@@ -165,33 +145,70 @@ ollama pull bge-m3
 $env:Knowledge__Embedding__Provider = "ollama"   # 或 openai + BaseUrl/ApiKey
 ```
 
-测试集与验收：`docs/验收标准/`；自动化验收：`pwsh -File scripts/acceptance-p1.ps1`（H1/I1/I2/R1/R2/D1 + 负控 N1/N2，全过退出码 0）。
+### Agent Harness（运行时横切轴）
 
-## 工业语料与检索评测
+loop/context/memory/tools/trace 的统一运行时（基于 MAF）：循环上限、超时/取消、工具白名单、轨迹落库、RAG 上下文注入。设计见 [`docs/设计步骤/AgentHarness.md`](docs/设计步骤/AgentHarness.md)。
 
-工业语料由仓库内的真实素材生成（P0 管道**只吃 PDF**，所以先转 PDF 再上传，不为 CSV 去改管道）：
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/harness/health` | 能力位（模型是否配置 + 可用工具） |
+| POST | `/api/harness/run` | 建一次 Harness 运行（消息 + 预算 + 可选 RAG） |
+| GET | `/api/harness/runs/{id}` | 运行详情 + 步骤轨迹 |
+
+### Workflow（步骤编排）
+
+把步骤编排成可重跑、可续跑、提示词可版本化的长任务；步骤类型为 `agent`（托管 Agent Harness，可选 RAG）与 `report`（汇总为 Markdown）。设计见 [`docs/设计步骤/P4工作流.md`](docs/设计步骤/P4工作流.md)。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/workflow/health` | 能力位 `{ workflow, steps[] }` |
+| GET | `/api/workflow/definitions` | 工作流定义列表 |
+| POST | `/api/workflow/runs` | 创建运行（202 `{ runId }`，入队） |
+| GET | `/api/workflow/runs` | 运行列表 |
+| GET | `/api/workflow/runs/{id}` | 运行状态 + 错误 |
+| GET | `/api/workflow/runs/{id}/steps` | 步骤级状态（检查点） |
+| POST | `/api/workflow/runs/{id}/steps/{stepKey}/rerun` | 单步重跑（下游标脏） |
+| POST | `/api/workflow/runs/{id}/cancel` | 取消（不挂起） |
+| POST | `/api/workflow/runs/{id}/resume` | 断点续跑 |
+| DELETE | `/api/workflow/runs/{id}` | 删除运行（级联步骤） |
+| GET | `/api/workflow/prompts?key=` | 提示词版本列表 |
+| POST | `/api/workflow/prompts` | 新增提示词版本 |
+| POST | `/api/workflow/prompts/{key}/{version}/activate` | 设为默认版本 |
+| SignalR | `/hubs/workflow` | 步骤级进度事件 |
+
+### 会话
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET/POST | `/api/conversations` | 会话列表 / 新建 |
+| GET | `/api/conversations/{id}/messages` | 会话消息 |
+| DELETE | `/api/conversations/{id}` | 删除会话 |
+
+## 构建与测试
 
 ```bash
-python scripts/build-industrial-corpus.py   # -> tests/corpus/industrial/*.pdf（32 份）
-# 上传到知识库后：
-python scripts/eval-industrial.py           # -> tests/benchmark/industrial/report.json
+dotnet build AgentWorkbench.slnx
+dotnet test tests/AgentWorkbench.ArchitectureTests   # 依赖边界 + 无环
+dotnet test tests/AgentWorkbench.UnitTests           # 确定性纯逻辑；LLM 走 mock
+cd web; npm run build                                # 前端产物
 ```
 
-| 脚本 | 作用 |
-| --- | --- |
-| `scripts/build-industrial-corpus.py` | 故障场景库 + 点位表 → PDF 语料 |
-| `scripts/export-alarms.py` | 从 NitroGateway 导真实报警 → CSV + PDF（需先跑通软 PLC） |
-| `scripts/eval-industrial.py` | 三路检索 Recall@5 / MRR + 负控误命中率 |
+> **验收脚本尚未落地**：仓库当前**没有** `scripts/` 目录，历史文档中出现的 `acceptance-*.ps1` / `eval-*.ps1` 均为未实现引用。端到端验收需按 [`docs/测试标准/`](docs/测试标准/) 重新落地；见 [`docs/底座建设清单.md`](docs/底座建设清单.md) 的缺口清单。
 
-首轮基线（30 正例 + 5 负例）：纯 FTS5 `0.47` / 纯向量 `0.90` / RRF 融合 `0.90`（Recall@5）；
-负控误命中率 `1.0` **未达标**——检索缺相关性下限，语料没覆盖的问题也会自信返回 Top5。
-详见 [`docs/验收标准/工业报警处置-检索评测报告.md`](docs/验收标准/工业报警处置-检索评测报告.md)。
+## 明确不做
+
+- 不做任何垂直业务模块（底座零业务语义，见 [ADR-0002](docs/adr/0002-remove-vertical-modules.md)）
+- 不做模型训练 / 微调 / 模型管理平台
+- 不做可视化拖拽工作流设计器
+- 不重写 MAF 已有的 Agent Loop / 工具协议 / Workflow 引擎
 
 ## 进度
 
-- [x] D1 脚手架：后端 + 前端 + SignalR 流式 + 本地一键启动
-- [x] P0 数据管道（D1–D5）：上传/解析/清洗/切分/入库/预览 + 验收
-- [x] P1 知识库：`IKnowledgeEngine` 防腐层 + 本地 FTS5/sqlite-vec 混合检索 + 带引用问答 + 验收
-- [x] 模型管理：多供应商/多模型在线增删 + 免重启切换（SQLite 持久化，Key 待加密）
-- [ ] 工具调用（时间 / 计算 / HTTP / SQLite / 文档）+ 前端可视化
-- [ ] AnythingLLM / RAGFlow 适配（预留 stub，改配置切换）
+- [x] 脚手架：后端 + 前端 + SignalR 流式
+- [x] PDF 数据管道：上传/解析/清洗/切分/入库/预览
+- [x] 知识库：`IKnowledgeEngine` 防腐层 + FTS5/sqlite-vec 混合检索 + 带引用问答
+- [x] 模型管理：多供应商/多模型在线增删 + 免重启切换（Key 待加密）
+- [x] Agent Harness：loop/工具环/轨迹/RAG 注入（基于 MAF）
+- [x] Workflow：步骤编排/单步重跑/提示词版本/重试/检查点
+- [ ] 落地自动化验收（`scripts/` 与负控）——当前缺口
+- [ ] 工具调用扩展（HTTP / SQLite / 文档）+ 前端可视化

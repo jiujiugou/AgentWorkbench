@@ -16,7 +16,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\AgentWorkbench.Review\AgentWorkbench.Review.csproj" />
     <ProjectReference Include="..\AgentWorkbench.AgentHarness\AgentWorkbench.AgentHarness.csproj" />
     <ProjectReference Include="..\AgentWorkbench.Knowledge.Abstractions\AgentWorkbench.Knowledge.Abstractions.csproj" />
     <ProjectReference Include="..\AgentWorkbench.Persistence\AgentWorkbench.Persistence.csproj" />

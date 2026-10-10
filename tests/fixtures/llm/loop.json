@@ -1,7 +1,0 @@
-{
-  "scenario": "loop",
-  "kind": "agent-tool",
-  "tool": "locate_evidence",
-  "keyword": "违约",
-  "_comment": "AL2/N6 负控：模型持续调用工具，必须到 maxSteps 终止，不挂起。"
-}

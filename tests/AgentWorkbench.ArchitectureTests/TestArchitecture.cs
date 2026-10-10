@@ -17,8 +17,6 @@ internal static class TestArchitecture
         "AgentWorkbench.Knowledge",
         "AgentWorkbench.Providers",
         "AgentWorkbench.Agent",
-        "AgentWorkbench.Review",
-        "AgentWorkbench.ReviewAdvisor",
         "AgentWorkbench.AgentHarness",
         "AgentWorkbench.Workflow",
         "AgentWorkbench.Webapi"

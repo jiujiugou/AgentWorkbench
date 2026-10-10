@@ -6,7 +6,6 @@ const route = useRoute()
 const active = computed(() => {
   const path = route.path
   if (path.startsWith('/documents')) return '/documents'
-  if (path.startsWith('/review')) return '/review'
   if (path.startsWith('/workflow')) return '/workflow'
   return path
 })
@@ -23,9 +22,7 @@ const active = computed(() => {
         <el-menu-item index="/">对话</el-menu-item>
         <el-menu-item index="/documents">文档</el-menu-item>
         <el-menu-item index="/knowledge">知识库</el-menu-item>
-        <el-menu-item index="/review">审查</el-menu-item>
         <el-menu-item index="/workflow">工作流</el-menu-item>
-        <el-menu-item index="/rules">规则</el-menu-item>
         <el-menu-item index="/settings">设置</el-menu-item>
       </el-menu>
     </el-header>

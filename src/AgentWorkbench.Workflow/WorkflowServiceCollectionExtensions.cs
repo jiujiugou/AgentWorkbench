@@ -10,8 +10,6 @@ public static class WorkflowServiceCollectionExtensions
     public static IServiceCollection AddNitroWorkflow(
         this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddSingleton<IWorkflowStepExecutor, ExtractStepExecutor>();
-        services.AddSingleton<IWorkflowStepExecutor, CompareStepExecutor>();
         services.AddSingleton<IWorkflowStepExecutor, AgentStepExecutor>();
         services.AddSingleton<IWorkflowStepExecutor, ReportStepExecutor>();
         services.AddSingleton<WorkflowStepRegistry>();

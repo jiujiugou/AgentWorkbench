@@ -17,8 +17,7 @@ public sealed record KnowledgeStatus(
     int IndexedChunkCount);
 
 /// <summary>
-/// 可替换知识引擎统一接口（防腐层）：
-/// 本地自研（Local）与 AnythingLLM / RAGFlow / OpenContracts 走同一契约。
+/// 可替换知识引擎统一接口（防腐层）：本地自研实现与将来接入的任何第三方引擎走同一契约。
 /// </summary>
 public interface IKnowledgeEngine
 {

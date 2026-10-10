@@ -17,8 +17,6 @@ public class LayeringTests
             .Or().ResideInNamespaceMatching("^AgentWorkbench\\.Knowledge")
             .Or().ResideInNamespaceMatching("^AgentWorkbench\\.Providers")
             .Or().ResideInNamespaceMatching("^AgentWorkbench\\.Agent")
-            .Or().ResideInNamespaceMatching("^AgentWorkbench\\.Review")
-            .Or().ResideInNamespaceMatching("^AgentWorkbench\\.ReviewAdvisor")
             .Or().ResideInNamespaceMatching("^AgentWorkbench\\.AgentHarness")
             .Or().ResideInNamespaceMatching("^AgentWorkbench\\.Workflow");
 

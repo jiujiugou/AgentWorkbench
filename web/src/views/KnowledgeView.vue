@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Delete, Refresh, Search } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { Refresh, Search } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import {
   knowledgeApi,
   type KnowledgeDocument,
   type KnowledgeStatus,
   type RetrievalSource,
-  type Rule,
 } from '@/api/knowledge'
 import { useBackendHealth } from '@/composables/useBackendHealth'
 import BackendStatus from '@/components/BackendStatus.vue'
@@ -22,7 +21,6 @@ const { health: backendHealth, start: startHealthCheck } = useBackendHealth({
 
 const status = ref<KnowledgeStatus | null>(null)
 const documents = ref<KnowledgeDocument[]>([])
-const rules = ref<Rule[]>([])
 const loading = ref(false)
 
 const query = ref('')
@@ -30,19 +28,12 @@ const topK = ref(5)
 const searching = ref(false)
 const results = ref<RetrievalSource[]>([])
 
-const newRule = ref({ category: '标准条款', name: '', body: '' })
-
 async function load() {
   loading.value = true
   try {
-    const [s, docs, ruleList] = await Promise.all([
-      knowledgeApi.health(),
-      knowledgeApi.documents(),
-      knowledgeApi.rules(),
-    ])
+    const [s, docs] = await Promise.all([knowledgeApi.health(), knowledgeApi.documents()])
     status.value = s
     documents.value = docs
-    rules.value = ruleList
   } catch (e) {
     ElMessage.error('加载失败：' + (e as Error).message)
   } finally {
@@ -75,23 +66,6 @@ async function reindex(row: KnowledgeDocument) {
 
 function openSource(source: RetrievalSource) {
   void router.push(`/documents/${source.documentId}?chunk=${source.seq}`)
-}
-
-async function addRule() {
-  if (!newRule.value.name.trim()) {
-    ElMessage.warning('请填写规则名称')
-    return
-  }
-  await knowledgeApi.addRule(newRule.value.category, newRule.value.name, newRule.value.body)
-  newRule.value = { category: '标准条款', name: '', body: '' }
-  ElMessage.success('已保存')
-  rules.value = await knowledgeApi.rules()
-}
-
-async function removeRule(row: Rule) {
-  await ElMessageBox.confirm(`删除规则「${row.name}」？`, '确认', { type: 'warning' })
-  await knowledgeApi.removeRule(row.id)
-  rules.value = await knowledgeApi.rules()
 }
 
 function score(value?: number | null) {
@@ -181,25 +155,6 @@ function score(value?: number | null) {
       </div>
     </el-card>
 
-    <el-card shadow="never" class="block">
-      <template #header>规则库（P1 占位，内容 P2 填充）</template>
-      <div class="rule-form">
-        <el-input v-model="newRule.category" placeholder="分类" style="width: 160px" />
-        <el-input v-model="newRule.name" placeholder="规则名称" style="width: 240px" />
-        <el-input v-model="newRule.body" placeholder="规则内容" />
-        <el-button type="primary" @click="addRule">新增</el-button>
-      </div>
-      <el-table :data="rules" empty-text="暂无规则">
-        <el-table-column prop="category" label="分类" width="140" />
-        <el-table-column prop="name" label="名称" width="220" />
-        <el-table-column prop="body" label="内容" show-overflow-tooltip />
-        <el-table-column label="操作" width="90">
-          <template #default="{ row }">
-            <el-button :icon="Delete" text type="danger" @click="removeRule(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
   </div>
 </template>
 
@@ -289,9 +244,4 @@ function score(value?: number | null) {
   overflow-y: auto;
 }
 
-.rule-form {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 12px;
-}
 </style>

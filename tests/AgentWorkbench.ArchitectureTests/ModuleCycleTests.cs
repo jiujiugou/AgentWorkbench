@@ -30,8 +30,6 @@ public class ModuleCycleTests
             "Knowledge",
             "Providers",
             "Agent",
-            "Review",
-            "ReviewAdvisor",
             "AgentHarness",
             "Workflow",
             "Webapi",

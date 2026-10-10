@@ -1,7 +1,7 @@
 # AgentWorkbench.Agent
 
 对话 Agent 运行时模块：把「模型网关 → 对话/结构化输出」收敛成两个契约，屏蔽具体供应商，
-是 RAG 问答、要素抽取、审查、工作流的共同底座。
+是流式对话、RAG 问答、结构化输出与工作流步骤的共同底座。
 
 ## 功能
 
@@ -10,7 +10,7 @@
 | `AgentServiceCollectionExtensions.cs` | 模块自注册入口 `AddNitroAgents`：注册 `IChatService` / `IStructuredChatService` / `IChatClientProvider` |
 | `ChatService.cs` | 流式对话：`history + userMessage → IAsyncEnumerable<string>`；支持覆盖系统提示词（RAG 注入上下文）；模型不支持 tools 返回 4xx 时**自动降级为无工具重试一次** |
 | `StructuredChatService.cs` | 强类型结构化输出：`GetJsonAsync<T>`，首次解析失败后**追加修复提示 + temperature=0 重试一次** |
-| `IChatClientProvider.cs` | 按当前激活供应商/模型解析出 `IChatClient`（含默认实现），供需要原生函数调用的模块（P3 Agent Loop）复用同一网关 |
+| `IChatClientProvider.cs` | 按当前激活供应商/模型解析出 `IChatClient`（含默认实现），供需要原生函数调用的模块复用同一网关（当前无消费者，预留） |
 | `IAgentToolProvider.cs` | 工具扩展点：实现它即可向对话 Agent 注入函数工具，调用方零改动 |
 
 ## 接口
@@ -18,8 +18,8 @@
 | 接口 | 成员 | 实现 | 主要消费者 |
 | --- | --- | --- | --- |
 | `IChatService` | `IsConfiguredAsync`、`StreamAsync` | `ChatService` | Webapi `AgentHub`（流式对话）、Knowledge 的 RAG 问答 |
-| `IStructuredChatService` | `IsConfiguredAsync`、`GetJsonAsync<T>` | `StructuredChatService` | Review 的 `LlmElementExtractor`、ReviewAdvisor 能力位、Workflow |
-| `IChatClientProvider` | `GetClientAsync` | `ChatClientProvider` | ReviewAdvisor `ReviewAgentLoop`（要原生 function calling） |
+| `IStructuredChatService` | `IsConfiguredAsync`、`GetJsonAsync<T>` | `StructuredChatService` | 需要强类型 JSON 的调用方（当前预留） |
+| `IChatClientProvider` | `GetClientAsync` | `ChatClientProvider` | 需要原生 function calling 的模块（当前预留，无消费者） |
 | `IAgentToolProvider` | `GetTools()` | 各模块（AgentHarness `BuiltinTools`、未来的业务工具） | `ChatService` 构造时聚合注入 |
 | `ChatTurn`（Domain，输入模型） | `Role` / `Content` | — | `StreamAsync` 的历史入参 |
 

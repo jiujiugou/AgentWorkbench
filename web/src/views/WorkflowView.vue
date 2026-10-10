@@ -15,7 +15,7 @@ const { health: backendHealth, start: startHealthCheck } = useBackendHealth({
   immediate: true,
 })
 
-const PROMPT_KEY = 'advisor.conclusion'
+const PROMPT_KEY = 'workflow.answer'
 
 const capabilities = ref<WorkflowCapabilities | null>(null)
 const documents = ref<{ id: string; fileName: string; status: string; chunkCount: number }[]>([])
@@ -178,7 +178,7 @@ async function addPrompt() {
         </el-table-column>
       </el-table>
       <div class="form prompt-add">
-        <el-input v-model="newVersion" placeholder="版本号，如 advisor-p0.3" style="width: 200px" />
+        <el-input v-model="newVersion" placeholder="版本号，如 base-0.2" style="width: 200px" />
         <el-input v-model="newContent" placeholder="提示词内容" style="width: 420px" />
         <el-button @click="addPrompt">新增版本（设为默认）</el-button>
       </div>

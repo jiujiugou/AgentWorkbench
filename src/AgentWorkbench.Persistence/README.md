@@ -11,7 +11,9 @@ SQLite 持久化模块：连接、FluentMigrator 迁移与仓储。
 | `PersistenceServiceCollectionExtensions.cs` | 连接、迁移、仓储的 DI 注册 |
 | `DocumentRepository.cs` | 文档 / 页 / 块的数据访问 |
 | `ProviderRepository.cs` | 模型供应商与其模型的仓储 |
-| `RuleRepository.cs` | 规则库仓储（P1 只做管理入口，内容 P2 填充） |
+| `AgentRunRepository.cs` | Agent Harness 运行与步骤轨迹的仓储 |
+| `ConversationRepository.cs` | 会话与消息仓储 |
+| `WorkflowRepository.cs` | 工作流定义 / 运行 / 步骤 / 提示词版本仓储 |
 
 ## 迁移（Migrations）
 
@@ -23,8 +25,10 @@ SQLite 持久化模块：连接、FluentMigrator 迁移与仓储。
 | `M002_CreateDocumentPages` | 文档页表（raw + cleaned） |
 | `M003_CreateChunks` | 切分块表 |
 | `M004_CreateChunksFts` | 全文索引表：FTS5 + trigram 分词（对中文子串友好），供 BM25 检索 |
-| `M005_CreateRules` | 规则库表（标准条款 / 风险清单）：P1 只建表 + 管理入口，内容 P2 填充 |
 | `M006_CreateProviders` | 供应商 / 模型表 |
+| `M014_CreateAgentRuns` / `M015_CreateAgentSteps` | Agent Harness 运行与轨迹 |
+| `M016_CreateConversations` | 会话与消息 |
+| `M017`–`M020` | 工作流定义 / 提示词版本 / 运行 / 步骤 |
 
 启动时自动迁移，并种子默认供应商（见 `Webapi/Program.cs`）。
 

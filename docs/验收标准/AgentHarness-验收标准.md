@@ -5,14 +5,16 @@
 > 判定原则：每条给出**可复核证据**（脚本结果 / 接口返回）。**全部自动化**，不含人工抽样、不含 LLM-as-judge。
 > 依据：`../测试标准/Agent-测试与验收标准.md`（**能由脚本/程序判定的，绝对不用 AI**；LLM 层用 **mock 模型 + record-replay** 确定性化）。
 
+> ⚠️ **现状（2026-10-10）**：仓库中**没有任何验收脚本**（`scripts/` 从未进版本库）。本文件是**标准**（意图与阈值），不是可立即运行的门禁；`scripts/acceptance-harness.ps1`、`scripts/eval-harness.ps1` 均**未落地**。可用 `dotnet test tests/AgentWorkbench.UnitTests` 覆盖 H0/H1 的确定性部分。
+
 ## 0. 判定方式说明
 
 | 标记 | 含义 |
 | --- | --- |
-| **自动** | 由 `scripts/acceptance-harness.ps1` 断言，给出 PASS/FAIL |
-| **度量** | 由 `scripts/eval-harness.ps1` 程序计算指标 + 阈值门禁 |
+| **自动** | 由脚本断言给 PASS/FAIL（脚本**未落地**，见顶部说明） |
+| **度量** | 由脚本程序计算指标 + 阈值门禁（脚本**未落地**） |
 
-> 本轴**不含人工项**：主观"建议是否合理"属 P3 Q1，不在此表。loop/context/memory/tools/trace 的判定全部程序化（mock 驱动）。
+> 本轴**不含人工项**：loop/context/memory/tools/trace 的判定全部程序化（mock 驱动）。
 
 ## 1. 功能验收（判定型）
 
@@ -22,7 +24,7 @@
 | HL2 | 必定终止 | **自动（mock）** | mock 诱导不收敛 → 到 `MaxIterations`/`timeout` 终止；run 终态非悬挂 | 脚本输出 |
 | HL3 | 工具白名单 | **自动（mock）** | 仅白名单工具可执行；非白名单工具被拒且**留痕**（轨迹含拒绝记录） | 脚本输出 |
 | HL4 | 轨迹完整 | **自动** | 每步含 `iteration/kind/tool/result`；结果 `stepsUsed` 与轨迹步数一致 | 脚本输出 |
-| HL5 | P3 迁移不变量 | **自动** | 迁移到 `LoopAgent` 后 `scripts/acceptance-p3.ps1` 仍 **24/24 PASS**（行为不变） | 脚本输出 |
+| HL5 | 单元回归不变量 | **自动** | 引入新 loop 实现后 `dotnet test tests/AgentWorkbench.UnitTests` 全绿（行为不变） | 测试输出 |
 | HC1 | 检索注入 | **自动（mock）** | RAG 命中片段作为 context 注入；注入消息带来源标记 | 脚本输出 |
 | HC2 | 引用可核对 | **自动** | 结论引用 `{chunkId,seq,evidence}`：`seq` ∈ 文档真实 chunks 且 `evidence` 命中该 chunk | 脚本输出 |
 | HC3 | 预算 / 压缩 | **自动（mock）** | 超预算样本触发 `Compaction`；注入 token/消息数 ≤ 预算；未超预算时最近 N 轮不丢 | 脚本输出 |
@@ -42,12 +44,12 @@
 
 | 编号 | 标准 | 判定 | 阈值 | 证据 |
 | --- | --- | --- | --- | --- |
-| MH1 | 终止率 | **度量** | 不收敛样本终止率 **= 100%**（悬挂 = 0） | `eval-harness` 报告 |
-| MH2 | 引用可核对率 | **度量** | 带引用结论的可核对比例 **= 100%** | `eval-harness` 报告 |
-| MH3 | 压缩比 | **度量** | 超预算样本压缩后 token / 原始 token **≤ 0.60** | `eval-harness` 报告 |
-| MH4 | 会话记忆命中率 | **度量** | 金标问答中依赖会话/长期记忆的命中率 **≥ 0.80**（默认关闭时标 X 豁免） | `eval-harness` 报告 |
+| MH1 | 终止率 | **度量（待实现）** | 不收敛样本终止率 **= 100%**（悬挂 = 0） | 评测报告（评测集未建立） |
+| MH2 | 引用可核对率 | **度量（待实现）** | 带引用结论的可核对比例 **= 100%** | 评测报告（评测集未建立） |
+| MH3 | 压缩比 | **度量（待实现）** | 超预算样本压缩后 token / 原始 token **≤ 0.60** | 评测报告（评测集未建立） |
+| MH4 | 会话记忆命中率 | **度量（待实现）** | 金标问答中依赖会话/长期记忆的命中率 **≥ 0.80**（默认关闭时标 X 豁免） | 评测报告（评测集未建立） |
 
-> 指标均为**程序计算**（对照 `tests/benchmark/harness/golden/`），不调用模型做判断。
+> 指标均为**程序计算**，不调用模型做判断；评测集 `tests/benchmark/harness/` **尚未建立**（`tests/benchmark/` 整个目录已随垂直模块移除）。
 
 ## 3. 负控（红队）——必须存在，且必须"会失败"
 
@@ -63,14 +65,16 @@
 
 ## 4. 测试集
 
-- 复用：`tests/corpus/`、`tests/benchmark/p2/negative/`、`tests/benchmark/p3/`、`tests/fixtures/llm/`。
-- 新增 `tests/benchmark/harness/`：
+- 复用：`tests/corpus/`（`sample-contract.pdf` / `long-contract.pdf`）。
+- **待建立** `tests/benchmark/harness/`（当前不存在）：
   - `golden/`：会话脚本 + 期望（注入来源、压缩后预算、记忆命中）。
   - `negative/`：死循环 / 越权工具 / 非 JSON / 超长上下文 / 缺 session。
   - `long-conversation.json`：超长多轮样本，供 HC3/HM4/MH3。
-- 本地 mock：沿用 `src/AgentWorkbench.MockLlm`（如需新增动作在 `tests/fixtures/llm/` 增场景），**不得调用真模型**。
+- 本地 mock：沿用 `src/AgentWorkbench.MockLlm`（场景内置在 `Program.cs`：`normal` / `harness-tool` / `harness-loop` / `reject-tools`），**不得调用真模型**。
 
 ## 5. 自动化脚本
+
+> **未落地**：以下脚本在仓库中不存在（`scripts/` 从未进版本库）。保留命令形态是作为将来补齐门禁时的目标接口。
 
 ```powershell
 # 判定 + 负控（构建 → 清库 → 起 mock+服务 → 跑 → 停）
@@ -88,5 +92,5 @@ powershell -ExecutionPolicy Bypass -File scripts/eval-harness.ps1
 
 - **自动**：HL/HC/HM/HT/HO 全 PASS + NH1–NH7 全 PASS。
 - **度量**：MH1/MH2/MH3 达标（MH4 未启用长期记忆时标 X 豁免）。
-- **回归**：`scripts/acceptance-p3.ps1` 仍 24/24（HL5）。
+- **回归**：`dotnet test tests/AgentWorkbench.UnitTests` 全绿（HL5）。
 - 同时满足 → **Agent Harness 通过**。

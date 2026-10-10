@@ -16,8 +16,6 @@
     <ProjectReference Include="..\AgentWorkbench.Documents\AgentWorkbench.Documents.csproj" />
     <ProjectReference Include="..\AgentWorkbench.Knowledge\AgentWorkbench.Knowledge.csproj" />
     <ProjectReference Include="..\AgentWorkbench.Agent\AgentWorkbench.Agent.csproj" />
-    <ProjectReference Include="..\AgentWorkbench.Review\AgentWorkbench.Review.csproj" />
-    <ProjectReference Include="..\AgentWorkbench.ReviewAdvisor\AgentWorkbench.ReviewAdvisor.csproj" />
     <ProjectReference Include="..\AgentWorkbench.AgentHarness\AgentWorkbench.AgentHarness.csproj" />
     <ProjectReference Include="..\AgentWorkbench.Workflow\AgentWorkbench.Workflow.csproj" />
     <ProjectReference Include="..\AgentWorkbench.Providers\AgentWorkbench.Providers.csproj" />

@@ -54,9 +54,7 @@ const stepStatusText: Record<string, string> = {
 }
 
 const stepTitle: Record<string, string> = {
-  extract: '要素抽取',
-  compare: '规则比对',
-  agent: '审查结论（Agent）',
+  agent: '结论（Agent）',
   report: '汇总报告',
 }
 

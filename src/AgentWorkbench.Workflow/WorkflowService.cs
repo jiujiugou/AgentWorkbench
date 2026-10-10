@@ -35,7 +35,7 @@ public interface IWorkflowService
 /// <inheritdoc />
 public sealed class WorkflowService : IWorkflowService
 {
-    public const string DefaultWorkflowKey = "contract_review";
+    public const string DefaultWorkflowKey = "document_analysis";
 
     private readonly IWorkflowRepository _repository;
     private readonly IDocumentRepository _documents;

@@ -1,5 +1,0 @@
-{
-  "scenario": "normal",
-  "kind": "agent-final-dynamic",
-  "_comment": "正常的 Agent Loop 响应：从用户提示中的证据观察（seq=N :: 原文）取第一条，回填为可核对引用。"
-}

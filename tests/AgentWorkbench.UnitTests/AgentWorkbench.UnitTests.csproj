@@ -28,8 +28,6 @@
     <ProjectReference Include="..\..\src\AgentWorkbench.Knowledge.Local\AgentWorkbench.Knowledge.Local.csproj" />
     <ProjectReference Include="..\..\src\AgentWorkbench.Agent\AgentWorkbench.Agent.csproj" />
     <ProjectReference Include="..\..\src\AgentWorkbench.Providers\AgentWorkbench.Providers.csproj" />
-    <ProjectReference Include="..\..\src\AgentWorkbench.Review\AgentWorkbench.Review.csproj" />
-    <ProjectReference Include="..\..\src\AgentWorkbench.ReviewAdvisor\AgentWorkbench.ReviewAdvisor.csproj" />
     <ProjectReference Include="..\..\src\AgentWorkbench.AgentHarness\AgentWorkbench.AgentHarness.csproj" />
     <ProjectReference Include="..\..\src\AgentWorkbench.Workflow\AgentWorkbench.Workflow.csproj" />
     <ProjectReference Include="..\..\src\AgentWorkbench.Persistence\AgentWorkbench.Persistence.csproj" />

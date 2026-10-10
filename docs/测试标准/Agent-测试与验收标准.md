@@ -1,8 +1,8 @@
 # Agent 测试与验收标准（AgentWorkbench）
 
 > 版本：v0.2 ｜ 2026-10-05
-> 适用：P0 数据管道 / P1 知识库 / P2 要素抽取与比对 / 后续 P3。
-> 依据：`docs/法律文件Agent-MVP与实施指南.md` ⑥；`docs/设计步骤/P2要素抽取与比对.md`；NitroGateway 的 AC / Invariants / FACTORY-TEST 实践。
+> 适用：PRJ 全部模块（PDF 数据管道 / 知识库 / 模型网关 / Agent 运行时 / Harness / Workflow）。
+> 依据：NitroGateway 的 AC / Invariants / FACTORY-TEST 实践。
 
 ---
 
@@ -10,7 +10,7 @@
 
 网关类项目的正确性是**布尔可判定**的（值/状态/消息），判定型测试足够。Agent 的核心是**概率性生成**（抽取、结论、回答），没有唯一答案，故障是幻觉、漏抽、误判。
 
-结论：把系统切成"**确定性内核 + 概率性智能层**"两部分，分别用两条轨道治理。P2 是 LLM 首次进入主流程的里程碑，是分叉起点（见 `P2-测试设计.md`）。
+结论：把系统切成"**确定性内核 + 概率性智能层**"两部分，分别用两条轨道治理。LLM 一旦进入主流程，即按本标准的双轨治理。
 
 ---
 
@@ -26,7 +26,7 @@
 2. 有金标（正确结果已知）→ **程序化指标**（F1 / recall / 精确率 / 证据绑定率）→ 不用 AI。
 3. 只有"**无金标的开放文本质量**"才**可以**用 LLM-as-judge，且：可选、非门禁、需人工抽检校准、固定 prompt/模型/温度。
 
-**推论**（P2 适用）：LLM 相关断言用 **mock / record-replay** 去 AI 化，不用真模型。
+**推论**：LLM 相关断言用 **mock / record-replay** 去 AI 化，不用真模型。
 
 ### 1.2 判定型（绿 / 红）
 
@@ -49,10 +49,10 @@
 | L0 架构 | `tests/AgentWorkbench.ArchitectureTests` | 边界/无环 | 全绿 |
 | L1 单元 | `tests/AgentWorkbench.UnitTests` | 绿/红 | 全绿 + 变异分 ≥ break |
 | L2 集成 | 进程内 + **mock LLM** | 绿/红 | 全绿 |
-| L3 端到端 | `scripts/acceptance-p*.ps1` | PASS/FAIL/SKIP | 退出码 0 |
+| L3 端到端 | `scripts/acceptance-*.ps1`（**未落地**，`scripts/` 不存在） | PASS/FAIL/SKIP | 退出码 0 |
 | L4 不变量 | `docs/测试标准/invariants/` + 检测器 | 正例绿 · 负控红 | 负控必须能红 |
-| L5 评测 | `tests/benchmark/*` + `scripts/eval-*.ps1` | 指标 ≥/≤ 阈值 | 阈值 + 趋势 |
-| L6 红队 | `tests/corpus`、`tests/benchmark/*/negative` | 必须"会失败" | 负控全过 |
+| L5 评测 | `tests/benchmark/*`（**待建立**）+ `scripts/eval-*.ps1`（**未落地**） | 指标 ≥/≤ 阈值 | 阈值 + 趋势 |
+| L6 红队 | `tests/corpus`、`tests/benchmark/*/negative`（**待建立**） | 必须"会失败" | 负控全过 |
 
 不是每个里程碑全做，映射见 §7。
 
@@ -70,19 +70,18 @@
 
 ## 4. 度量型标准
 
-- 金标集：`tests/benchmark/<milestone>/golden/`。
+- 金标集：`tests/benchmark/<milestone>/golden/`（**待建立**，目录当前不存在）。
 - 指标（**程序计算**）：
 
 | 场景 | 指标 |
 | --- | --- |
-| 抽取 | 字段 F1 / 准确率 / 召回率 |
+| 结构化输出 | 字段 F1 / 准确率 / 召回率 |
 | 检索 | recall@k / MRR / 引用命中率 |
-| 比对清单 | 精确率 / 召回率 / 合理率 |
 | 证据 | 证据绑定率（有值结论证据齐全比例） |
-| 负控 | 误报率（无关文档高危无证据清单数） |
+| 负控 | 误报率（无关输入产生命中/结论的比例） |
 | 工程 | 成本 / P95 延迟 |
 
-- 阈值（建议默认，以 `EVAL` 为准）：抽取 F1 ≥ 0.80；证据绑定率 = 100%；无关文档误报 = 0；非法输入拒绝率 = 100%。
+- 阈值（建议默认，以 `EVAL` 为准）：各项 F1 ≥ 0.80；证据绑定率 = 100%；无关输入误报 = 0；非法输入拒绝率 = 100%。
 - 非确定项固定 seed/温度并多次采样，报告注明采样次数。
 - LLM-as-judge 仅用于无金标问答，**可选、非门禁**。
 
@@ -91,7 +90,7 @@
 ## 5. 可复现性
 
 - **mock / record-replay**：LLM 请求响应录制为 fixture 回放 → 概率层变确定性，测试不调真模型。
-- 端到端用**独立端口 + 独立数据目录 + 空 provider**（参见 `scripts/acceptance-p2.ps1`）。
+- 端到端用**独立端口 + 独立数据目录 + 空 provider**（脚本未落地，落地时照此约定）。
 - 跑测试/变异前停掉常驻 Webapi（否则锁 `bin`，MSB3027）。
 
 ---
@@ -118,10 +117,11 @@
 
 | 里程碑 | 判定型 | 度量型 | 关键新增 |
 | --- | --- | --- | --- |
-| P0 | L0/L1/L3/L6 | 无 | 已具备 |
-| P1 | L0/L1/L3/L6 | 检索 recall@k（建议） | 检索指标 |
-| **P2** | L0/L1/L3/L4/L6 | F1 / 误报率 / 证据绑定率 | **双轨起点；LLM 断言去 AI 化** |
-| P3 | 全 | 开放问答 LLM-judge（可选） | record-replay、评测集运营 |
+| L0 架构 | L0 | 无 | 已具备（`ArchitectureTests`） |
+| L1 单元 | L0/L1 | 无 | 已具备（`UnitTests`） |
+| L3 端到端 | L0/L1/L3/L6 | 检索 recall@k（建议） | **待落地 `scripts/`** |
+| 双轨（LLM 相关） | L0/L1/L3/L4/L6 | F1 / 误报率 / 证据绑定率 | 双轨起点；LLM 断言去 AI 化 |
+| 全量 | 全 | 开放问答 LLM-judge（可选） | record-replay、评测集运营 |
 
 ---
 
@@ -132,4 +132,3 @@
 - `模板/EVAL-评测集模板.md`
 - `模板/REPORT-验收报告模板.md`
 
-P2 实例见 `P2-测试设计.md`。

@@ -10,7 +10,7 @@ public sealed class ReportStepExecutor : IWorkflowStepExecutor
     public Task<string> ExecuteAsync(WorkflowStepContext context, CancellationToken cancellationToken)
     {
         var builder = new StringBuilder();
-        builder.AppendLine($"# 审查报告（工作流 {context.Run.WorkflowKey}）");
+        builder.AppendLine($"# 工作流报告（{context.Run.WorkflowKey}）");
         builder.AppendLine();
         builder.AppendLine($"- 文档：{context.FileName}");
         builder.AppendLine($"- 运行：#{context.Run.Id}");

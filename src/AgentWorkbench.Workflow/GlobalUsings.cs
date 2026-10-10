@@ -1,7 +1,6 @@
 global using AgentWorkbench.AgentHarness;
 global using AgentWorkbench.Domain;
 global using AgentWorkbench.Persistence;
-global using AgentWorkbench.Review;
 global using Microsoft.Extensions.Configuration;
 global using Microsoft.Extensions.DependencyInjection;
 global using Microsoft.Extensions.Hosting;

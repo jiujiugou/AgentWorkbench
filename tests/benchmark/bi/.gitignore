@@ -1,8 +1,0 @@
-# 构建产物：由 build_db.py 从 data/DuSQL 生成
-database/
-
-# 数据集本体（体积大，按需下载，见 README）
-data/
-
-# 生成的负控预测
-pred_negctl.sql

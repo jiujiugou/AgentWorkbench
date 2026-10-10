@@ -33,8 +33,8 @@ MAF 的定位是"机制提供者"：它把与模型交互、工具调用、工�
 | # | 能力域 | MAF 提供的机制 | 对应类型（本仓库用法） | 成熟度 | 是否够用 |
 |---|---|---|---|---|---|
 | ① | **Agent 与模型交互** | `IChatClient` 抽象、`ChatClientAgent`、多轮会话、流式响应、结构化输出；多供应商解耦 | `ChatService`、`AgentHarnessService.BuildAgent`、`StructuredChatService` | 成熟 | ✅ 直接复用 |
-| ② | **Tools / 工具调用** | `AIFunctionFactory` 生成工具 Schema、`FunctionInvokingChatClient` 自动执行函数环、调用分发与结果回传；可接 MCP | `IAgentToolProvider`、`BuiltinTools`、`ReviewAgentLoop.BuildTools` | 成熟 | ✅ 直接复用 |
-| ③ | **Workflows / 工作流编排** | 将 Agent/函数/执行节点组织为有明确路径的流程，支持顺序、并行、条件分支、汇合、多 Agent 协作 | 仓库**自研**了 `AgentWorkbench.Workflow`，**未使用** MAF Workflow 引擎 | 成熟（但本仓库未用） | ⚠️ 已另起炉灶，保持现状 |
+| ② | **Tools / 工具调用** | `AIFunctionFactory` 生成工具 Schema、`FunctionInvokingChatClient` 自动执行函数环、调用分发与结果回传；可接 MCP | `IAgentToolProvider`、`AgentHarness/Tools/BuiltinTools` | 成熟 | ✅ 直接复用 |
+| ③ | **Workflows / 工作流编排** | 将 Agent/函数/执行节点组织为有明确路径的流程，支持顺序、并行、条件分支、汇合、多 Agent 协作 | `AgentWorkbench.Workflow` 用 `Microsoft.Agents.AI.Workflows`（`WorkflowBuilder` + `InProcessExecution`）做顺序图编排 | 成熟 | ✅ 直接复用（顺序管线） |
 | ④ | **会话状态 / 记忆 / 上下文** | `ChatHistoryProvider`（含内存实现）、可扩展的上下文提供器、可接持久化与检索 | `InMemoryChatHistoryProvider`、RAG 注入（`IKnowledgeEngine`） | 提供扩展点 | ⚠️ 只给了壳，存储策略自定 |
 | ⑤ | **Middleware / 中间件** | 在模型请求、响应、Agent 执行过程中插入自定义逻辑（日志/策略/过滤/异常/拦截） | `FunctionInvoker` 回调、run 级 try/catch | 扩展点 | ⚠️ 仅扩展点 |
 | ⑥ | **Checkpoint / 暂停与恢复** | 对支持检查点的工作流保存执行状态并恢复；用于长任务、中断恢复、人工审批 | 仓库在 `WorkflowService` 里**手工**做了步骤级检查点 | 机制存在 | ⚠️ Harness run 无检查点 |
@@ -82,15 +82,14 @@ MAF 的定位是"机制提供者"：它把与模型交互、工具调用、工�
 | 结构化输出 | `IStructuredChatService` / `StructuredChatService` | 强类型 JSON |
 | 模型网关 | `src/AgentWorkbench.Providers` + `IChatClientFactory` | 多供应商 / 模型解析 |
 | 混合检索 RRF | `src/AgentWorkbench.Knowledge.Local` | FTS5 + sqlite-vec + RRF |
-| 自研工作流（P4） | `src/AgentWorkbench.Workflow/WorkflowService.cs` | 步骤级检查点、重跑、续跑、重试、提示词版本 |
-| 自研审查 Agent（P3） | `src/AgentWorkbench.ReviewAdvisor/Agent/ReviewAgentLoop.cs` | 只读工具环 + 越权终止 + 引用后置校验 |
-| 任务队列 / 后台消费 | `WorkflowRunQueue`+`WorkflowWorker`、`AdvisorRunQueue`+`AdvisorWorker` | `Channel` + `BackgroundService` |
+| 工作流（P4） | `src/AgentWorkbench.Workflow/WorkflowService.cs` | MAF 图编排：步骤级检查点、重跑、续跑、重试、提示词版本 |
+| 任务队列 / 后台消费 | `WorkflowRunQueue`+`WorkflowWorker` | `Channel` + `BackgroundService` |
 | Web 组合根 | `src/AgentWorkbench.Webapi/Program.cs` | `AddNitroXxx` 模块注册 + SignalR Hub |
-| 已有验收 | `scripts/acceptance-harness.ps1`（13 断言）、`-p0`～`-p4` | 全部 mock LLM 驱动 |
+| 已有验收 | `tests/AgentWorkbench.ArchitectureTests`、`tests/AgentWorkbench.UnitTests` | **无端到端脚本**（`scripts/` 不存在） |
 | 架构边界 | `tests/AgentWorkbench.ArchitectureTests` | ArchUnitNET 强制依赖方向 |
 
 **共同短板**：
-1. 全部 mock LLM 驱动，**未在真实模型下验证过**；
+1. 没有端到端验收脚本（`scripts/` 目录从未进入版本库），**未在真实模型下验证过**；
 2. 只有正例绿，**几乎全部缺"能变红的负控"**；
 3. Harness 这一层**只有"能跑"，没有"跑得住"**（无预算、无循环检测、无错误分类、无幂等、无并发控制、无审批）。
 
@@ -193,7 +192,7 @@ MAF 的定位是"机制提供者"：它把与模型交互、工具调用、工�
 
 | 属性 | 含义 | 判定方式 |
 |---|---|---|
-| **可运行** | 一条命令独立启动，无需业务模块也能跑通闭环 | `acceptance-harness` 绿 |
+| **可运行** | 一条命令独立启动，无需业务模块也能跑通闭环 | `dotnet build` + 单测全绿（端到端脚本未落地） |
 | **可终止** | 任何异常输入都不会悬挂；总有明确终态 | 死循环样本终止率 = 100%（MH1） |
 | **可靠** | 工具失败可重试/降级；恢复不重复副作用 | B5/B9 正例绿 + 负控红 |
 | **可恢复** | 中断后能从中断点续跑，状态持久化 | 重启后同 session 可续、run 可 resume |
@@ -274,9 +273,9 @@ MAF 的定位是"机制提供者"：它把与模型交互、工具调用、工�
 dotnet build AgentWorkbench.slnx
 dotnet test tests/AgentWorkbench.ArchitectureTests
 dotnet test tests/AgentWorkbench.UnitTests
-powershell -ExecutionPolicy Bypass -File scripts/acceptance-harness.ps1
+# 端到端验收脚本尚未落地（scripts/ 目录不存在）
 # 阶段 P3 起：
-python scripts/eval-harness.py      # -> tests/benchmark/harness/report.json
+# python scripts/eval-harness.py    # -> tests/benchmark/harness/report.json
 ```
 
 全过退出码 0。
@@ -291,7 +290,7 @@ python scripts/eval-harness.py      # -> tests/benchmark/harness/report.json
 - ❌ 不做多租户 SaaS / 计费 / 组织管理
 - ❌ 不做前端管理后台（现有 web 只演示，不加功能）
 - ❌ **不重写 MAF 已有的 Agent Loop / 工具协议 / Workflow 引擎**
-- ❌ 不把知识库（RAG）继续做深——它已够用，评测交给 `tests/benchmark/`
+- ❌ 不把知识库（RAG）继续做深——它已够用；评测集需在 `tests/benchmark/`（**待建立**）补齐
 
 ---
 
@@ -325,5 +324,5 @@ python scripts/eval-harness.py      # -> tests/benchmark/harness/report.json
 | 轨迹仓储 | `src/AgentWorkbench.Persistence/AgentRunRepository.cs` |
 | HTTP 入口 | `src/AgentWorkbench.Webapi/Controllers/HarnessController.cs` |
 | 组合根 | `src/AgentWorkbench.Webapi/Program.cs` |
-| 已有验收 | `scripts/acceptance-harness.ps1` |
+| 验收脚本（未落地） | `scripts/acceptance-harness.ps1`（不存在） |
 | 可执行验收标准 | `docs/验收标准/AgentHarness-验收标准.md` |

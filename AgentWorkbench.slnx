@@ -9,8 +9,6 @@
     <Project Path="src/AgentWorkbench.Knowledge/AgentWorkbench.Knowledge.csproj" />
     <Project Path="src/AgentWorkbench.Providers/AgentWorkbench.Providers.csproj" />
     <Project Path="src/AgentWorkbench.Agent/AgentWorkbench.Agent.csproj" />
-    <Project Path="src/AgentWorkbench.Review/AgentWorkbench.Review.csproj" />
-    <Project Path="src/AgentWorkbench.ReviewAdvisor/AgentWorkbench.ReviewAdvisor.csproj" />
     <Project Path="src/AgentWorkbench.AgentHarness/AgentWorkbench.AgentHarness.csproj" />
     <Project Path="src/AgentWorkbench.Workflow/AgentWorkbench.Workflow.csproj" />
     <Project Path="src/AgentWorkbench.Webapi/AgentWorkbench.Webapi.csproj" />

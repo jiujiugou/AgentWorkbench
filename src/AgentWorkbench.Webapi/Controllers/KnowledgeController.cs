@@ -12,7 +12,6 @@ namespace AgentWorkbench.Webapi.Controllers;
 
 public sealed record RetrieveRequest(string Query, int? TopK);
 public sealed record AskRequest(string Query, List<ChatTurn>? History);
-public sealed record CreateRuleRequest(string Category, string Name, string Body);
 
 [ApiController]
 [Route("api/knowledge")]
@@ -21,20 +20,17 @@ public sealed class KnowledgeController : ControllerBase
     private readonly IKnowledgeEngine _engine;
     private readonly IRagService _rag;
     private readonly IDocumentRepository _documents;
-    private readonly IRuleRepository _rules;
     private readonly ILogger<KnowledgeController> _logger;
 
     public KnowledgeController(
         IKnowledgeEngine engine,
         IRagService rag,
         IDocumentRepository documents,
-        IRuleRepository rules,
         ILogger<KnowledgeController> logger)
     {
         _engine = engine;
         _rag = rag;
         _documents = documents;
-        _rules = rules;
         _logger = logger;
     }
 
@@ -121,39 +117,6 @@ public sealed class KnowledgeController : ControllerBase
 
         _logger.LogInformation("Ask completed: AnswerLength={Length} Sources={SourceCount} ElapsedMs={ElapsedMs}", builder.Length, sources.Count, sw.ElapsedMilliseconds);
         return Ok(new { answer = builder.ToString(), sources = sources.Select(ToSource) });
-    }
-
-    [HttpGet("rules")]
-    public async Task<IActionResult> ListRules()
-    {
-        var sw = Stopwatch.StartNew();
-        var rules = await _rules.ListAsync();
-        _logger.LogDebug("List rules: {Count} in {ElapsedMs}ms", rules.Count, sw.ElapsedMilliseconds);
-        return Ok(rules);
-    }
-
-    [HttpPost("rules")]
-    public async Task<IActionResult> CreateRule([FromBody] CreateRuleRequest request)
-    {
-        var sw = Stopwatch.StartNew();
-        if (request is null || string.IsNullOrWhiteSpace(request.Name))
-        {
-            _logger.LogWarning("CreateRule failed: empty name");
-            return BadRequest(new { message = "name 不能为空" });
-        }
-
-        var rule = await _rules.InsertAsync(request.Category ?? string.Empty, request.Name, request.Body ?? string.Empty);
-        _logger.LogInformation("CreateRule: {Category}/{Name} (id={Id}) in {ElapsedMs}ms", rule.Category, rule.Name, rule.Id, sw.ElapsedMilliseconds);
-        return Ok(rule);
-    }
-
-    [HttpDelete("rules/{id:long}")]
-    public async Task<IActionResult> DeleteRule(long id)
-    {
-        var sw = Stopwatch.StartNew();
-        var deleted = await _rules.DeleteAsync(id);
-        _logger.LogInformation("DeleteRule: {Id} Deleted={Deleted} in {ElapsedMs}ms", id, deleted, sw.ElapsedMilliseconds);
-        return deleted ? NoContent() : NotFound();
     }
 
     private static object ToSource(RetrievalHit hit) => new

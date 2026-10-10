@@ -38,15 +38,6 @@ export interface RetrievalSource {
   content: string
 }
 
-export interface Rule {
-  id: number
-  category: string
-  name: string
-  body: string
-  version: number
-  createdAt: string
-}
-
 async function handle<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const text = await response.text().catch(() => '')
@@ -66,12 +57,4 @@ export const knowledgeApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query, topK }),
     }).then((r) => handle<RetrievalSource[]>(r)),
-  rules: () => fetch('/api/knowledge/rules').then((r) => handle<Rule[]>(r)),
-  addRule: (category: string, name: string, body: string) =>
-    fetch('/api/knowledge/rules', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category, name, body }),
-    }).then((r) => handle<Rule>(r)),
-  removeRule: (id: number) => fetch(`/api/knowledge/rules/${id}`, { method: 'DELETE' }),
 }

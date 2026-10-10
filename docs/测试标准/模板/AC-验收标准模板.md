@@ -22,7 +22,7 @@
 
 - [ ] **M-1** <指标> 达标。
   **期望**：<指标 ≥/≤ 阈值；与基线对比>。
-  **证据**：`scripts/eval-*.ps1` 报告（`report.json` 指标值）。
+  **证据**：评测报告（`report.json` 指标值）。⚠️ 仓库当前**没有任何验收/评测脚本**（`scripts/` 未进版本库），脚本形态的评测属**待实现**。
 
 ## 人工（若有）
 
@@ -34,8 +34,10 @@
 
 - [ ] **V-1** `dotnet build AgentWorkbench.slnx` → 0 错误。
 - [ ] **V-2** `dotnet test tests/AgentWorkbench.UnitTests` → 全绿。
-- [ ] **V-3** `pwsh -File scripts/acceptance-p<X>.ps1` → 退出码 0。
-- [ ] **V-4** `<评测命令>` → 指标达标。
+- [ ] **V-3** `dotnet test tests/AgentWorkbench.ArchitectureTests` → 全绿。
+- [ ] **V-4** `cd web; npm run build` → 0 错误。
+
+> 说明：`scripts/acceptance-*.ps1` / `scripts/eval-*.ps1` 在仓库中**不存在**（未落地）。若补充了端到端门禁脚本，在此追加 `V-5 ... → 退出码 0`。
 
 ## 附件
 

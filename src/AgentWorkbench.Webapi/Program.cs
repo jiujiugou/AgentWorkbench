@@ -4,8 +4,6 @@ using AgentWorkbench.Documents;
 using AgentWorkbench.Knowledge;
 using AgentWorkbench.Persistence;
 using AgentWorkbench.Providers;
-using AgentWorkbench.Review;
-using AgentWorkbench.ReviewAdvisor;
 using AgentWorkbench.Workflow;
 using AgentWorkbench.Webapi.Hubs;
 using Microsoft.AspNetCore.Http.Features;
@@ -30,12 +28,8 @@ builder.Services.AddNitroProviders(builder.Configuration);
 builder.Services.AddNitroAgents(builder.Configuration);
 builder.Services.AddNitroKnowledge(builder.Configuration);
 builder.Services.AddNitroDocuments(builder.Configuration);
-builder.Services.AddNitroReview(builder.Configuration);
-builder.Services.AddNitroReviewAdvisor(builder.Configuration);
 builder.Services.AddNitroAgentHarness(builder.Configuration);
 builder.Services.AddNitroWorkflow(builder.Configuration);
-// 用 SignalR 覆盖 Review 模块的默认空进度通知
-builder.Services.AddSingleton<IReviewProgressNotifier, SignalRReviewProgressNotifier>();
 // 用 SignalR 覆盖 Workflow 模块的默认空进度通知
 builder.Services.AddSingleton<IWorkflowProgressNotifier, SignalRWorkflowProgressNotifier>();
 
@@ -55,7 +49,6 @@ var app = builder.Build();
 // 启动即迁移，并种子默认供应商
 app.InitializeDatabase();
 await app.Services.SeedDefaultProviderAsync();
-await app.Services.SeedReviewRulesAsync();
 await app.Services.SeedWorkflowAsync();
 
 app.UseSerilogRequestLogging();
@@ -72,7 +65,6 @@ app.UseCors("spa");
 
 app.MapControllers();
 app.MapHub<AgentHub>("/hubs/agent");
-app.MapHub<ReviewHub>("/hubs/review");
 app.MapHub<WorkflowHub>("/hubs/workflow");
 
 app.Run();
