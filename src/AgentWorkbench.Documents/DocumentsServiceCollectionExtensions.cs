@@ -1,4 +1,6 @@
 using AgentWorkbench.Documents.Parsing;
+using AgentWorkbench.Documents.Tools;
+using AgentWorkbench.ToolExecution;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -16,6 +18,9 @@ public static class DocumentsServiceCollectionExtensions
         services.AddSingleton<IChunker, Chunker>();
         services.AddSingleton<DocumentIngestionService>();
         services.AddHostedService<DocumentParseWorker>();
+
+        // 文档工具：由文档模块自己注册（工具平台不反向依赖文档仓储）
+        services.AddSingleton<IAgentToolProvider, ListDocumentsTool>();
         return services;
     }
 }

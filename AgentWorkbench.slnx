@@ -8,13 +8,20 @@
     <Project Path="src/AgentWorkbench.Knowledge.Local/AgentWorkbench.Knowledge.Local.csproj" />
     <Project Path="src/AgentWorkbench.Knowledge/AgentWorkbench.Knowledge.csproj" />
     <Project Path="src/AgentWorkbench.Providers/AgentWorkbench.Providers.csproj" />
-    <Project Path="src/AgentWorkbench.Agent/AgentWorkbench.Agent.csproj" />
+    <Project Path="src/AgentWorkbench.ModelRuntime/AgentWorkbench.ModelRuntime.csproj" />
+    <Project Path="src/AgentWorkbench.Conversation/AgentWorkbench.Conversation.csproj" />
+    <Project Path="src/AgentWorkbench.ToolExecution/AgentWorkbench.ToolExecution.csproj" />
+    <Project Path="src/AgentWorkbench.Safety/AgentWorkbench.Safety.csproj" />
+    <Project Path="src/AgentWorkbench.AgentLoop/AgentWorkbench.AgentLoop.csproj" />
+    <Project Path="src/AgentWorkbench.Context/AgentWorkbench.Context.csproj" />
+    <Project Path="src/AgentWorkbench.Memory/AgentWorkbench.Memory.csproj" />
+    <Project Path="src/AgentWorkbench.Observability/AgentWorkbench.Observability.csproj" />
     <Project Path="src/AgentWorkbench.AgentHarness/AgentWorkbench.AgentHarness.csproj" />
     <Project Path="src/AgentWorkbench.Workflow/AgentWorkbench.Workflow.csproj" />
     <Project Path="src/AgentWorkbench.Webapi/AgentWorkbench.Webapi.csproj" />
-    <Project Path="src/AgentWorkbench.MockLlm/AgentWorkbench.MockLlm.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/AgentWorkbench.MockLlm/AgentWorkbench.MockLlm.csproj" />
     <Project Path="tests/AgentWorkbench.ArchitectureTests/AgentWorkbench.ArchitectureTests.csproj" />
     <Project Path="tests/AgentWorkbench.UnitTests/AgentWorkbench.UnitTests.csproj" />
   </Folder>

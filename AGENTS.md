@@ -27,19 +27,33 @@ cd web; npm run build
 | Knowledge.Local | src/AgentWorkbench.Knowledge.Local | FTS5 + sqlite-vec + RRF |
 | Knowledge | src/AgentWorkbench.Knowledge | 聚合 AddNitroKnowledge |
 | Providers | src/AgentWorkbench.Providers | 模型网关（供应商/模型 + IChatClient） |
-| Agent | src/AgentWorkbench.Agent | 对话 Agent 运行时（Microsoft Agent Framework）+ 工具扩展点 + IStructuredChatService |
-| AgentHarness | src/AgentWorkbench.AgentHarness | Agent Harness 运行时横切轴（loop/context/memory/tools/trace，基于 MAF） |
+| ModelRuntime | src/AgentWorkbench.ModelRuntime | 模型交互：统一调用语义（单次请求超时/重试/并发闸门/用量统计） |
+| ToolExecution | src/AgentWorkbench.ToolExecution | 工具调用：工具扩展点 + 白名单目录 + 函数调用环 + 通用内置工具 |
+| AgentLoop | src/AgentWorkbench.AgentLoop | 执行控制：迭代预算与 run 级超时 |
+| Context | src/AgentWorkbench.Context | 上下文组装：检索片段 → 最终 user 文本（纯逻辑） |
+| Memory | src/AgentWorkbench.Memory | 状态与记忆：会话存储（sessionId → AgentSession） |
+| Safety | src/AgentWorkbench.Safety | 可靠性与安全：工具授权白名单策略 |
+| Observability | src/AgentWorkbench.Observability | 可观测与评估：执行轨迹落库与回放 |
+| Conversation | src/AgentWorkbench.Conversation | 对话 Agent 运行时（Microsoft Agent Framework）+ IStructuredChatService |
+| AgentHarness | src/AgentWorkbench.AgentHarness | Agent 运行时编排门面：装配 model/tools/context/session/loop/trace，自身不实现能力 |
 | Workflow | src/AgentWorkbench.Workflow | 工作流（Workflow Loop：步骤编排/单步重跑/提示词版本/重试/检查点；步骤类型 agent + report） |
-| MockLlm | src/AgentWorkbench.MockLlm | 确定性 OpenAI 兼容 Mock 模型（测试替身，永不调真模型） |
+| MockLlm | tests/AgentWorkbench.MockLlm | 确定性 OpenAI 兼容 Mock 模型（测试替身，永不调真模型） |
 | ArchitectureTests | tests/AgentWorkbench.ArchitectureTests | ArchUnitNET 边界强制 |
 
 ## 依赖方向（禁止反向/循环）
 Webapi → 各模块
-Agent → Providers, Domain
-AgentHarness → Agent, Providers, Knowledge.Abstractions, Persistence, Domain
+Conversation → Providers, ModelRuntime, ToolExecution, Domain
+ModelRuntime → （仅 Shared）
+ToolExecution → Safety
+AgentLoop → （仅 Shared）
+Context → Knowledge.Abstractions
+Memory → （仅 Shared）
+Safety → （仅 Shared）
+Observability → Persistence, Domain
+AgentHarness → ModelRuntime, ToolExecution, AgentLoop, Context, Memory, Safety, Observability, Providers, Knowledge.Abstractions
 Workflow → AgentHarness, Knowledge.Abstractions, Persistence, Domain
-Knowledge.Local → Knowledge.Abstractions, Persistence, Providers, Agent
-Documents → Knowledge.Abstractions, Persistence
+Knowledge.Local → Knowledge.Abstractions, Persistence, Providers, Conversation, ToolExecution
+Documents → Knowledge.Abstractions, Persistence, ToolExecution
 Persistence/Providers/Knowledge.Abstractions → Domain
 Domain → Shared；所有模块 → Shared
 
@@ -47,10 +61,12 @@ Domain → Shared；所有模块 → Shared
 - IKnowledgeEngine + KnowledgeEngineRegistry（新知识引擎）
 - IEmbeddingProvider + EmbeddingProviderRegistry（新向量模型）
 - IReranker（重排）、IChatClientFactory（模型网关 → IChatClient）
-- IAgentToolProvider（Microsoft Agent Framework 函数工具注入）
+- IAgentToolProvider（Microsoft Agent Framework 函数工具注入；一个工具一个类）
+- IToolCatalog / IToolExecutionPipeline / IToolPolicy（工具目录与执行环、授权白名单）
+- IModelRuntime（统一模型调用语义）· IAgentLoop（预算与超时）· IContextBuilder · ISessionStore · IExecutionTraceStore
 - IStructuredChatService（强类型 JSON 结构化输出）
 - IWorkflowStepExecutor + WorkflowStepRegistry（新步骤类型）、IPromptStore（提示词来源/存储）、IWorkflowProgressNotifier（进度通道）
-- 模块自注册：AddNitroPersistence / AddNitroProviders / AddNitroAgents / AddNitroKnowledge / AddNitroDocuments / AddNitroAgentHarness / AddNitroWorkflow
+- 模块自注册：AddNitroPersistence / AddNitroProviders / AddNitroModelRuntime / AddNitroToolExecution / AddNitroConversation / AddNitroKnowledge / AddNitroDocuments / AddNitroContext / AddNitroMemory / AddNitroSafety / AddNitroObservability / AddNitroAgentLoop / AddNitroAgentHarness / AddNitroWorkflow
 
 ## 工作规则
 1. 先调查 2. 最小修改 3. 验证（build + 架构测试 + 验收）4. 停止

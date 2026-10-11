@@ -11,7 +11,10 @@
 | `ModuleSlices.cs` | 按 `AgentWorkbench.<Module>` 顶层命名空间切分为模块切片 |
 | `TestArchitecture.cs` | 加载待测程序集，供各规则复用 |
 
-预期模块：Shared、Domain、Persistence、Documents、Knowledge、Providers、Webapi。
+预期模块：Shared、Domain、Persistence、Documents、Knowledge、Providers、ModelRuntime、Conversation、
+ToolExecution、Safety、AgentLoop、Context、Memory、Observability、AgentHarness、Workflow、Webapi。
+
+负控：`Modules_should_not_depend_on_webapi` —— 任何模块反向 `using AgentWorkbench.Webapi` 都必须让本用例变红。
 
 ## 运行
 

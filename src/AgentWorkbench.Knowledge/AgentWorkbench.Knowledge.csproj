@@ -19,5 +19,6 @@
     <ProjectReference Include="..\AgentWorkbench.Persistence\AgentWorkbench.Persistence.csproj" />
     <ProjectReference Include="..\AgentWorkbench.Providers\AgentWorkbench.Providers.csproj" />
     <ProjectReference Include="..\AgentWorkbench.Shared\AgentWorkbench.Shared.csproj" />
+    <ProjectReference Include="..\AgentWorkbench.ToolExecution\AgentWorkbench.ToolExecution.csproj" />
   </ItemGroup>
 </Project>

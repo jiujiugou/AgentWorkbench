@@ -7,7 +7,9 @@ public sealed record HarnessCapabilities(bool Loop, bool Llm, bool Context, bool
 public sealed record HarnessRunRequest(string? SessionId, string Input, bool UseKnowledge = true);
 
 /// <summary>单步轨迹（loop 内的一次工具调用或最终答复）。</summary>
-public sealed record HarnessStep(int Iteration, string Kind, string? Tool, string? Arguments, string? Result);
+/// <remarks><see cref="Error"/> 仅工具步可能非空：调用失败时记异常类型与消息，便于回放时区分「失败」与「空结果」。</remarks>
+public sealed record HarnessStep(
+    int Iteration, string Kind, string? Tool, string? Arguments, string? Result, string? Error = null);
 
 /// <summary>一次 Harness run 结果。</summary>
 public sealed record HarnessRunResult(

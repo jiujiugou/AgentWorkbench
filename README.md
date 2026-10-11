@@ -29,14 +29,21 @@ AgentWorkbench/
 │  ├─ AgentWorkbench.Knowledge.Local/ # 本地实现：FTS5 + sqlite-vec + RRF + RAG
 │  ├─ AgentWorkbench.Knowledge/       # 聚合：AddNitroKnowledge()
 │  ├─ AgentWorkbench.Providers/       # 模型网关：供应商/模型 + IChatClient
-│  ├─ AgentWorkbench.Agent/           # 对话 Agent 运行时（Microsoft Agent Framework）+ 工具扩展点
-│  ├─ AgentWorkbench.AgentHarness/    # Agent Harness：loop/context/memory/tools/trace
+│  ├─ AgentWorkbench.ModelRuntime/    # 模型交互：单次超时/重试/并发闸门/用量统计
+│  ├─ AgentWorkbench.ToolExecution/   # 工具调用：工具目录 + 函数调用环 + 通用内置工具
+│  ├─ AgentWorkbench.AgentLoop/       # 执行控制：迭代预算 + run 级超时
+│  ├─ AgentWorkbench.Context/         # 上下文：检索片段 → 最终 user 文本
+│  ├─ AgentWorkbench.Memory/          # 状态与记忆：会话存储
+│  ├─ AgentWorkbench.Safety/          # 可靠性与安全：工具授权白名单
+│  ├─ AgentWorkbench.Observability/   # 可观测与评估：执行轨迹落库/回放
+│  ├─ AgentWorkbench.Conversation/    # 对话 Agent 运行时（Microsoft Agent Framework）+ 结构化输出
+│  ├─ AgentWorkbench.AgentHarness/    # Agent 运行时编排门面（装配以上各模块）
 │  ├─ AgentWorkbench.Workflow/        # 步骤编排：重跑/提示词版本/重试/检查点
-│  ├─ AgentWorkbench.MockLlm/         # 确定性 OpenAI 兼容 Mock 模型（测试替身，永不调真模型）
 │  └─ AgentWorkbench.Webapi/          # 组合根：Controllers / Hubs / Program.cs
 ├─ tests/
 │  ├─ AgentWorkbench.ArchitectureTests/  # ArchUnitNET 边界强制
-│  └─ AgentWorkbench.UnitTests/          # 确定性纯逻辑测试
+│  ├─ AgentWorkbench.UnitTests/          # 确定性纯逻辑测试
+│  └─ AgentWorkbench.MockLlm/            # 确定性 OpenAI 兼容 Mock 模型（测试替身，永不调真模型）
 └─ web/                               # Vue 3 前端
 ```
 
@@ -145,9 +152,9 @@ ollama pull bge-m3
 $env:Knowledge__Embedding__Provider = "ollama"   # 或 openai + BaseUrl/ApiKey
 ```
 
-### Agent Harness（运行时横切轴）
+### Agent Harness（运行时编排门面）
 
-loop/context/memory/tools/trace 的统一运行时（基于 MAF）：循环上限、超时/取消、工具白名单、轨迹落库、RAG 上下文注入。设计见 [`docs/设计步骤/AgentHarness.md`](docs/设计步骤/AgentHarness.md)。
+一次 run 的编排入口：把模型交互 / 工具调用 / 执行控制 / 上下文 / 记忆 / 安全 / 可观测各自独立的功能域模块装配起来（循环本体由 MAF 承担）。配置节：`Harness:ModelRuntime` · `Harness:ToolExecution` · `Harness:Tools` · `Harness:Loop` · `Harness:Context` · `Harness:Memory`。设计见 [`docs/设计步骤/AgentHarness.md`](docs/设计步骤/AgentHarness.md)。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
@@ -209,6 +216,7 @@ cd web; npm run build                                # 前端产物
 - [x] 知识库：`IKnowledgeEngine` 防腐层 + FTS5/sqlite-vec 混合检索 + 带引用问答
 - [x] 模型管理：多供应商/多模型在线增删 + 免重启切换（Key 待加密）
 - [x] Agent Harness：loop/工具环/轨迹/RAG 注入（基于 MAF）
+- [x] 功能域拆分：模型交互(ModelRuntime) / 工具调用(ToolExecution) / 执行控制(AgentLoop) / 上下文(Context) / 记忆(Memory) / 安全(Safety) / 可观测(Observability) 独立模块
 - [x] Workflow：步骤编排/单步重跑/提示词版本/重试/检查点
 - [ ] 落地自动化验收（`scripts/` 与负控）——当前缺口
 - [ ] 工具调用扩展（HTTP / SQLite / 文档）+ 前端可视化

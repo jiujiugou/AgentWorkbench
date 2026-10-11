@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text;
-using AgentWorkbench.Agent;
+using AgentWorkbench.Conversation;
 using AgentWorkbench.Domain;
 using AgentWorkbench.Knowledge.Abstractions.Retrieval;
 using AgentWorkbench.Knowledge.Local;

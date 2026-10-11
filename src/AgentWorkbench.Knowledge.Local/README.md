@@ -16,7 +16,8 @@
 | `Embedding/EmbeddingProviderRegistry.cs` | 按配置选择 Embedding 实现（`none` 时降级为空实现） |
 | `Embedding/OllamaEmbeddingProvider.cs` | 基于 Ollama（OllamaSharp）的本地向量化，默认模型 `bge-m3` |
 | `Embedding/OpenAiEmbeddingProvider.cs` | OpenAI 兼容 `/embeddings` 供应商（如硅基流动 bge-m3）作为私有化之外的回退 |
+| `Tools/SearchKnowledgeTool.cs` | 工具 `search_knowledge`（只读）：检索带来源的原文片段。**放在本模块内**，避免工具平台（ToolExecution）反向依赖知识库；引擎经 `IServiceProvider` 惰性解析避免 DI 环 |
 
 ## 依赖
 
-Knowledge.Abstractions、Persistence、Providers。
+Knowledge.Abstractions、Persistence、Providers、Conversation（`IChatService` 供 RAG 问答）、ToolExecution（仅工具扩展点契约）、Domain、Shared。

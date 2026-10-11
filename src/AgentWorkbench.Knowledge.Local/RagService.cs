@@ -4,7 +4,7 @@ using System.Text;
 using AgentWorkbench.Domain;
 using AgentWorkbench.Knowledge.Abstractions.Retrieval;
 using AgentWorkbench.Knowledge.Local.Retrieval;
-using AgentWorkbench.Agent;
+using AgentWorkbench.Conversation;
 using AgentWorkbench.Shared.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;

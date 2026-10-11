@@ -5,8 +5,10 @@ using AgentWorkbench.Knowledge.Local;
 using AgentWorkbench.Knowledge.Local.Embedding;
 using AgentWorkbench.Knowledge.Local.Indexing;
 using AgentWorkbench.Knowledge.Local.Retrieval;
+using AgentWorkbench.Knowledge.Local.Tools;
 using AgentWorkbench.Persistence;
 using AgentWorkbench.Shared.Options;
+using AgentWorkbench.ToolExecution;
 using CommunityToolkit.VectorData.SqliteVec;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -34,6 +36,9 @@ public static class KnowledgeServiceCollectionExtensions
             sp.GetRequiredService<LocalKnowledgeEngine>(),
             sp.GetRequiredService<IOptions<KnowledgeOptions>>()).Resolve());
         services.AddSingleton<IRagService, RagService>();
+
+        // 知识库工具：由知识模块自己注册（工具平台不反向依赖知识库）
+        services.AddSingleton<IAgentToolProvider, SearchKnowledgeTool>();
         return services;
     }
 }

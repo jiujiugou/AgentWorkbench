@@ -1,7 +1,11 @@
-global using AgentWorkbench.Agent;
-global using AgentWorkbench.Domain;
+global using AgentWorkbench.AgentLoop;
+global using AgentWorkbench.Context;
 global using AgentWorkbench.Knowledge.Abstractions;
-global using AgentWorkbench.Persistence;
+global using AgentWorkbench.Memory;
+global using AgentWorkbench.ModelRuntime;
+global using AgentWorkbench.Observability;
+global using AgentWorkbench.Providers;
+global using AgentWorkbench.ToolExecution;
 global using Microsoft.Extensions.Configuration;
 global using Microsoft.Extensions.DependencyInjection;
 global using Microsoft.Extensions.Logging;

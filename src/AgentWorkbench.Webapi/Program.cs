@@ -1,9 +1,16 @@
-using AgentWorkbench.Agent;
+using AgentWorkbench.AgentLoop;
 using AgentWorkbench.AgentHarness;
+using AgentWorkbench.Context;
+using AgentWorkbench.Conversation;
 using AgentWorkbench.Documents;
 using AgentWorkbench.Knowledge;
+using AgentWorkbench.Memory;
+using AgentWorkbench.ModelRuntime;
+using AgentWorkbench.Observability;
 using AgentWorkbench.Persistence;
 using AgentWorkbench.Providers;
+using AgentWorkbench.Safety;
+using AgentWorkbench.ToolExecution;
 using AgentWorkbench.Workflow;
 using AgentWorkbench.Webapi.Hubs;
 using Microsoft.AspNetCore.Http.Features;
@@ -24,10 +31,17 @@ builder.Services.Configure<FormOptions>(options => options.MultipartBodyLengthLi
 
 // ── 模块注册（新增能力 = 新增一行 AddNitroXxx）──
 builder.Services.AddNitroPersistence(builder.Configuration, builder.Environment);
+builder.Services.AddNitroSafety(builder.Configuration);
 builder.Services.AddNitroProviders(builder.Configuration);
-builder.Services.AddNitroAgents(builder.Configuration);
+builder.Services.AddNitroModelRuntime(builder.Configuration);
+builder.Services.AddNitroToolExecution(builder.Configuration);
+builder.Services.AddNitroConversation(builder.Configuration);
 builder.Services.AddNitroKnowledge(builder.Configuration);
 builder.Services.AddNitroDocuments(builder.Configuration);
+builder.Services.AddNitroContext(builder.Configuration);
+builder.Services.AddNitroMemory(builder.Configuration);
+builder.Services.AddNitroObservability();
+builder.Services.AddNitroAgentLoop(builder.Configuration);
 builder.Services.AddNitroAgentHarness(builder.Configuration);
 builder.Services.AddNitroWorkflow(builder.Configuration);
 // 用 SignalR 覆盖 Workflow 模块的默认空进度通知

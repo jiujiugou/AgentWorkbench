@@ -14,7 +14,8 @@ P0 数据管道模块：上传 → 队列 → 后台解析 → 清洗 → 切分
 | `Parsing/TextCleaner.cs` | 文本清洗：去页眉/页脚/页码、合并断行、规范化空白 |
 | `Parsing/TextPatterns.cs` | 文本结构识别的共享规则 |
 | `Parsing/Chunker.cs` | 按标题/条款预切分，再对超长段落做定长切分（带重叠） |
+| `Tools/ListDocumentsTool.cs` | 工具 `list_documents`（只读）：列出文档及状态。**放在本模块内**，避免工具平台（ToolExecution）反向依赖文档仓储 |
 
 ## 依赖
 
-Knowledge.Abstractions、Persistence。
+Knowledge.Abstractions、Persistence、ToolExecution（仅工具扩展点契约）、Domain、Shared。

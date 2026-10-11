@@ -12,4 +12,4 @@
 
 ## 依赖
 
-Knowledge.Local（间接 Knowledge.Abstractions、Persistence、Providers）。
+Knowledge.Local（间接 Knowledge.Abstractions、Persistence、Providers、Conversation、ToolExecution）。

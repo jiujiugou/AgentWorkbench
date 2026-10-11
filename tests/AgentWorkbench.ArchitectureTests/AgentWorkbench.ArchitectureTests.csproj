@@ -27,7 +27,15 @@
     <ProjectReference Include="..\..\src\AgentWorkbench.Knowledge.Local\AgentWorkbench.Knowledge.Local.csproj" />
     <ProjectReference Include="..\..\src\AgentWorkbench.Knowledge\AgentWorkbench.Knowledge.csproj" />
     <ProjectReference Include="..\..\src\AgentWorkbench.Providers\AgentWorkbench.Providers.csproj" />
-    <ProjectReference Include="..\..\src\AgentWorkbench.Agent\AgentWorkbench.Agent.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.ModelRuntime\AgentWorkbench.ModelRuntime.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.Conversation\AgentWorkbench.Conversation.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.ToolExecution\AgentWorkbench.ToolExecution.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.Safety\AgentWorkbench.Safety.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.AgentLoop\AgentWorkbench.AgentLoop.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.Context\AgentWorkbench.Context.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.Memory\AgentWorkbench.Memory.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.Observability\AgentWorkbench.Observability.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.AgentHarness\AgentWorkbench.AgentHarness.csproj" />
     <ProjectReference Include="..\..\src\AgentWorkbench.Webapi\AgentWorkbench.Webapi.csproj" />
   </ItemGroup>
 </Project>

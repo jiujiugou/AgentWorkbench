@@ -1,4 +1,4 @@
-using AgentWorkbench.Agent;
+using AgentWorkbench.Conversation;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgentWorkbench.Webapi.Controllers;

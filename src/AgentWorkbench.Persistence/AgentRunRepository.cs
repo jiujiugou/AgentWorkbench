@@ -45,8 +45,8 @@ public sealed class AgentRunRepository : IAgentRunRepository
         using var connection = _factory.Create();
         await connection.ExecuteAsync(
             """
-            INSERT INTO agent_steps (run_id, iteration, kind, tool, arguments, result, created_at)
-            VALUES (@RunId, @Iteration, @Kind, @Tool, @Arguments, @Result, @CreatedAt)
+            INSERT INTO agent_steps (run_id, iteration, kind, tool, arguments, result, error, created_at)
+            VALUES (@RunId, @Iteration, @Kind, @Tool, @Arguments, @Result, @Error, @CreatedAt)
             """, steps.Select(s => new
             {
                 RunId = runId,
@@ -55,6 +55,7 @@ public sealed class AgentRunRepository : IAgentRunRepository
                 s.Tool,
                 s.Arguments,
                 s.Result,
+                s.Error,
                 s.CreatedAt
             }));
     }

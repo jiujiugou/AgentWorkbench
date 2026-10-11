@@ -1,14 +1,10 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Text.Json;
-using AgentWorkbench.Knowledge.Abstractions.Retrieval;
-using AgentWorkbench.Providers;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
 namespace AgentWorkbench.AgentHarness;
 
-/// <summary>Agent Harness（运行时横切轴）：loop + context + memory + tools + trace，基于 MAF。</summary>
+/// <summary>Agent 运行时门面：一次 run 的编排入口（loop / context / memory / tools / trace 各由独立模块提供）。</summary>
 public interface IAgentHarness
 {
     Task<HarnessCapabilities> GetCapabilitiesAsync(CancellationToken cancellationToken = default);
@@ -21,34 +17,51 @@ public interface IAgentHarness
 /// <inheritdoc />
 public sealed class AgentHarnessService : IAgentHarness
 {
-    private const int MaxResultChars = 400;
+    private const int MaxAssistantChars = 400;
+    private const float Temperature = 0.7f;
 
     private readonly IChatClientFactory _factory;
-    private readonly HarnessOptions _options;
-    private readonly IReadOnlyList<IAgentToolProvider> _toolProviders;
+    private readonly IModelRuntime _runtime;
+    private readonly IToolCatalog _tools;
+    private readonly IToolExecutionPipeline _pipeline;
+    private readonly IContextBuilder _context;
+    private readonly IOptions<ContextOptions> _contextOptions;
+    private readonly ISessionStore _sessions;
+    private readonly IOptions<MemoryOptions> _memoryOptions;
+    private readonly IAgentLoop _loop;
+    private readonly IExecutionTraceStore _traces;
     private readonly IKnowledgeEngine _knowledge;
-    private readonly IAgentRunRepository _repository;
     private readonly ILoggerFactory _loggerFactory;
     private readonly IServiceProvider _services;
     private readonly ILogger<AgentHarnessService> _logger;
 
-    private readonly ConcurrentDictionary<string, AgentSession> _sessions = new(StringComparer.Ordinal);
-
     public AgentHarnessService(
         IChatClientFactory factory,
-        IOptions<HarnessOptions> options,
-        IEnumerable<IAgentToolProvider> toolProviders,
+        IModelRuntime runtime,
+        IToolCatalog tools,
+        IToolExecutionPipeline pipeline,
+        IContextBuilder context,
+        IOptions<ContextOptions> contextOptions,
+        ISessionStore sessions,
+        IOptions<MemoryOptions> memoryOptions,
+        IAgentLoop loop,
+        IExecutionTraceStore traces,
         IKnowledgeEngine knowledge,
-        IAgentRunRepository repository,
         ILoggerFactory loggerFactory,
         IServiceProvider services,
         ILogger<AgentHarnessService> logger)
     {
         _factory = factory;
-        _options = options.Value;
-        _toolProviders = toolProviders.ToList();
+        _runtime = runtime;
+        _tools = tools;
+        _pipeline = pipeline;
+        _context = context;
+        _contextOptions = contextOptions;
+        _sessions = sessions;
+        _memoryOptions = memoryOptions;
+        _loop = loop;
+        _traces = traces;
         _knowledge = knowledge;
-        _repository = repository;
         _loggerFactory = loggerFactory;
         _services = services;
         _logger = logger;
@@ -60,9 +73,9 @@ public sealed class AgentHarnessService : IAgentHarness
         return new HarnessCapabilities(
             Loop: true,
             Llm: llm,
-            Context: _options.Context.Enabled,
-            Memory: _options.Memory.SessionEnabled,
-            Tools: AllowedToolNames());
+            Context: _contextOptions.Value.Enabled,
+            Memory: _memoryOptions.Value.SessionEnabled,
+            Tools: _tools.GetToolNames());
     }
 
     public async Task<HarnessRunResult> RunAsync(HarnessRunRequest request, CancellationToken cancellationToken = default)
@@ -73,149 +86,107 @@ public sealed class AgentHarnessService : IAgentHarness
         var sessionId = string.IsNullOrWhiteSpace(request.SessionId)
             ? Guid.NewGuid().ToString("N")
             : request.SessionId!;
-        var steps = new List<HarnessStep>();
         var sw = Stopwatch.StartNew();
 
-        var tools = _toolProviders
-            .SelectMany(p => p.GetTools())
-            .Where(t => _options.Tools.Whitelist.Contains(t.Name, StringComparer.Ordinal))
-            .ToList();
-
-        var agent = BuildAgent(endpoint, tools, steps);
+        // 模型请求统一走 ModelRuntime（超时 / 重试 / 用量），工具环预算来自 AgentLoop，工具授权已由 ToolCatalog 按白名单裁剪
+        var chatClient = _runtime.Wrap(_factory.GetClient(endpoint));
+        var execution = _pipeline.Create(chatClient, new ToolExecutionLimits(_loop.MaxIterations));
+        var agent = BuildAgent(execution.Client);
 
         var userText = request.Input;
-        if (request.UseKnowledge && _options.Context.Enabled)
+        if (request.UseKnowledge && _contextOptions.Value.Enabled)
         {
-            var hits = await _knowledge.RetrieveAsync(request.Input, _options.Context.RagTopK, cancellationToken);
-            var context = BuildContext(hits);
-            if (context.Length > 0)
-                userText = context + "\n\n" + request.Input;
+            var hits = await _knowledge.RetrieveAsync(request.Input, _contextOptions.Value.RagTopK, cancellationToken);
+            userText = _context.Compose(request.Input, hits);
         }
 
         var messages = new List<ChatMessage> { new(ChatRole.User, userText) };
 
-        var session = _options.Memory.SessionEnabled
-            ? await GetOrCreateSessionAsync(sessionId, agent, cancellationToken)
+        var session = _memoryOptions.Value.SessionEnabled
+            ? await _sessions.GetOrCreateAsync(sessionId, token => agent.CreateSessionAsync(token).AsTask(), cancellationToken)
             : await agent.CreateSessionAsync(cancellationToken);
-
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(_options.Loop.TimeoutSeconds));
 
         try
         {
-            var response = await agent.RunAsync(
-                messages, session,
-                new ChatClientAgentRunOptions(new ChatOptions { Temperature = 0.7f }),
-                timeout.Token);
+            // 执行控制：run 级超时由 AgentLoop 施加（超时抛 AgentRunTimeoutException）
+            var response = await _loop.ExecuteAsync(
+                async token => await agent.RunAsync(
+                    messages, session,
+                    new ChatClientAgentRunOptions(new ChatOptions { Temperature = Temperature }),
+                    token),
+                cancellationToken);
 
             var text = response.Text ?? string.Empty;
-            var lastToolIteration = steps.Where(s => s.Kind == "tool").Select(s => s.Iteration).DefaultIfEmpty(-1).Max();
-            var finalIteration = lastToolIteration + 1;
-            steps.Add(new HarnessStep(finalIteration, "assistant", null, null, Truncate(text)));
+            var steps = BuildSteps(execution.Traces, text);
             var iterations = steps.Max(s => s.Iteration) + 1;
             sw.Stop();
 
-            var run = new AgentRunRecord
-            {
-                SessionId = sessionId,
-                Status = "succeeded",
-                Iterations = iterations,
-                Model = endpoint.Model,
-                LatencyMs = sw.ElapsedMilliseconds,
-                CreatedAt = DateTimeOffset.UtcNow.ToString("o"),
-                FinishedAt = DateTimeOffset.UtcNow.ToString("o")
-            };
-            var runId = await _repository.InsertRunAsync(run);
-            await _repository.InsertStepsAsync(runId, ToStepRecords(steps));
+            var trace = ExecutionTrace.Success(
+                sessionId, iterations, endpoint.Model, sw.ElapsedMilliseconds, ToTraceSteps(steps));
+            var runId = await _traces.SaveAsync(trace, cancellationToken);
 
-            _logger.LogInformation("Harness run {RunId} session={SessionId} iterations={Iterations} tools={ToolSteps} in {ElapsedMs}ms",
-                runId, sessionId, iterations, steps.Count(s => s.Kind == "tool"), sw.ElapsedMilliseconds);
+            _logger.LogInformation(
+                "Harness run {RunId} session={SessionId} iterations={Iterations} tools={ToolSteps} failedToolSteps={FailedToolSteps} in {ElapsedMs}ms",
+                runId, sessionId, iterations,
+                steps.Count(s => s.Kind == "tool"), steps.Count(s => s.Error is not null),
+                sw.ElapsedMilliseconds);
 
             return new HarnessRunResult(runId, sessionId, text, iterations, endpoint.Model, sw.ElapsedMilliseconds, steps);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             sw.Stop();
-            await PersistFailureAsync(sessionId, endpoint.Model, steps, sw.ElapsedMilliseconds, "运行超时（timeout）");
-            throw new TimeoutException($"Harness 运行超时（{_options.Loop.TimeoutSeconds}s）");
+            await PersistFailureAsync(sessionId, endpoint.Model, execution.Traces, sw.ElapsedMilliseconds, "运行超时（timeout）");
+            throw new AgentRunTimeoutException(_loop.TimeoutSeconds);
+        }
+        catch (TimeoutException ex)
+        {
+            sw.Stop();
+            await PersistFailureAsync(sessionId, endpoint.Model, execution.Traces, sw.ElapsedMilliseconds, ex.Message);
+            throw;
         }
         catch (Exception ex)
         {
             sw.Stop();
-            await PersistFailureAsync(sessionId, endpoint.Model, steps, sw.ElapsedMilliseconds, ex.Message);
+            await PersistFailureAsync(sessionId, endpoint.Model, execution.Traces, sw.ElapsedMilliseconds, ex.Message);
             throw;
         }
     }
 
     public async Task<HarnessRunResult?> GetRunAsync(long runId, CancellationToken cancellationToken = default)
     {
-        var run = await _repository.GetRunAsync(runId);
-        if (run is null)
+        var trace = await _traces.GetAsync(runId, cancellationToken);
+        if (trace is null)
             return null;
-        var steps = await _repository.GetStepsAsync(runId);
         return new HarnessRunResult(
-            run.Id, run.SessionId,
-            steps.LastOrDefault(s => s.Kind == "assistant")?.Result ?? string.Empty,
-            run.Iterations, run.Model, run.LatencyMs ?? 0,
-            steps.Select(s => new HarnessStep(s.Iteration, s.Kind, s.Tool, s.Arguments, s.Result)).ToList());
+            runId, trace.SessionId,
+            trace.Steps.LastOrDefault(s => s.Kind == "assistant")?.Result ?? string.Empty,
+            trace.Iterations, trace.Model, trace.LatencyMs,
+            trace.Steps.Select(s => new HarnessStep(s.Iteration, s.Kind, s.Tool, s.Arguments, s.Result, s.Error)).ToList());
     }
 
-    private ChatClientAgent BuildAgent(ChatEndpoint endpoint, List<AITool> tools, List<HarnessStep> steps)
+    private ChatClientAgent BuildAgent(IChatClient client)
     {
-        var baseClient = _factory.GetClient(endpoint);
-        var invoking = new FunctionInvokingChatClient(baseClient, _loggerFactory, _services)
-        {
-            MaximumIterationsPerRequest = _options.Loop.MaxIterations
-        };
-        invoking.FunctionInvoker = async (context, token) =>
-        {
-            steps.Add(new HarnessStep(context.Iteration, "tool", context.Function.Name, Serialize(context.Arguments), null));
-            var result = await context.Function.InvokeAsync(context.Arguments, token);
-            steps[^1] = steps[^1] with { Result = Truncate(result?.ToString()) };
-            return result;
-        };
-
         var options = new ChatClientAgentOptions
         {
             Name = "AgentHarness",
             UseProvidedChatClientAsIs = true,
             ChatHistoryProvider = new InMemoryChatHistoryProvider(new InMemoryChatHistoryProviderOptions()),
-            ChatOptions = new ChatOptions { Tools = tools, Temperature = 0.7f }
+            ChatOptions = new ChatOptions { Tools = [.. _tools.GetTools()], Temperature = Temperature }
         };
-        return new ChatClientAgent(invoking, options, _loggerFactory, _services);
+        return new ChatClientAgent(client, options, _loggerFactory, _services);
     }
 
-    private async Task<AgentSession> GetOrCreateSessionAsync(string sessionId, ChatClientAgent agent, CancellationToken cancellationToken)
-    {
-        if (_sessions.TryGetValue(sessionId, out var existing))
-            return existing;
-        var session = await agent.CreateSessionAsync(cancellationToken);
-        return _sessions.GetOrAdd(sessionId, session);
-    }
-
-    private IReadOnlyList<string> AllowedToolNames()
-    {
-        var available = _toolProviders.SelectMany(p => p.GetTools()).Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
-        return _options.Tools.Whitelist.Where(available.Contains).ToList();
-    }
-
-    private async Task PersistFailureAsync(string sessionId, string model, List<HarnessStep> steps, long elapsedMs, string error)
+    private async Task PersistFailureAsync(
+        string sessionId, string model, IReadOnlyList<ToolCallTrace> traces, long elapsedMs, string error)
     {
         try
         {
-            var run = new AgentRunRecord
-            {
-                SessionId = sessionId,
-                Status = "failed",
-                Iterations = steps.Count > 0 ? steps.Max(s => s.Iteration) : 0,
-                Model = model,
-                LatencyMs = elapsedMs,
-                Error = error,
-                CreatedAt = DateTimeOffset.UtcNow.ToString("o"),
-                FinishedAt = DateTimeOffset.UtcNow.ToString("o")
-            };
-            var runId = await _repository.InsertRunAsync(run);
-            await _repository.InsertStepsAsync(runId, ToStepRecords(steps));
+            var steps = BuildSteps(traces, assistantText: null);
+            var iterations = steps.Count > 0 ? steps.Max(s => s.Iteration) : 0;
+            await _traces.SaveAsync(
+                ExecutionTrace.Failure(sessionId, iterations, model, elapsedMs, error, ToTraceSteps(steps)),
+                CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -223,31 +194,22 @@ public sealed class AgentHarnessService : IAgentHarness
         }
     }
 
-    private static IReadOnlyList<AgentStepRecord> ToStepRecords(IEnumerable<HarnessStep> steps)
-        => steps.Select(s => new AgentStepRecord
-        {
-            Iteration = s.Iteration,
-            Kind = s.Kind,
-            Tool = s.Tool,
-            Arguments = s.Arguments,
-            Result = s.Result,
-            CreatedAt = DateTimeOffset.UtcNow.ToString("o")
-        }).ToList();
-
-    private static string BuildContext(IReadOnlyList<RetrievalHit> hits)
+    private static IReadOnlyList<HarnessStep> BuildSteps(IReadOnlyList<ToolCallTrace> traces, string? assistantText)
     {
-        if (hits.Count == 0)
-            return string.Empty;
-        var lines = hits.Select(h => $"《{h.FileName}》片段#{h.Seq} (p{h.PageFrom}-{h.PageTo}) :: {Snippet(h.Content)}");
-        return "【知识库检索片段】仅供回答参考，需在结论中标注来源：\n" + string.Join("\n", lines);
+        var steps = traces
+            .Select(t => new HarnessStep(t.Iteration, "tool", t.Name, t.Arguments, t.Result, t.Error))
+            .ToList();
+        if (assistantText is null)
+            return steps;
+
+        var finalIteration = steps.Select(s => s.Iteration).DefaultIfEmpty(-1).Max() + 1;
+        steps.Add(new HarnessStep(finalIteration, "assistant", null, null, Truncate(assistantText)));
+        return steps;
     }
 
-    private static string Serialize(AIFunctionArguments arguments)
-        => JsonSerializer.Serialize(arguments.ToDictionary(kv => kv.Key, kv => kv.Value?.ToString()));
+    private static IReadOnlyList<ExecutionStep> ToTraceSteps(IEnumerable<HarnessStep> steps)
+        => steps.Select(s => new ExecutionStep(s.Iteration, s.Kind, s.Tool, s.Arguments, s.Result, s.Error)).ToList();
 
     private static string? Truncate(string? value)
-        => value is null ? null : value.Length <= MaxResultChars ? value : value[..MaxResultChars];
-
-    private static string Snippet(string content)
-        => content.Length <= 120 ? content : content[..120];
+        => value is null ? null : value.Length <= MaxAssistantChars ? value : value[..MaxAssistantChars];
 }

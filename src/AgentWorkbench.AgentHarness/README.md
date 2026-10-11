@@ -1,48 +1,77 @@
 # AgentWorkbench.AgentHarness
 
-Agent Harness（运行时横切轴）模块：在 MAF 之上补齐 **loop / context / memory / tools / trace** 五个横切关注点的策略与持久化。
-让 Agent「不只是能跑，还能被限制、被观测、被复现」。
+Agent 运行时**编排门面**：一次 run 的入口。
+把模型交互 / 工具调用 / 执行控制 / 上下文 / 记忆 / 安全 / 可观测各自独立的功能域模块装配成一条流水线，
+**自身不实现任何一项能力**（迭代循环本体由 MAF 承担）。
+
+## 一次 run 的流水线
+
+```
+ResolveAsync(端点)                                    Providers
+  → IModelRuntime.Wrap(client)                        模型交互（超时/重试/并发/用量）
+  → IToolExecutionPipeline.Create(client, 预算)        工具调用（工具环 + 轨迹采集）
+      ↑ 预算 = IAgentLoop.MaxIterations               执行控制
+  → ChatClientAgent（工具来自 IToolCatalog）           对话运行时 + 白名单目录（Safety）
+  → IContextBuilder.Compose(输入, 检索命中)             上下文（UseKnowledge=true 时）
+  → ISessionStore.GetOrCreateAsync(sessionId)          记忆
+  → IAgentLoop.ExecuteAsync(...)                      执行控制（run 级超时）
+  → IExecutionTraceStore.SaveAsync(轨迹)               可观测（成功/失败都落库）
+```
 
 ## 功能
 
 | 文件 | 说明 |
 | --- | --- |
-| `AgentHarnessService.cs` | Harness 主服务：建 Agent（工具环 + 会话 + 历史）→ 可选 RAG 注入 → 带超时运行 → 轨迹落库 → 返回结果；失败也落 `failed` run |
-| `HarnessOptions.cs` | 配置节 `Harness`：`Loop.MaxIterations=6` / `Loop.TimeoutSeconds=30` / `Context.Enabled`+`RagTopK=5` / `Memory.SessionEnabled` / `Tools.Whitelist`（4 个内置工具） |
+| `AgentHarnessService.cs` | 编排上面这条流水线；失败也落 `failed` run（保留已完成的工具步骤） |
 | `HarnessModels.cs` | 契约模型：`HarnessCapabilities`、`HarnessRunRequest`、`HarnessStep`、`HarnessRunResult`、`HarnessModelNotConfiguredException` |
-| `Tools/BuiltinTools.cs` | 4 个内置**只读**工具（`get_current_time` / `calculator` / `search_knowledge` / `list_documents`），仓储通过 `IServiceProvider` 惰性解析避免 DI 循环 |
-| `Tools/SafeCalculator.cs` | 自研安全四则运算解析器（不用 `eval`，无外部依赖） |
-| `HarnessServiceCollectionExtensions.cs` | 模块自注册入口 `AddNitroAgentHarness` |
+| `HarnessServiceCollectionExtensions.cs` | 模块自注册入口 `AddNitroAgentHarness`（只注册 `IAgentHarness`，能力全在别的模块） |
 | Webapi `HarnessController` | HTTP 面：`api/harness/health` · `POST run` · `GET runs/{id}` |
 
 ## 接口
 
-| 接口 | 成员 | 实现 | 说明 |
+| 接口 | 成员 | 实现 | 消费者 |
 | --- | --- | --- | --- |
-| `IAgentHarness` | `GetCapabilitiesAsync`、`RunAsync`、`GetRunAsync` | `AgentHarnessService` | 唯一对外契约；Webapi / Workflow `AgentStepExecutor` 消费 |
-| `IAgentToolProvider` | `GetTools()` | `BuiltinTools` | 复用 Agent 模块的工具扩展点 |
-| `IAgentRunRepository`（Persistence） | `InsertRunAsync` / `InsertStepsAsync` / `GetRunAsync` / `GetStepsAsync` | — | 轨迹持久化（M014 `agent_runs` / M015 `agent_steps`） |
-| `IKnowledgeEngine`（Knowledge.Abstractions） | `RetrieveAsync` | — | 上下文注入 + `search_knowledge` 工具 |
+| `IAgentHarness` | `GetCapabilitiesAsync`、`RunAsync`、`GetRunAsync` | `AgentHarnessService` | Webapi `HarnessController`、Workflow `AgentStepExecutor` |
+
+### 编排依赖的契约（能力都在别的模块）
+
+| 契约 | 模块 | Harness 用它做什么 |
+| --- | --- | --- |
+| `IChatClientFactory` | Providers | 解析端点、取 `IChatClient` |
+| `IModelRuntime` | ModelRuntime | 每个模型请求的超时/重试/并发/用量 |
+| `IToolCatalog` | ToolExecution | 取白名单内的工具（授权策略来自 Safety） |
+| `IToolExecutionPipeline` | ToolExecution | 装配工具环 + 采集 `ToolCallTrace` |
+| `IAgentLoop` | AgentLoop | 迭代预算 + run 级超时 |
+| `IContextBuilder` | Context | 检索片段 → user 文本 |
+| `ISessionStore` | Memory | 按 sessionId 复用会话 |
+| `IExecutionTraceStore` | Observability | 轨迹落库与回放 |
+| `IKnowledgeEngine` | Knowledge.Abstractions | 检索（`UseKnowledge=true` 时） |
+
+## 配置节归属
+
+| 配置节 | 归属模块 | 内容 |
+| --- | --- | --- |
+| `Harness:ModelRuntime` | ModelRuntime | 单次请求超时 / 重试 / 退避 / 并发闸门 |
+| `Harness:ToolExecution` | ToolExecution | 轨迹结果截断长度 |
+| `Harness:Tools` | Safety | 工具白名单 |
+| `Harness:Loop` | AgentLoop | `MaxIterations` / `TimeoutSeconds` |
+| `Harness:Context` | Context | `Enabled` / `RagTopK` |
+| `Harness:Memory` | Memory | `SessionEnabled` |
+
+> 节名沿用原有 `Harness:*` 路径，`appsettings` 无需改写；配置的**解析与默认值**已随功能挪到各自模块。
 
 ## 框架提供 vs 自研
 
 | 机制 | 来源 | 位置/说明 |
 | --- | --- | --- |
-| `ChatClientAgent` + `ChatClientAgentOptions` | **MAF** | `AgentHarnessService.BuildAgent` |
-| `InMemoryChatHistoryProvider` + `AgentSession` | **MAF** | 会话/历史容器（`ChatHistoryProvider` 扩展点） |
-| `FunctionInvokingChatClient` + `MaximumIterationsPerRequest` | **MEA** | **工具环**本体（自动执行函数、回填结果、循环到上限） |
-| `FunctionInvoker` 回调（中间件扩展点） | **MEA** | 本模块借它挂轨迹采集 |
-| `AIFunctionFactory.Create` | **MEA** | `BuiltinTools` 工具 Schema |
-| 工具**白名单强制**（不在白名单不注册、不可调用） | 自研（策略） | `RunAsync` 的 `.Where(Whitelist.Contains)` + `AllowedToolNames` |
-| run 级**超时**（linked CTS + `CancelAfter`） | 自研（策略） | `RunAsync`；超时抛 `TimeoutException` 并落 `failed` |
-| **RAG 上下文注入**（检索 → 拼「【知识库检索片段】」→ 前置到 user 消息） | 自研 | `RunAsync` + `BuildContext` |
-| **轨迹采集**（迭代号/工具名/参数/结果，400 字符截断） | 自研（借 `FunctionInvoker` 钩子） | `FunctionInvoker` 委托 → `HarnessStep` |
-| **轨迹持久化/回放** | 自研 | `IAgentRunRepository` + `GetRunAsync` |
-| 会话记忆（进程内 `ConcurrentDictionary`，**重启即丢**） | 自研 | `_sessions`；MAF 只提供会话对象，存储策略自定 |
-| 能力位 `HarnessCapabilities` | 自研 | `GetCapabilitiesAsync` |
+| `ChatClientAgent` + `ChatClientAgentOptions` | **MAF** | `BuildAgent` |
+| `InMemoryChatHistoryProvider` + `AgentSession` | **MAF** | 历史容器（会话的持有/复用策略在 `Memory`） |
+| `FunctionInvokingChatClient`（工具环本体） | **MEA** | 由 `ToolExecution` 装配 |
+| 装配顺序、失败也要留痕、能力位 | 自研（编排层） | `RunAsync` / `GetCapabilitiesAsync` |
+| 工具白名单、超时、RAG 注入、轨迹、会话复用 | 自研（各自模块） | 见上表 |
 
-> 边界：MAF 负责「怎么循环、怎么执行工具」，Harness 负责「允许调什么、跑多久、上下文从哪来、跑完留下什么」。
+> 边界：Harness 只做**装配与失败记录**。「允许调什么」在 Safety + ToolExecution，「跑多久/几次」在 AgentLoop，「上下文从哪来」在 Context，「留什么痕迹」在 Observability。
 
 ## 依赖
 
-Agent、Providers、Knowledge.Abstractions、Persistence、Domain、Shared。
+ModelRuntime、ToolExecution、AgentLoop、Context、Memory、Observability、Providers、Knowledge.Abstractions、Shared。
