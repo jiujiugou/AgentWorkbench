@@ -1,24 +1,73 @@
-# AgentWorkbench.Context
+# 上下文模块（Context）
 
-上下文模块（功能域 4 的「上下文」侧）：把一次模型调用要看的输入拼成最终 user 文本。
-**纯逻辑、无 IO** —— 检索本身由 `IKnowledgeEngine` 提供。
+这个模块只干一件事：**把检索命中的原文片段拼成一次模型调用前置的 user 文本**。纯逻辑、无 IO。
 
-## 功能
+它不做检索（检索在 `Knowledge.Abstractions` 的实现方），不存历史（历史在 `Conversation` / `Memory` /
+`Persistence`），不落库、不调模型。
 
-| 文件 | 说明 |
-| --- | --- |
-| `ContextBuilder.cs` | `IContextBuilder.Compose(input, hits)`：把检索命中拼成 `【知识库检索片段】…《文件名》片段#Seq (pX-Y) :: 摘要` 前置到用户输入；无命中则原样返回 |
-| `ContextOptions.cs` | 配置节 `Harness:Context`：`Enabled=true`（是否做 RAG 注入）/ `RagTopK=5` |
-| `ContextServiceCollectionExtensions.cs` | 模块自注册入口 `AddNitroContext` |
+---
 
-## 接口
+## 一、现在已经具备的能力
+
+### 拼什么、怎么拼
+
+- `IContextBuilder.Compose(input, hits)`：没有命中就**原样返回 `input`**；有命中就在前面加一段
+  `【知识库检索片段】仅供回答参考，需在结论中标注来源：`，每条一行
+  `《文件名》片段#Seq (pX-Y) :: 摘要`，空行之后才是用户原文。
+- 每条片段截 120 字符（`Snippet`）。
+- 消费者只有一个：`AgentHarness.RunAsync`（`UseKnowledge=true` 且 `Harness:Context:Enabled=true` 时）。
+  能力位 `HarnessCapabilities.Context` 跟着开关变。
+- 配置节 `Harness:Context`：`Enabled=true`（做不做 RAG 注入）/ `RagTopK=5`（注入几条）。
+
+### 接口
 
 | 接口 | 成员 | 实现 | 消费者 |
 | --- | --- | --- | --- |
-| `IContextBuilder` | `Compose(input, hits)` | `ContextBuilder` | AgentHarness `RunAsync`（`UseKnowledge=true` 时） |
+| `IContextBuilder` | `Compose(input, hits)` | `ContextBuilder` | `AgentHarness.RunAsync` |
 
-> 未落地：历史消息裁剪 / token 预算压缩（缺口清单）——当前只做「检索片段 → 上下文前缀」这一步组装。
+---
+
+## 二、还没处理的问题（接下来要干的活）
+
+| 问题 | 不处理的后果 | 现在什么状态 | 做好的标准 |
+| --- | --- | --- | --- |
+| 历史消息裁剪 | 长会话把上下文窗口撑爆，请求直接失败或模型「忘了开头」 | 没做；历史由调用方全量传入 | 按 token 预算裁剪，并留下裁剪记录 |
+| 历史压缩 / 摘要 | 长任务没有任何「整理上下文」的手段 | 没做 | 超预算时把旧轮次摘要成一段，保留最近 N 轮原文 |
+| 检索片段与历史共用一份预算 | 命中条数一多照样超窗 | `RagTopK` 固定 5，没有 token 计数 | 历史 / 检索 / 输出统一分配预算 |
+| 截断按字符不按 token | 中文和英文效果不一致，可能截在半句 | 120 字符硬截 | 按 token 或句边界截 |
+| 拿不到用量 | 判断不了「超没超」 | 用量计数在 `ModelRuntime`，本模块是纯逻辑 | 由编排层把预算决定下传，或引入只读计量契约 |
+| 没有裁剪类测试 | 一旦实现裁剪，没有红绿可依 | 只有 `ContextBuilderTests`（拼前缀 / 原样返回） | 裁剪正例 + 负控（预算调大必须不裁） |
+
+---
+
+## 三、加一种上下文来源要做什么
+
+- 本模块是纯函数契约：新增来源 = 新增一个 Composer，或在编排层多拼一段再交给它。
+- 判断标准：**只要不产生 IO，就可以放这里；一旦要查库 / 调模型，就属于别的模块。**
+
+---
+
+## 四、红线
+
+1. **禁止 IO**。检索、读库、调模型都不在本模块。
+2. **无命中必须原样返回**。`Compose` 的语义是「加前缀」，不是「改输入」。
+3. **不新建第二个历史存储**。历史只有一个来源，本模块只看传进来的东西。
+4. **片段只是参考**。注入的提示里已声明「需在结论中标注来源」，不得把片段当结论。
+
+---
+
+## 五、怎么算验收通过
+
+判定型用例必须正例能绿、负控能红；能由脚本判定的禁止用 AI 判。
+
+目前覆盖到的（`tests/AgentWorkbench.UnitTests/Context/ContextBuilderTests.cs`）：
+
+- 有命中 → 片段被拼到原文之前，来源信息（文件名 / 页码 / 序号）齐全。
+- 无命中 → 输出与输入逐字相同。
+
+还没有的：裁剪 / 压缩的判定用例与负控 —— 能力本身没实现，先写负控再写功能。
 
 ## 依赖
 
 Knowledge.Abstractions（`RetrievalHit`）、Shared。
+

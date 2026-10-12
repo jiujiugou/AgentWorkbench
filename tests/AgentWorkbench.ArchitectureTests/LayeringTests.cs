@@ -61,4 +61,34 @@ public class LayeringTests
 
         modules.Should().NotDependOnAny(webapi).Check(TestArchitecture.Architecture);
     }
+
+    /// <summary>
+    /// Memory 契约模块必须保持纯净：落库实现放 Memory.Persistence，不能在 Memory 里 using Persistence。
+    /// 负控：给 AgentWorkbench.Memory 加一行 <c>using AgentWorkbench.Persistence;</c> → 本用例必须变红。
+    /// </summary>
+    [Fact]
+    public void Memory_should_not_depend_on_persistence()
+    {
+        var persistence = Types().That().ResideInNamespaceMatching("^AgentWorkbench\\.Persistence");
+
+        Types().That().ResideInNamespaceMatching("^AgentWorkbench\\.Memory$")
+            .Should().NotDependOnAny(persistence)
+            .Check(TestArchitecture.Architecture);
+    }
+
+    /// <summary>
+    /// Context 是纯组装面：不查库、不引记忆；长期记忆由编排层映射成中性片段后传入。
+    /// 负控：给 Context 加一行 <c>using AgentWorkbench.Memory;</c> 或 <c>using AgentWorkbench.Persistence;</c> → 必须变红。
+    /// </summary>
+    [Fact]
+    public void Context_should_not_depend_on_memory_or_persistence()
+    {
+        var data = Types().That()
+            .ResideInNamespaceMatching("^AgentWorkbench\\.Memory")
+            .Or().ResideInNamespaceMatching("^AgentWorkbench\\.Persistence");
+
+        Types().That().ResideInNamespaceMatching("^AgentWorkbench\\.Context$")
+            .Should().NotDependOnAny(data)
+            .Check(TestArchitecture.Architecture);
+    }
 }

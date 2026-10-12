@@ -80,17 +80,34 @@ public sealed class AgentHarnessService : IAgentHarness
 
     public async Task<HarnessRunResult> RunAsync(HarnessRunRequest request, CancellationToken cancellationToken = default)
     {
-        var endpoint = await _factory.ResolveAsync(null, cancellationToken)
-            ?? throw new HarnessModelNotConfiguredException();
-
         var sessionId = string.IsNullOrWhiteSpace(request.SessionId)
             ? Guid.NewGuid().ToString("N")
             : request.SessionId!;
         var sw = Stopwatch.StartNew();
 
+        ChatEndpoint endpoint;
+        try
+        {
+            endpoint = await _factory.ResolveAsync(null, cancellationToken)
+                ?? throw new HarnessModelNotConfiguredException();
+        }
+        catch (HarnessModelNotConfiguredException ex)
+        {
+            // 起不来也要留痕：调用方按 error_code=model_unavailable 就能区分「没配模型」和「模型跑了但失败」。
+            sw.Stop();
+            await PersistQuietlyAsync(
+                sessionId, AgentRunStatus.Failed, AgentRunCode.ModelUnavailable, ex.Message,
+                model: null, sw.ElapsedMilliseconds, traces: []);
+            throw;
+        }
+
         // 模型请求统一走 ModelRuntime（超时 / 重试 / 用量），工具环预算来自 AgentLoop，工具授权已由 ToolCatalog 按白名单裁剪
         var chatClient = _runtime.Wrap(_factory.GetClient(endpoint));
-        var execution = _pipeline.Create(chatClient, new ToolExecutionLimits(_loop.MaxIterations));
+
+        // 执行控制守卫：一次 run 一个实例，管住「卡在同一个调用上」与「把 token 烧光」；
+        // 判定在工具环内进行（见 ToolExecutionPipeline），这里只负责把它装起来。
+        var guard = _loop.CreateGuard(new RuntimeUsageSource(_runtime));
+        var execution = _pipeline.Create(chatClient, new ToolExecutionLimits(_loop.MaxIterations, guard));
         var agent = BuildAgent(execution.Client);
 
         var userText = request.Input;
@@ -102,8 +119,9 @@ public sealed class AgentHarnessService : IAgentHarness
 
         var messages = new List<ChatMessage> { new(ChatRole.User, userText) };
 
+        var sessionFactory = new AgentSessionFactory(agent);
         var session = _memoryOptions.Value.SessionEnabled
-            ? await _sessions.GetOrCreateAsync(sessionId, token => agent.CreateSessionAsync(token).AsTask(), cancellationToken)
+            ? await _sessions.GetOrCreateAsync(sessionId, sessionFactory, cancellationToken)
             : await agent.CreateSessionAsync(cancellationToken);
 
         try
@@ -116,40 +134,71 @@ public sealed class AgentHarnessService : IAgentHarness
                     token),
                 cancellationToken);
 
-            var text = response.Text ?? string.Empty;
-            var steps = BuildSteps(execution.Traces, text);
-            var iterations = steps.Max(s => s.Iteration) + 1;
             sw.Stop();
 
-            var trace = ExecutionTrace.Success(
-                sessionId, iterations, endpoint.Model, sw.ElapsedMilliseconds, ToTraceSteps(steps));
-            var runId = await _traces.SaveAsync(trace, cancellationToken);
+            // 收尾分类：环内提前终止（重复调用 / 预算耗尽）优先；否则问守卫「是不是跑满迭代被强制收口」
+            // —— 框架跑满迭代时不报错，而是清空工具逼模型用文本收口再正常返回，不主动问就与「答完了」无法区分。
+            var stop = execution.Stop ?? guard.InspectCompletion();
+            var text = response.Text ?? string.Empty;
+            var steps = BuildSteps(execution.Traces, text);
+            var iterations = steps.Count == 0 ? 0 : steps.Max(s => s.Iteration) + 1;
+            var status = stop?.Status ?? AgentRunStatus.Succeeded;
+
+            var runId = await _traces.SaveAsync(
+                ExecutionTrace.Create(
+                    sessionId, status, stop?.Code, iterations, endpoint.Model, sw.ElapsedMilliseconds,
+                    stop?.Message, ToTraceSteps(steps)),
+                cancellationToken);
 
             _logger.LogInformation(
-                "Harness run {RunId} session={SessionId} iterations={Iterations} tools={ToolSteps} failedToolSteps={FailedToolSteps} in {ElapsedMs}ms",
-                runId, sessionId, iterations,
+                "Harness run {RunId} session={SessionId} status={Status} code={Code} iterations={Iterations} tools={ToolSteps} failedToolSteps={FailedToolSteps} in {ElapsedMs}ms",
+                runId, sessionId, status, stop?.Code, iterations,
                 steps.Count(s => s.Kind == "tool"), steps.Count(s => s.Error is not null),
                 sw.ElapsedMilliseconds);
 
-            return new HarnessRunResult(runId, sessionId, text, iterations, endpoint.Model, sw.ElapsedMilliseconds, steps);
+            return new HarnessRunResult(
+                runId, sessionId, text, iterations, endpoint.Model, sw.ElapsedMilliseconds,
+                steps, status, stop?.Code);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            // 调用方取消不是失败：它是「按用户意愿停下」，必须与 failed 分开，否则前端会把它当成故障上报。
             sw.Stop();
-            await PersistFailureAsync(sessionId, endpoint.Model, execution.Traces, sw.ElapsedMilliseconds, "运行超时（timeout）");
-            throw new AgentRunTimeoutException(_loop.TimeoutSeconds);
+            await PersistQuietlyAsync(
+                sessionId, AgentRunStatus.Cancelled, AgentRunCode.Cancelled, "调用方取消", endpoint.Model,
+                sw.ElapsedMilliseconds, execution.Traces);
+            throw;
+        }
+        catch (AgentRunTimeoutException ex)
+        {
+            // run 级墙钟预算（AgentLoop 施加）先于单次请求超时被识别，两者归类码不同。
+            sw.Stop();
+            await PersistQuietlyAsync(
+                sessionId, AgentRunStatus.Timeout, AgentRunCode.RunTimeout, ex.Message, endpoint.Model,
+                sw.ElapsedMilliseconds, execution.Traces);
+            throw;
         }
         catch (TimeoutException ex)
         {
             sw.Stop();
-            await PersistFailureAsync(sessionId, endpoint.Model, execution.Traces, sw.ElapsedMilliseconds, ex.Message);
+            await PersistQuietlyAsync(
+                sessionId, AgentRunStatus.Timeout, AgentRunCode.ModelTimeout, ex.Message, endpoint.Model,
+                sw.ElapsedMilliseconds, execution.Traces);
             throw;
         }
         catch (Exception ex)
         {
             sw.Stop();
-            await PersistFailureAsync(sessionId, endpoint.Model, execution.Traces, sw.ElapsedMilliseconds, ex.Message);
+            await PersistQuietlyAsync(
+                sessionId, AgentRunStatus.Failed, ClassifyFailure(ex, execution), ex.Message, endpoint.Model,
+                sw.ElapsedMilliseconds, execution.Traces);
             throw;
+        }
+        finally
+        {
+            // 会话写回：成功 / 失败 / 取消 / 超时都要落，否则重启后只有成功那轮记得住。
+            if (_memoryOptions.Value.SessionEnabled)
+                await SaveSessionQuietlyAsync(sessionId, sessionFactory, session);
         }
     }
 
@@ -162,7 +211,8 @@ public sealed class AgentHarnessService : IAgentHarness
             runId, trace.SessionId,
             trace.Steps.LastOrDefault(s => s.Kind == "assistant")?.Result ?? string.Empty,
             trace.Iterations, trace.Model, trace.LatencyMs,
-            trace.Steps.Select(s => new HarnessStep(s.Iteration, s.Kind, s.Tool, s.Arguments, s.Result, s.Error)).ToList());
+            trace.Steps.Select(s => new HarnessStep(s.Iteration, s.Kind, s.Tool, s.Arguments, s.Result, s.Error)).ToList(),
+            trace.Status, trace.ErrorCode);
     }
 
     private ChatClientAgent BuildAgent(IChatClient client)
@@ -177,20 +227,75 @@ public sealed class AgentHarnessService : IAgentHarness
         return new ChatClientAgent(client, options, _loggerFactory, _services);
     }
 
-    private async Task PersistFailureAsync(
-        string sessionId, string model, IReadOnlyList<ToolCallTrace> traces, long elapsedMs, string error)
+    /// <summary>
+    /// 失败 / 取消 / 超时路径落库：绝不因落库本身出错而掩盖原始异常，也绝不因调用方已取消而丢记录。
+    /// </summary>
+    private async Task PersistQuietlyAsync(
+        string sessionId, string status, string? code, string error, string? model, long elapsedMs,
+        IReadOnlyList<ToolCallTrace> traces)
     {
         try
         {
-            var steps = BuildSteps(traces, assistantText: null);
-            var iterations = steps.Count > 0 ? steps.Max(s => s.Iteration) : 0;
-            await _traces.SaveAsync(
-                ExecutionTrace.Failure(sessionId, iterations, model, elapsedMs, error, ToTraceSteps(steps)),
+            await PersistRunAsync(
+                sessionId, status, code, error, model, elapsedMs, traces, assistantText: null,
                 CancellationToken.None);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "记录失败 run 轨迹时出错 session={SessionId}", sessionId);
+            _logger.LogWarning(ex, "记录 run 轨迹时出错 session={SessionId} status={Status}", sessionId, status);
+        }
+    }
+
+    private async Task<long> PersistRunAsync(
+        string sessionId, string status, string? code, string? error, string? model, long elapsedMs,
+        IReadOnlyList<ToolCallTrace> traces, string? assistantText, CancellationToken cancellationToken)
+    {
+        var steps = BuildSteps(traces, assistantText);
+        var iterations = steps.Count == 0 ? 0 : steps.Max(s => s.Iteration) + 1;
+        return await _traces.SaveAsync(
+            ExecutionTrace.Create(
+                sessionId, status, code, iterations, model, elapsedMs, error, ToTraceSteps(steps)),
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// 把冒泡上来的异常归类成 <see cref="AgentRunCode"/>：工具执行环记录过的异常算工具异常，其余算未归类。
+    /// </summary>
+    private static string ClassifyFailure(Exception exception, ToolExecutionRun execution)
+    {
+        foreach (var candidate in Flatten(exception))
+        {
+            foreach (var failure in execution.ToolFailures)
+            {
+                // 实例引用是第一判据；框架（MEA）在「连续失败越限」时可能重抛或包一层，
+                // 所以类型 + 消息相同的也认，避免归类退化成 unhandled_error。
+                if (ReferenceEquals(candidate, failure) ||
+                    (candidate.GetType() == failure.GetType() &&
+                     string.Equals(candidate.Message, failure.Message, StringComparison.Ordinal)))
+                    return AgentRunCode.ToolError;
+            }
+        }
+
+        return AgentRunCode.Unhandled;
+    }
+
+    private static IEnumerable<Exception> Flatten(Exception exception)
+    {
+        var stack = new Stack<Exception>();
+        stack.Push(exception);
+        while (stack.Count > 0)
+        {
+            var current = stack.Pop();
+            yield return current;
+            if (current is AggregateException aggregate)
+            {
+                foreach (var inner in aggregate.InnerExceptions)
+                    stack.Push(inner);
+            }
+            else if (current.InnerException is { } innerException)
+            {
+                stack.Push(innerException);
+            }
         }
     }
 
@@ -199,7 +304,10 @@ public sealed class AgentHarnessService : IAgentHarness
         var steps = traces
             .Select(t => new HarnessStep(t.Iteration, "tool", t.Name, t.Arguments, t.Result, t.Error))
             .ToList();
-        if (assistantText is null)
+
+        // 空答复不落成步骤：提前终止（循环 / 预算）时模型往往没有最终文本，
+        // 落一条空 assistant 步会把「没有答复」写成「答复为空」，回放时分不清。
+        if (string.IsNullOrEmpty(assistantText))
             return steps;
 
         var finalIteration = steps.Select(s => s.Iteration).DefaultIfEmpty(-1).Max() + 1;
@@ -212,4 +320,17 @@ public sealed class AgentHarnessService : IAgentHarness
 
     private static string? Truncate(string? value)
         => value is null ? null : value.Length <= MaxAssistantChars ? value : value[..MaxAssistantChars];
+
+    /// <summary>会话写回 best-effort：写库失败不能掩盖本次 run 的结局，也绝不能因调用方取消而丢写。</summary>
+    private async Task SaveSessionQuietlyAsync(string sessionId, ISessionFactory factory, AgentSession session)
+    {
+        try
+        {
+            await _sessions.SaveAsync(sessionId, factory, session, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "保存会话时出错 session={SessionId}", sessionId);
+        }
+    }
 }

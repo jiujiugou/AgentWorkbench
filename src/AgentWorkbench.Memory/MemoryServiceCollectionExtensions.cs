@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AgentWorkbench.Memory;
 
@@ -11,6 +11,8 @@ public static class MemoryServiceCollectionExtensions
     {
         services.AddOptions<MemoryOptions>()
             .Bind(configuration.GetSection(MemoryOptions.SectionName));
+        // 供 TTL / 淘汰判定使用；测试可注册假时间源覆盖（不覆盖已有注册）。
+        services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<ISessionStore, SessionStore>();
         return services;
     }

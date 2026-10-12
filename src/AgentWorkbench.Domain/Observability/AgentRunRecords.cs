@@ -9,6 +9,8 @@ public sealed class AgentRunRecord
     public int Iterations { get; set; }
     public string? Model { get; set; }
     public long? LatencyMs { get; set; }
+    /// <summary>失败 / 终止归类码（取值见 AgentWorkbench.Shared.AgentRunCode）；成功且无异常收尾时为 null。</summary>
+    public string? ErrorCode { get; set; }
     public string? Error { get; set; }
     public string CreatedAt { get; set; } = string.Empty;
     public string? FinishedAt { get; set; }

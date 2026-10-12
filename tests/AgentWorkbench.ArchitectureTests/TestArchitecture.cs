@@ -23,6 +23,7 @@ internal static class TestArchitecture
         "AgentWorkbench.AgentLoop",
         "AgentWorkbench.Context",
         "AgentWorkbench.Memory",
+        "AgentWorkbench.Memory.Persistence",
         "AgentWorkbench.Observability",
         "AgentWorkbench.AgentHarness",
         "AgentWorkbench.Workflow",

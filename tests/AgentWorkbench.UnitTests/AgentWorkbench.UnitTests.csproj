@@ -16,6 +16,7 @@
     </PackageReference>
     <PackageReference Include="Moq" Version="4.20.72" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
@@ -37,6 +38,8 @@
     <ProjectReference Include="..\..\src\AgentWorkbench.Providers\AgentWorkbench.Providers.csproj" />
     <ProjectReference Include="..\..\src\AgentWorkbench.AgentHarness\AgentWorkbench.AgentHarness.csproj" />
     <ProjectReference Include="..\..\src\AgentWorkbench.Workflow\AgentWorkbench.Workflow.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.Memory\AgentWorkbench.Memory.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.Memory.Persistence\AgentWorkbench.Memory.Persistence.csproj" />
     <ProjectReference Include="..\..\src\AgentWorkbench.Persistence\AgentWorkbench.Persistence.csproj" />
   </ItemGroup>
 </Project>

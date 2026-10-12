@@ -18,6 +18,8 @@ public sealed class AgentLoopService : IAgentLoop
 
     public int TimeoutSeconds => _options.TimeoutSeconds;
 
+    public IAgentRunGuard CreateGuard(IAgentUsageSource? usage = null) => new AgentRunGuard(_options, usage);
+
     public async Task<T> ExecuteAsync<T>(
         Func<CancellationToken, Task<T>> action,
         CancellationToken cancellationToken = default)

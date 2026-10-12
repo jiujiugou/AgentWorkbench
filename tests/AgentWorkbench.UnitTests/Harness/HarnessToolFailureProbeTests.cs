@@ -84,10 +84,10 @@ public sealed class HarnessToolFailureProbeTests
                 Options.Create(new ToolExecutionOptions()), NullLoggerFactory.Instance, services),
             new ContextBuilder(),
             Options.Create(new ContextOptions { Enabled = false }),
-            new SessionStore(),
+            new SessionStore(Options.Create(new MemoryOptions()), TimeProvider.System),
             Options.Create(new MemoryOptions()),
             new AgentLoopService(
-                Options.Create(new AgentLoopOptions { MaxIterations = 10, TimeoutSeconds = 30 }),
+                Options.Create(new AgentLoopOptions { MaxIterations = 10, TimeoutSeconds = 30, MaxRepeatedToolCalls = 0 }),
                 NullLogger<AgentLoopService>.Instance),
             traces,
             Mock.Of<IKnowledgeEngine>(),

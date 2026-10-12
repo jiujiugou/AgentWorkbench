@@ -15,6 +15,7 @@
     <Project Path="src/AgentWorkbench.AgentLoop/AgentWorkbench.AgentLoop.csproj" />
     <Project Path="src/AgentWorkbench.Context/AgentWorkbench.Context.csproj" />
     <Project Path="src/AgentWorkbench.Memory/AgentWorkbench.Memory.csproj" />
+    <Project Path="src/AgentWorkbench.Memory.Persistence/AgentWorkbench.Memory.Persistence.csproj" />
     <Project Path="src/AgentWorkbench.Observability/AgentWorkbench.Observability.csproj" />
     <Project Path="src/AgentWorkbench.AgentHarness/AgentWorkbench.AgentHarness.csproj" />
     <Project Path="src/AgentWorkbench.Workflow/AgentWorkbench.Workflow.csproj" />

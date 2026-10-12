@@ -29,8 +29,8 @@ public sealed class AgentRunRepository : IAgentRunRepository
         using var connection = _factory.Create();
         var id = await connection.ExecuteScalarAsync<long>(
             """
-            INSERT INTO agent_runs (session_id, status, iterations, model, latency_ms, error, created_at, finished_at)
-            VALUES (@SessionId, @Status, @Iterations, @Model, @LatencyMs, @Error, @CreatedAt, @FinishedAt);
+            INSERT INTO agent_runs (session_id, status, iterations, model, latency_ms, error, error_code, created_at, finished_at)
+            VALUES (@SessionId, @Status, @Iterations, @Model, @LatencyMs, @Error, @ErrorCode, @CreatedAt, @FinishedAt);
             SELECT last_insert_rowid();
             """, run);
         _logger.LogInformation("Inserted agent run {RunId} session={SessionId} iterations={Iterations}", id, run.SessionId, run.Iterations);

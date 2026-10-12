@@ -23,6 +23,7 @@ public sealed class ExecutionTraceStore : IExecutionTraceStore
             Model = trace.Model,
             LatencyMs = trace.LatencyMs,
             Error = trace.Error,
+            ErrorCode = trace.ErrorCode,
             CreatedAt = now,
             FinishedAt = now
         });
@@ -58,6 +59,7 @@ public sealed class ExecutionTraceStore : IExecutionTraceStore
             run.Model,
             run.LatencyMs ?? 0,
             run.Error,
+            run.ErrorCode,
             steps.Select(s => new ExecutionStep(s.Iteration, s.Kind, s.Tool, s.Arguments, s.Result, s.Error)).ToList());
     }
 }

@@ -5,6 +5,7 @@ global using AgentWorkbench.Memory;
 global using AgentWorkbench.ModelRuntime;
 global using AgentWorkbench.Observability;
 global using AgentWorkbench.Providers;
+global using AgentWorkbench.Shared;
 global using AgentWorkbench.ToolExecution;
 global using Microsoft.Extensions.Configuration;
 global using Microsoft.Extensions.DependencyInjection;

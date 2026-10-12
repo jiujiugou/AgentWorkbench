@@ -34,6 +34,7 @@
     <ProjectReference Include="..\..\src\AgentWorkbench.AgentLoop\AgentWorkbench.AgentLoop.csproj" />
     <ProjectReference Include="..\..\src\AgentWorkbench.Context\AgentWorkbench.Context.csproj" />
     <ProjectReference Include="..\..\src\AgentWorkbench.Memory\AgentWorkbench.Memory.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.Memory.Persistence\AgentWorkbench.Memory.Persistence.csproj" />
     <ProjectReference Include="..\..\src\AgentWorkbench.Observability\AgentWorkbench.Observability.csproj" />
     <ProjectReference Include="..\..\src\AgentWorkbench.AgentHarness\AgentWorkbench.AgentHarness.csproj" />
     <ProjectReference Include="..\..\src\AgentWorkbench.Webapi\AgentWorkbench.Webapi.csproj" />

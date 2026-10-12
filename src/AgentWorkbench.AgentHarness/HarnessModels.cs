@@ -11,10 +11,17 @@ public sealed record HarnessRunRequest(string? SessionId, string Input, bool Use
 public sealed record HarnessStep(
     int Iteration, string Kind, string? Tool, string? Arguments, string? Result, string? Error = null);
 
-/// <summary>一次 Harness run 结果。</summary>
+/// <summary>
+/// 一次 Harness run 结果。
+/// </summary>
+/// <remarks>
+/// <see cref="Status"/> 说明「以什么状态结束」（取值见 <see cref="AgentRunStatus"/>：正常收尾 / 跑满迭代 /
+/// 循环 / 超预算 / 超时 / 取消 / 失败），<see cref="Code"/> 说明「为什么」（取值见 <see cref="AgentRunCode"/>）。
+/// 只回一个 <see cref="Text"/> 时，「跑满迭代被强制收口」与「模型答完了」在结果里长得一模一样。
+/// </remarks>
 public sealed record HarnessRunResult(
     long RunId, string SessionId, string Text, int Iterations, string? Model, long LatencyMs,
-    IReadOnlyList<HarnessStep> Steps);
+    IReadOnlyList<HarnessStep> Steps, string Status, string? Code = null);
 
 /// <summary>未配置模型，Harness 无法运行。</summary>
 public sealed class HarnessModelNotConfiguredException()

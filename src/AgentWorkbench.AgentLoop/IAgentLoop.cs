@@ -13,6 +13,12 @@ public interface IAgentLoop
     /// <summary>单次 run 的总超时（秒）。</summary>
     int TimeoutSeconds { get; }
 
+    /// <summary>
+    /// 为一次 run 新建执行控制守卫（重复调用检测 / token 预算），交给工具执行环在环内调用。
+    /// </summary>
+    /// <param name="usage">用量来源；为 <c>null</c>（或配置的预算为 0）时不判 token 预算。</param>
+    IAgentRunGuard CreateGuard(IAgentUsageSource? usage = null);
+
     /// <summary>在 run 级超时约束下执行 <paramref name="action"/>；超时抛 <see cref="AgentRunTimeoutException"/>。</summary>
     Task<T> ExecuteAsync<T>(
         Func<CancellationToken, Task<T>> action,

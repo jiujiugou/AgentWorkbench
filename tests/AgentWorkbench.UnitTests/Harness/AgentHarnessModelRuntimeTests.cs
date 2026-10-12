@@ -75,7 +75,7 @@ public sealed class AgentHarnessModelRuntimeTests
                 Options.Create(new ToolExecutionOptions()), NullLoggerFactory.Instance, services),
             new ContextBuilder(),
             Options.Create(new ContextOptions { Enabled = false }),
-            new SessionStore(),
+            new SessionStore(Options.Create(new MemoryOptions()), TimeProvider.System),
             Options.Create(new MemoryOptions()),
             new AgentLoopService(
                 Options.Create(new AgentLoopOptions { MaxIterations = 3, TimeoutSeconds = 30 }),
