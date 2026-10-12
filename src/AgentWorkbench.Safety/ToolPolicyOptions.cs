@@ -14,6 +14,8 @@ public sealed class ToolPolicyOptions
         "get_current_time",
         "calculator",
         "search_knowledge",
-        "list_documents"
+        "list_documents",
+        "remember",
+        "recall"
     ];
 }

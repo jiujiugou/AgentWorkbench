@@ -31,8 +31,8 @@ cd web; npm run build
 | ToolExecution | src/AgentWorkbench.ToolExecution | 工具调用：工具扩展点 + 白名单目录 + 函数调用环 + 通用内置工具 |
 | AgentLoop | src/AgentWorkbench.AgentLoop | 执行控制：迭代预算与 run 级超时 |
 | Context | src/AgentWorkbench.Context | 上下文组装：检索片段 → 最终 user 文本（纯逻辑） |
-| Memory | src/AgentWorkbench.Memory | 状态与记忆：会话存储契约 + 内存实现（sessionId → AgentSession） |
-| Memory.Persistence | src/AgentWorkbench.Memory.Persistence | 状态与记忆落库：会话快照 SQLite + 过期清理 |
+| Memory | src/AgentWorkbench.Memory | 状态与记忆：会话存储契约 + 内存实现（sessionId → AgentSession）+ 长期记忆契约 |
+| Memory.Persistence | src/AgentWorkbench.Memory.Persistence | 状态与记忆落库：会话快照 / 长期记忆 SQLite + 过期清理 + remember/recall 工具 |
 | Safety | src/AgentWorkbench.Safety | 可靠性与安全：工具授权白名单策略 |
 | Observability | src/AgentWorkbench.Observability | 可观测与评估：执行轨迹落库与回放 |
 | Conversation | src/AgentWorkbench.Conversation | 对话 Agent 运行时（Microsoft Agent Framework）+ IStructuredChatService |
@@ -49,7 +49,7 @@ ToolExecution → Safety
 AgentLoop → （仅 Shared）
 Context → Knowledge.Abstractions
 Memory → （仅 Shared）
-Memory.Persistence → Memory, Persistence
+Memory.Persistence → Memory, Persistence, ToolExecution
 Safety → （仅 Shared）
 Observability → Persistence, Domain
 AgentHarness → ModelRuntime, ToolExecution, AgentLoop, Context, Memory, Safety, Observability, Providers, Knowledge.Abstractions
@@ -65,7 +65,7 @@ Domain → Shared；所有模块 → Shared
 - IReranker（重排）、IChatClientFactory（模型网关 → IChatClient）
 - IAgentToolProvider（Microsoft Agent Framework 函数工具注入；一个工具一个类）
 - IToolCatalog / IToolExecutionPipeline / IToolPolicy（工具目录与执行环、授权白名单）
-- IModelRuntime（统一模型调用语义）· IAgentLoop（预算与超时）· IContextBuilder · ISessionStore / ISessionFactory · IExecutionTraceStore
+- IModelRuntime（统一模型调用语义）· IAgentLoop（预算与超时）· IContextBuilder · ISessionStore / ISessionFactory · ILongTermMemoryStore / IMemoryScopeAccessor · IExecutionTraceStore
 - IStructuredChatService（强类型 JSON 结构化输出）
 - IWorkflowStepExecutor + WorkflowStepRegistry（新步骤类型）、IPromptStore（提示词来源/存储）、IWorkflowProgressNotifier（进度通道）
 - 模块自注册：AddNitroPersistence / AddNitroProviders / AddNitroModelRuntime / AddNitroToolExecution / AddNitroConversation / AddNitroKnowledge / AddNitroDocuments / AddNitroContext / AddNitroMemory / AddNitroMemoryPersistence / AddNitroSafety / AddNitroObservability / AddNitroAgentLoop / AddNitroAgentHarness / AddNitroWorkflow

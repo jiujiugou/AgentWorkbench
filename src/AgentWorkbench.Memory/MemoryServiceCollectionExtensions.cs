@@ -14,6 +14,8 @@ public static class MemoryServiceCollectionExtensions
         // 供 TTL / 淘汰判定使用；测试可注册假时间源覆盖（不覆盖已有注册）。
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<ISessionStore, SessionStore>();
+        // 记忆作用域：由编排层在每次 run 设置，记忆工具读取；AsyncLocal 实现天然按 run 隔离。
+        services.AddSingleton<IMemoryScopeAccessor, AsyncLocalMemoryScopeAccessor>();
         return services;
     }
 }

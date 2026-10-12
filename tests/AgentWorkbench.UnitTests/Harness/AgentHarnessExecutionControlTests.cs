@@ -1,4 +1,4 @@
-using AgentWorkbench.AgentHarness;
+﻿using AgentWorkbench.AgentHarness;
 using AgentWorkbench.AgentLoop;
 using AgentWorkbench.Context;
 using AgentWorkbench.Knowledge.Abstractions;
@@ -281,6 +281,7 @@ public sealed class AgentHarnessExecutionControlTests
             Options.Create(new ContextOptions { Enabled = false }),
             new SessionStore(Options.Create(new MemoryOptions()), TimeProvider.System),
             Options.Create(new MemoryOptions()),
+            new AsyncLocalMemoryScopeAccessor(),
             new AgentLoopService(Options.Create(loopOptions), NullLogger<AgentLoopService>.Instance),
             traces,
             Mock.Of<IKnowledgeEngine>(),

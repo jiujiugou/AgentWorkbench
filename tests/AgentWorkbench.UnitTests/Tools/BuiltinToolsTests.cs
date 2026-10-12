@@ -1,8 +1,12 @@
 using AgentWorkbench.Documents.Tools;
 using AgentWorkbench.Knowledge.Local.Tools;
+using AgentWorkbench.Memory;
+using AgentWorkbench.Memory.Persistence.Tools;
 using AgentWorkbench.Safety;
 using AgentWorkbench.ToolExecution.Builtin;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Moq;
 using Xunit;
 
 namespace AgentWorkbench.UnitTests.Tools;
@@ -20,6 +24,12 @@ public sealed class BuiltinToolsTests
         names.AddRange(new CalculatorTool().GetTools().Select(t => t.Name));
         names.AddRange(new SearchKnowledgeTool(services).GetTools().Select(t => t.Name));
         names.AddRange(new ListDocumentsTool(services).GetTools().Select(t => t.Name));
+
+        var memoryOptions = Options.Create(new MemoryOptions());
+        var memoryStore = Mock.Of<ILongTermMemoryStore>();
+        var scopeAccessor = new AsyncLocalMemoryScopeAccessor();
+        names.AddRange(new RememberTool(memoryStore, scopeAccessor, memoryOptions).GetTools().Select(t => t.Name));
+        names.AddRange(new RecallTool(memoryStore, scopeAccessor, memoryOptions).GetTools().Select(t => t.Name));
         return names;
     }
 
@@ -32,6 +42,8 @@ public sealed class BuiltinToolsTests
         Assert.Contains(CalculatorTool.ToolName, names);
         Assert.Contains(SearchKnowledgeTool.ToolName, names);
         Assert.Contains(ListDocumentsTool.ToolName, names);
+        Assert.Contains(RememberTool.ToolName, names);
+        Assert.Contains(RecallTool.ToolName, names);
     }
 
     [Fact]

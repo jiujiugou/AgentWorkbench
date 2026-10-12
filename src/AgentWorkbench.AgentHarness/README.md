@@ -32,6 +32,8 @@ ResolveAsync(端点)                                   Providers
   `AgentSession` 里的 `InMemoryChatHistoryProvider`。会话本身由 `ISessionStore` 决定存哪：
   内存版程序重启即丢，装 `Memory.Persistence`（`AddNitroMemoryPersistence`）后落 `agent_sessions` 表，重启可续。
 - run 结束（含失败 / 取消 / 超时）会 best-effort `SaveAsync`，落库失败不影响本次 run 的结局。
+- run 开始时把 `IMemoryScopeAccessor` 设为 `MemoryScope.Session(sessionId)`：模型调 `remember` / `recall`
+  时才会落在「这个会话」名下。让编排层设作用域（而不是让工具参数指定）是隐私边界，见 ADR-0003。
 
 ### 结局怎么定
 

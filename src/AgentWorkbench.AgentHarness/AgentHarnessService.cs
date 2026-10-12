@@ -28,6 +28,7 @@ public sealed class AgentHarnessService : IAgentHarness
     private readonly IOptions<ContextOptions> _contextOptions;
     private readonly ISessionStore _sessions;
     private readonly IOptions<MemoryOptions> _memoryOptions;
+    private readonly IMemoryScopeAccessor _memoryScope;
     private readonly IAgentLoop _loop;
     private readonly IExecutionTraceStore _traces;
     private readonly IKnowledgeEngine _knowledge;
@@ -44,6 +45,7 @@ public sealed class AgentHarnessService : IAgentHarness
         IOptions<ContextOptions> contextOptions,
         ISessionStore sessions,
         IOptions<MemoryOptions> memoryOptions,
+        IMemoryScopeAccessor memoryScope,
         IAgentLoop loop,
         IExecutionTraceStore traces,
         IKnowledgeEngine knowledge,
@@ -59,6 +61,7 @@ public sealed class AgentHarnessService : IAgentHarness
         _contextOptions = contextOptions;
         _sessions = sessions;
         _memoryOptions = memoryOptions;
+        _memoryScope = memoryScope;
         _loop = loop;
         _traces = traces;
         _knowledge = knowledge;
@@ -84,6 +87,10 @@ public sealed class AgentHarnessService : IAgentHarness
             ? Guid.NewGuid().ToString("N")
             : request.SessionId!;
         var sw = Stopwatch.StartNew();
+
+        // 记忆作用域：本次 run 里模型调 remember / recall 时，记的/查的就是这个会话（或显式 global），
+        // 模型无法用参数指定别人的 scope_id。并发 run 各在自己的 async 上下文里，互不串扰。
+        using var memoryScope = _memoryScope.Begin(MemoryScope.Session(sessionId));
 
         ChatEndpoint endpoint;
         try
