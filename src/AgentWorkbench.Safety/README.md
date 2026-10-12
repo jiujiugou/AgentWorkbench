@@ -7,8 +7,11 @@
 | 文件 | 说明 |
 | --- | --- |
 | `ToolPolicy.cs` | `IToolPolicy`：`Whitelist` 快照、`IsAllowed(name)`、`Allowed(names)` |
-| `ToolPolicyOptions.cs` | 配置节 `Harness:Tools`：`Whitelist` 默认 `get_current_time` / `calculator` / `search_knowledge` / `list_documents` |
+| `ToolPolicyOptions.cs` | 配置节 `Harness:Tools`：`Whitelist` 默认 `get_current_time` / `calculator` / `search_knowledge` / `list_documents` / `remember` / `recall` |
 | `SafetyServiceCollectionExtensions.cs` | 模块自注册入口 `AddNitroSafety` |
+
+> `remember` / `recall` 这两个工具由 `Memory.Persistence` 提供；未装该模块时白名单里有名字但没有实现，
+> 等于模型看不到 —— 白名单是「允许」，不是「存在」。
 
 ## 接口
 

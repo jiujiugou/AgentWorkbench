@@ -6,7 +6,7 @@
 
 | 文件 | 说明 |
 | --- | --- |
-| `Program.cs` | 组合根：模块注册（`AddNitroPersistence/Safety/Providers/ModelRuntime/ToolExecution/Conversation/Knowledge/Documents/Context/Memory/Observability/AgentLoop/AgentHarness/Workflow`）、Serilog、64MB 上传上限、启动即迁移 + 种子默认供应商与工作流、静态文件 + SPA、CORS、映射 Controllers 与 Hub |
+| `Program.cs` | 组合根：模块注册（`AddNitroPersistence/Safety/Providers/ModelRuntime/ToolExecution/Conversation/Knowledge/Documents/Context/Memory/MemoryPersistence/Observability/AgentLoop/AgentHarness/Workflow`）、Serilog、64MB 上传上限、启动即迁移 + 种子默认供应商与工作流、静态文件 + SPA、CORS、映射 Controllers 与 Hub |
 | `Controllers/HealthController.cs` | 健康检查 |
 | `Controllers/DocumentsController.cs` | P0 文档：上传 / 列表 / 详情 / 页 / 块 / 重解析 / 删除 / 下载原始 PDF |
 | `Controllers/KnowledgeController.cs` | P1 知识库：健康 / 索引 / 检索 / 带引用问答 |
@@ -20,5 +20,8 @@
 ## 依赖
 
 全部模块（组合根是唯一允许依赖所有模块的地方）：Shared、Domain、Persistence、Documents、Knowledge、Providers、
-ModelRuntime、ToolExecution、Safety、AgentLoop、Context、Memory、Observability、Conversation、AgentHarness、Workflow。
+ModelRuntime、ToolExecution、Safety、AgentLoop、Context、Memory、Memory.Persistence、Observability、Conversation、AgentHarness、Workflow。
 反向依赖由 `LayeringTests.Modules_should_not_depend_on_webapi` 负控守住。
+
+> 注册顺序有要求：先 `AddNitroMemory` 再 `AddNitroMemoryPersistence`，后者用 `services.Replace`
+> 把内存版 `ISessionStore` 换成落库版。写反了会静默用回内存版（重启即丢）。
