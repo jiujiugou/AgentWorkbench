@@ -10,9 +10,8 @@ public sealed record HarnessCapabilities(bool Loop, bool Llm, bool Context, bool
 
 /// <summary>一次 Harness run 请求。</summary>
 /// <param name="SessionId">会话标识；为空时本次调用使用随机会话（无跨 run 记忆）。</param>
-/// <param name="Input">用户输入原文。</param>
-/// <param name="UseKnowledge">是否先做知识检索并把片段注入 user 文本。</param>
-public sealed record HarnessRunRequest(string? SessionId, string Input, bool UseKnowledge = true);
+/// <param name="Input">用户输入原文。知识检索不再由 harness 暗做——模型需要依据时调 <c>search_knowledge</c> 工具，轨迹留名。</param>
+public sealed record HarnessRunRequest(string? SessionId, string Input);
 
 /// <summary>单步轨迹（loop 内的一次工具调用或最终答复）。</summary>
 /// <param name="Iteration">所在迭代轮次，从 0 起。</param>

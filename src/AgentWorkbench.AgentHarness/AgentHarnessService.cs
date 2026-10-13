@@ -14,7 +14,7 @@ public interface IAgentHarness
     Task<HarnessCapabilities> GetCapabilitiesAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 执行一次完整的 Agent run：解析模型 → 可选知识检索 → 取/建会话 → 跑工具环 → 落轨迹 → 写回会话。
+    /// 执行一次完整的 Agent run：解析模型 → 取/建会话 → 跑工具环 → 落轨迹 → 写回会话。
     /// 无论成功、失败、取消还是超时，都会留下一条执行轨迹后再向上抛出（取消/失败等）。
     /// </summary>
     Task<HarnessRunResult> RunAsync(HarnessRunRequest request, CancellationToken cancellationToken = default);
@@ -37,14 +37,12 @@ public sealed class AgentHarnessService : IAgentHarness
     private readonly IModelRuntime _runtime;        // 单次模型调用语义：超时 / 重试 / 并发闸门 / 用量
     private readonly IToolCatalog _tools;           // 工具目录：按白名单裁剪后的可用工具
     private readonly IToolExecutionPipeline _pipeline; // 工具执行环：把工具调用接进模型循环
-    private readonly IContextBuilder _context;      // 上下文组装：检索片段 → 最终 user 文本
-    private readonly IOptions<ContextOptions> _contextOptions; // 上下文开关 / RAG TopK
+    private readonly IOptions<ContextOptions> _contextOptions; // 上下文能力位（组装已移至工具路径）
     private readonly ISessionStore _sessions;       // 会话存储：跨 run 的会话快照
     private readonly IOptions<MemoryOptions> _memoryOptions;   // 记忆开关（会话是否启用）
     private readonly IMemoryScopeAccessor _memoryScope;        // 记忆作用域：隔离并发 run 的 remember/recall
     private readonly IAgentLoop _loop;              // 执行控制：迭代预算、run 级超时、用量守卫
     private readonly IExecutionTraceStore _traces;  // 可观测：执行轨迹落库与回放
-    private readonly IKnowledgeEngine _knowledge;   // 知识检索：UseKnowledge 时召回片段
     private readonly ILoggerFactory _loggerFactory; // 传给 ChatClientAgent 构造日志
     private readonly IServiceProvider _services;    // 传给 ChatClientAgent 以解析其内部依赖
     private readonly ILogger<AgentHarnessService> _logger;
@@ -54,14 +52,12 @@ public sealed class AgentHarnessService : IAgentHarness
         IModelRuntime runtime,
         IToolCatalog tools,
         IToolExecutionPipeline pipeline,
-        IContextBuilder context,
         IOptions<ContextOptions> contextOptions,
         ISessionStore sessions,
         IOptions<MemoryOptions> memoryOptions,
         IMemoryScopeAccessor memoryScope,
         IAgentLoop loop,
         IExecutionTraceStore traces,
-        IKnowledgeEngine knowledge,
         ILoggerFactory loggerFactory,
         IServiceProvider services,
         ILogger<AgentHarnessService> logger)
@@ -70,14 +66,12 @@ public sealed class AgentHarnessService : IAgentHarness
         _runtime = runtime;
         _tools = tools;
         _pipeline = pipeline;
-        _context = context;
         _contextOptions = contextOptions;
         _sessions = sessions;
         _memoryOptions = memoryOptions;
         _memoryScope = memoryScope;
         _loop = loop;
         _traces = traces;
-        _knowledge = knowledge;
         _loggerFactory = loggerFactory;
         _services = services;
         _logger = logger;
@@ -136,13 +130,10 @@ public sealed class AgentHarnessService : IAgentHarness
         // 用「带工具环的 client」构建 Agent：模型每轮的工具调用都会经过 execution 管线。
         var agent = BuildAgent(execution.Client);
 
-        // 需要知识时，把检索片段与原始问题合成最终 user 文本；否则原样使用输入。
+        // 用户原文直接进模型：知识检索不再由 harness 暗中做——需要依据时由模型主动调
+        // search_knowledge 工具，调用留痕、可回放、可判分。曾经的 UseKnowledge 暗路与工具
+        // 路径重复（同一能力两条路），且全仓零测试覆盖，已拆。
         var userText = request.Input;
-        if (request.UseKnowledge && _contextOptions.Value.Enabled)
-        {
-            var hits = await _knowledge.RetrieveAsync(request.Input, _contextOptions.Value.RagTopK, cancellationToken);
-            userText = _context.Compose(request.Input, hits);
-        }
 
         var messages = new List<ChatMessage> { new(ChatRole.User, userText) };
 

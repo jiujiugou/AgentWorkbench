@@ -14,16 +14,21 @@ public interface IToolPolicy
 }
 
 /// <inheritdoc />
+/// <remarks>
+/// 持 <see cref="IOptionsMonitor{T}"/> 而非 <see cref="IOptions{T}"/>：白名单住进 appsettings.json 后，
+/// 修改保存即热重载（JSON provider 默认 reloadOnChange），下个 run 生效——工具「上线/下线」零停服。
+/// 每次访问都取 <c>CurrentValue</c>，不缓存快照；ToolCatalog 亦是每次调用现解析，链路两端都不做静态假设。
+/// </remarks>
 public sealed class ToolPolicy : IToolPolicy
 {
-    private readonly ToolPolicyOptions _options;
+    private readonly IOptionsMonitor<ToolPolicyOptions> _options;
 
-    public ToolPolicy(IOptions<ToolPolicyOptions> options) => _options = options.Value;
+    public ToolPolicy(IOptionsMonitor<ToolPolicyOptions> options) => _options = options;
 
-    public IReadOnlyList<string> Whitelist => _options.Whitelist;
+    public IReadOnlyList<string> Whitelist => _options.CurrentValue.Whitelist;
 
     public bool IsAllowed(string toolName)
-        => _options.Whitelist.Contains(toolName, StringComparer.Ordinal);
+        => _options.CurrentValue.Whitelist.Contains(toolName, StringComparer.Ordinal);
 
     public IReadOnlyList<string> Allowed(IEnumerable<string> toolNames)
         => toolNames.Where(IsAllowed).ToList();

@@ -45,7 +45,7 @@ public sealed class AgentStepExecutor : IWorkflowStepExecutor
 
         var input = BuildInput(context.PromptContent, context.FullText, prior, hits);
         var result = await _harness.RunAsync(
-            new HarnessRunRequest(null, input, UseKnowledge: true), cancellationToken);
+            new HarnessRunRequest(null, input), cancellationToken);
         return result.Text;
     }
 

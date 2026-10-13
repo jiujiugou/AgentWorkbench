@@ -35,7 +35,7 @@ public sealed class HarnessToolFailureProbeTests
         var harness = Build(client, tool, traces);
 
         await Assert.ThrowsAnyAsync<Exception>(async () =>
-            await harness.RunAsync(new HarnessRunRequest(null, "按脚本调用坏工具", UseKnowledge: false)));
+            await harness.RunAsync(new HarnessRunRequest(null, "按脚本调用坏工具")));
 
         var trace = Assert.Single(traces.Saved);
         Assert.Equal(ExecutionTrace.Failed, trace.Status);
@@ -59,7 +59,7 @@ public sealed class HarnessToolFailureProbeTests
         var traces = new RecordingTraceStore();
         var harness = Build(client, tool, traces);
 
-        var result = await harness.RunAsync(new HarnessRunRequest(null, "按脚本调用健康工具", UseKnowledge: false));
+        var result = await harness.RunAsync(new HarnessRunRequest(null, "按脚本调用健康工具"));
 
         Assert.Equal("done", result.Text);
         var trace = Assert.Single(traces.Saved);
@@ -82,7 +82,6 @@ public sealed class HarnessToolFailureProbeTests
             new FakeToolCatalog([.. tool.GetTools()]),
             new ToolExecutionPipeline(
                 Options.Create(new ToolExecutionOptions()), NullLoggerFactory.Instance, services),
-            new ContextBuilder(),
             Options.Create(new ContextOptions { Enabled = false }),
             new SessionStore(Options.Create(new MemoryOptions()), TimeProvider.System),
             Options.Create(new MemoryOptions()),
@@ -91,7 +90,6 @@ public sealed class HarnessToolFailureProbeTests
                 Options.Create(new AgentLoopOptions { MaxIterations = 10, TimeoutSeconds = 30, MaxRepeatedToolCalls = 0 }),
                 NullLogger<AgentLoopService>.Instance),
             traces,
-            Mock.Of<IKnowledgeEngine>(),
             NullLoggerFactory.Instance,
             services,
             NullLogger<AgentHarnessService>.Instance);

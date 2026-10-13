@@ -15,15 +15,17 @@
   `【知识库检索片段】仅供回答参考，需在结论中标注来源：`，每条一行
   `《文件名》片段#Seq (pX-Y) :: 摘要`，空行之后才是用户原文。
 - 每条片段截 120 字符（`Snippet`）。
-- 消费者只有一个：`AgentHarness.RunAsync`（`UseKnowledge=true` 且 `Harness:Context:Enabled=true` 时）。
-  能力位 `HarnessCapabilities.Context` 跟着开关变。
-- 配置节 `Harness:Context`：`Enabled=true`（做不做 RAG 注入）/ `RagTopK=5`（注入几条）。
+- **当前消费者：无。** 2026-10-13 拆掉了 `AgentHarness.RunAsync` 的 `UseKnowledge` 暗路（harness 曾自己检索、
+  自己拼装，与 `search_knowledge` 工具路径重复且零测试覆盖）；知识现在只走工具路径，轨迹留名、可回放。
+  `ContextBuilder` 自此没有 src 消费者——它是下一个删除/合并候选（纯函数可搬进 Harness 或 Knowledge）。
+- 配置节 `Harness:Context`：`Enabled=true` / `RagTopK=5`——现仅影响 `HarnessCapabilities.Context` 能力位，
+  不再驱动任何检索行为。
 
 ### 接口
 
 | 接口 | 成员 | 实现 | 消费者 |
 | --- | --- | --- | --- |
-| `IContextBuilder` | `Compose(input, hits)` | `ContextBuilder` | `AgentHarness.RunAsync` |
+| `IContextBuilder` | `Compose(input, hits)` | `ContextBuilder` | 无（2026-10-13 起 harness 暗路已拆） |
 
 ---
 

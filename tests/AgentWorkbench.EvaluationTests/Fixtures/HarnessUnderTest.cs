@@ -161,7 +161,7 @@ internal sealed class HarnessUnderTest
     /// <summary>跑一次 run；取消 / 失败路径按原语义抛出（用 <see cref="RunExpectingFailureAsync"/> 捕获）。</summary>
     public async Task<HarnessOutcome> RunAsync(string query, CancellationToken cancellationToken = default)
     {
-        var result = await Harness.RunAsync(new HarnessRunRequest(null, query, UseKnowledge: false), cancellationToken);
+        var result = await Harness.RunAsync(new HarnessRunRequest(null, query), cancellationToken);
         var trace = Traces.Saved[^1];
         var outcome = new HarnessOutcome(query, result, trace, Tool.Calls, Client.Calls);
         _cases.Add(new EvalCase(query, HarnessConversation.ToAgentResponse(query, result), LedgerFact.From(trace)));
@@ -179,7 +179,7 @@ internal sealed class HarnessUnderTest
         Exception? captured = null;
         try
         {
-            await Harness.RunAsync(new HarnessRunRequest(null, query, UseKnowledge: false), cancellationToken);
+            await Harness.RunAsync(new HarnessRunRequest(null, query), cancellationToken);
         }
         catch (Exception exception)
         {
@@ -224,14 +224,12 @@ internal sealed class HarnessUnderTest
             new FakeToolCatalog(tools),
             new ToolExecutionPipeline(
                 Options.Create(new ToolExecutionOptions()), NullLoggerFactory.Instance, services),
-            new ContextBuilder(),
             Options.Create(new ContextOptions { Enabled = false }),
             (ISessionStore?)sessions ?? new SessionStore(Options.Create(new MemoryOptions()), TimeProvider.System),
             Options.Create(new MemoryOptions()),
             new AsyncLocalMemoryScopeAccessor(),
             new AgentLoopService(Options.Create(loopOptions), NullLogger<AgentLoopService>.Instance),
             traces,
-            Mock.Of<IKnowledgeEngine>(),
             NullLoggerFactory.Instance,
             services,
             NullLogger<AgentHarnessService>.Instance);
@@ -269,7 +267,7 @@ internal sealed class HarnessAgent(IAgentHarness harness) : AIAgent
     private async Task<AgentResponse> RunHarnessAsync(IEnumerable<ChatMessage> messages, CancellationToken cancellationToken)
     {
         var query = messages.LastOrDefault(message => message.Role == ChatRole.User)?.Text ?? string.Empty;
-        var result = await harness.RunAsync(new HarnessRunRequest(null, query, UseKnowledge: false), cancellationToken);
+        var result = await harness.RunAsync(new HarnessRunRequest(null, query), cancellationToken);
         return HarnessConversation.ToAgentResponse(query, result);
     }
 }

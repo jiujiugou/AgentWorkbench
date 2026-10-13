@@ -41,7 +41,7 @@ public sealed class AgentHarnessModelRuntimeTests
         var (harness, runtime, traces) = Build(
             client, new ModelRuntimeOptions { MaxRetries = 1, RetryBaseDelayMilliseconds = 1 });
 
-        var result = await harness.RunAsync(new HarnessRunRequest(null, "hi", UseKnowledge: false));
+        var result = await harness.RunAsync(new HarnessRunRequest(null, "hi"));
 
         Assert.Equal("done", result.Text);
         Assert.Equal(2, attempts);                      // 第 1 次瞬时失败 + 第 2 次成功
@@ -73,7 +73,6 @@ public sealed class AgentHarnessModelRuntimeTests
             new FakeToolCatalog(),
             new ToolExecutionPipeline(
                 Options.Create(new ToolExecutionOptions()), NullLoggerFactory.Instance, services),
-            new ContextBuilder(),
             Options.Create(new ContextOptions { Enabled = false }),
             new SessionStore(Options.Create(new MemoryOptions()), TimeProvider.System),
             Options.Create(new MemoryOptions()),
@@ -82,7 +81,6 @@ public sealed class AgentHarnessModelRuntimeTests
                 Options.Create(new AgentLoopOptions { MaxIterations = 3, TimeoutSeconds = 30 }),
                 NullLogger<AgentLoopService>.Instance),
             traces,
-            Mock.Of<IKnowledgeEngine>(),
             NullLoggerFactory.Instance,
             services,
             NullLogger<AgentHarnessService>.Instance);

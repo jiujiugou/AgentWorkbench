@@ -18,7 +18,7 @@ ResolveAsync(端点)                                   Providers
   → IAgentLoop.CreateGuard(用量来源)                  执行控制（一次 run 一个守卫）
   → IToolExecutionPipeline.Create(client, 预算+守卫)   工具调用（工具环 + 轨迹采集 + 环内终止）
   → ChatClientAgent（工具来自 IToolCatalog）           对话运行时 + 白名单目录（Safety）
-  → IContextBuilder.Compose(输入, 检索命中)            上下文（UseKnowledge=true 时）
+  → 用户原文直接进模型（知识检索走 search_knowledge 工具，harness 不暗中拼装）
   → ISessionStore.GetOrCreateAsync(sessionId)         记忆
   → IAgentLoop.ExecuteAsync(...)                      执行控制（run 级超时）
   → 收尾分类（循环 / 预算 / 跑满 / 取消 / 超时 / 失败）  执行控制 + 编排层

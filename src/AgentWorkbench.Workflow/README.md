@@ -25,7 +25,7 @@
 ### 步骤策略
 
 - 一个步骤类型一个类：`IWorkflowStepExecutor` + `WorkflowStepRegistry`（按 `type` 解析，未知类型直接报错）。
-- 现有两种步骤：`agent`（先检索依据，再托管 `IAgentHarness` 生成结论，`UseKnowledge: true`）、
+- 现有两种步骤：`agent`（先自行检索依据并拼进输入，再托管 `IAgentHarness` 生成结论——harness 不再二次检索）、
   `report`（把前序步骤产物汇总成 Markdown）。
 - 步骤级重试与超时：`maxAttempts` + `timeoutSeconds`（linked CTS）；重试耗尽 → `WorkflowStepFailedException`，
   步骤落 `failed`。

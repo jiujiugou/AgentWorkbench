@@ -14,7 +14,7 @@
 | 产品面污染 | Webapi 长出评测专用 `POST /api/model/invoke` | Webapi 零改动 |
 | src 消费者 | 假设中的「Conversation/Workflow/Harness 共用」 | 实际零消费者——那是假设性收益 |
 
-先例：`tests/AgentWorkbench.BenchmarkHost`（同理由进 tests/）、`tests/AgentWorkbench.MockLlm`（tests 下的模型服务）。
+先例：`tests/AgentWorkbench.MockLlm`（tests 下的模型服务）。同类的 `tests/AgentWorkbench.BenchmarkHost` 空壳已于 2026-10-13 删除（空壳占位无消费者，恢复：`git checkout 2d68aa9 -- tests/AgentWorkbench.BenchmarkHost/`）。
 
 **代价（如实记录）**：本目录项目不在架构测试保护下，可能悄悄长出坏依赖无人察觉——靠 csproj 注释与本文档自律。将来若产品真需要单步调用出口：`git mv` 到 `src/` + 补 4 处架构测试名单即可，引用集合（Providers / ModelRuntime / Persistence）全在 src，迁移成本约一小时。
 
@@ -98,7 +98,7 @@ dotnet run --project tests/AgentWorkbench.ModelInvocation
 
 ## 与相邻项目的关系
 
-- **`tests/AgentWorkbench.BenchmarkHost`**：OpenAI 兼容的 `/v1/chat/completions`（τ² 的 LLM 入口，即 τ² 配置里的 model endpoint）。本项目是 τ² 的 **agent 回合入口**。两者当前是两个进程/两个端口；若 τ² 侧希望单进程，可把 `MapPost("/api/model/invoke")` 合并进 BenchmarkHost 的 `Program.cs`（库代码原样搬，5 分钟）。
+- **`tests/AgentWorkbench.BenchmarkHost`（已于 2026-10-13 删除）**：原设计为 OpenAI 兼容的 `/v1/chat/completions`（τ² 的 LLM 入口）。删除时它仍是 0 代码空壳；若 τ² V8 推进确需该入口，恢复空壳后补 Program.cs 即可（`git checkout 2d68aa9 -- tests/AgentWorkbench.BenchmarkHost/`），库代码从本服务与 MockLlm 原样搬。
 - **`src/AgentWorkbench.Webapi` 的 `POST /api/harness/run`**：产品面，run 级（内部含 AgentLoop 多轮循环、工具执行、RAG、记忆、落库）。与本服务不共用代码路径。
 
 ## 未付账单（接 τ² 推进计划）

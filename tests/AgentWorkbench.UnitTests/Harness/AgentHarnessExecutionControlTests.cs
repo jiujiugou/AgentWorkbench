@@ -35,7 +35,7 @@ public sealed class AgentHarnessExecutionControlTests
             new ScriptedChatClient(_ => HealthyCall()), new PassthroughModelRuntime(), [.. tool.GetTools()],
             traces, new AgentLoopOptions { MaxIterations = 10, TimeoutSeconds = 30, MaxRepeatedToolCalls = 3 });
 
-        var result = await harness.RunAsync(new HarnessRunRequest(null, "同一调用反复来", UseKnowledge: false));
+        var result = await harness.RunAsync(new HarnessRunRequest(null, "同一调用反复来"));
 
         Assert.Equal(AgentRunStatus.LoopDetected, result.Status);
         Assert.Equal(AgentRunCode.LoopDetected, result.Code);
@@ -57,7 +57,7 @@ public sealed class AgentHarnessExecutionControlTests
             new RecordingTraceStore(),
             new AgentLoopOptions { MaxIterations = 10, TimeoutSeconds = 30, MaxRepeatedToolCalls = 0 });
 
-        var result = await harness.RunAsync(new HarnessRunRequest(null, "同一调用反复来", UseKnowledge: false));
+        var result = await harness.RunAsync(new HarnessRunRequest(null, "同一调用反复来"));
 
         Assert.Equal(AgentRunStatus.IterationLimit, result.Status);
         Assert.Equal(10, tool.Calls);
@@ -74,7 +74,7 @@ public sealed class AgentHarnessExecutionControlTests
             [.. tool.GetTools()], traces,
             new AgentLoopOptions { MaxIterations = 10, TimeoutSeconds = 30, MaxTokensPerRun = 150 });
 
-        var result = await harness.RunAsync(new HarnessRunRequest(null, "烧钱", UseKnowledge: false));
+        var result = await harness.RunAsync(new HarnessRunRequest(null, "烧钱"));
 
         Assert.Equal(AgentRunStatus.BudgetExceeded, result.Status);
         Assert.Equal(AgentRunCode.BudgetExceeded, result.Code);
@@ -95,7 +95,7 @@ public sealed class AgentHarnessExecutionControlTests
             [.. tool.GetTools()], new RecordingTraceStore(),
             new AgentLoopOptions { MaxIterations = 10, TimeoutSeconds = 30, MaxTokensPerRun = 0, MaxRepeatedToolCalls = 0 });
 
-        var result = await harness.RunAsync(new HarnessRunRequest(null, "烧钱", UseKnowledge: false));
+        var result = await harness.RunAsync(new HarnessRunRequest(null, "烧钱"));
 
         Assert.Equal(AgentRunStatus.IterationLimit, result.Status);
         Assert.Equal(10, tool.Calls);
@@ -110,7 +110,7 @@ public sealed class AgentHarnessExecutionControlTests
             new RecordingTraceStore(),
             new AgentLoopOptions { MaxIterations = 2, TimeoutSeconds = 30, MaxRepeatedToolCalls = 0 });
 
-        var result = await harness.RunAsync(new HarnessRunRequest(null, "每轮都要工具", UseKnowledge: false));
+        var result = await harness.RunAsync(new HarnessRunRequest(null, "每轮都要工具"));
 
         // 框架跑满迭代不报错，而是清空工具逼模型收口：不主动分类就会记成 succeeded。
         Assert.Equal(AgentRunStatus.IterationLimit, result.Status);
@@ -127,7 +127,7 @@ public sealed class AgentHarnessExecutionControlTests
             new PassthroughModelRuntime(), [.. tool.GetTools()], new RecordingTraceStore(),
             new AgentLoopOptions { MaxIterations = 2, TimeoutSeconds = 30 });
 
-        var result = await harness.RunAsync(new HarnessRunRequest(null, "会答完", UseKnowledge: false));
+        var result = await harness.RunAsync(new HarnessRunRequest(null, "会答完"));
 
         Assert.Equal(AgentRunStatus.Succeeded, result.Status);
         Assert.Null(result.Code);
@@ -145,7 +145,7 @@ public sealed class AgentHarnessExecutionControlTests
 
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => harness.RunAsync(new HarnessRunRequest(null, "中途取消", UseKnowledge: false), cts.Token));
+            () => harness.RunAsync(new HarnessRunRequest(null, "中途取消"), cts.Token));
 
         var trace = Assert.Single(traces.Saved);
         Assert.Equal(AgentRunStatus.Cancelled, trace.Status);
@@ -163,7 +163,7 @@ public sealed class AgentHarnessExecutionControlTests
             new PassthroughModelRuntime(), [.. tool.GetTools()], new RecordingTraceStore(),
             new AgentLoopOptions { MaxIterations = 10, TimeoutSeconds = 60 });
 
-        var result = await harness.RunAsync(new HarnessRunRequest(null, "慢但没取消", UseKnowledge: false));
+        var result = await harness.RunAsync(new HarnessRunRequest(null, "慢但没取消"));
 
         Assert.Equal(AgentRunStatus.Succeeded, result.Status);
         Assert.Null(result.Code);
@@ -181,7 +181,7 @@ public sealed class AgentHarnessExecutionControlTests
             new AgentLoopOptions { MaxIterations = 10, TimeoutSeconds = 30, MaxRepeatedToolCalls = 0 });
 
         await Assert.ThrowsAnyAsync<Exception>(
-            () => harness.RunAsync(new HarnessRunRequest(null, "工具连续失败", UseKnowledge: false)));
+            () => harness.RunAsync(new HarnessRunRequest(null, "工具连续失败")));
 
         var trace = Assert.Single(traces.Saved);
         Assert.Equal(AgentRunStatus.Failed, trace.Status);
@@ -198,7 +198,7 @@ public sealed class AgentHarnessExecutionControlTests
             traces, new AgentLoopOptions { MaxIterations = 10, TimeoutSeconds = 1 });
 
         await Assert.ThrowsAsync<AgentRunTimeoutException>(
-            () => harness.RunAsync(new HarnessRunRequest(null, "跑太久", UseKnowledge: false)));
+            () => harness.RunAsync(new HarnessRunRequest(null, "跑太久")));
 
         var trace = Assert.Single(traces.Saved);
         Assert.Equal(AgentRunStatus.Timeout, trace.Status);
@@ -216,7 +216,7 @@ public sealed class AgentHarnessExecutionControlTests
             new AgentLoopOptions { MaxIterations = 3, TimeoutSeconds = 30 });
 
         await Assert.ThrowsAsync<HarnessModelNotConfiguredException>(
-            () => harness.RunAsync(new HarnessRunRequest(null, "没模型", UseKnowledge: false)));
+            () => harness.RunAsync(new HarnessRunRequest(null, "没模型")));
 
         var trace = Assert.Single(traces.Saved);
         Assert.Equal(AgentRunStatus.Failed, trace.Status);
@@ -232,7 +232,7 @@ public sealed class AgentHarnessExecutionControlTests
             new ScriptedChatClient(_ => HealthyCall()), new PassthroughModelRuntime(), [.. tool.GetTools()],
             traces, new AgentLoopOptions { MaxIterations = 4, TimeoutSeconds = 30, MaxRepeatedToolCalls = 3 });
 
-        var result = await harness.RunAsync(new HarnessRunRequest(null, "回放", UseKnowledge: false));
+        var result = await harness.RunAsync(new HarnessRunRequest(null, "回放"));
         var replay = await harness.GetRunAsync(result.RunId);
 
         Assert.NotNull(replay);
@@ -277,14 +277,12 @@ public sealed class AgentHarnessExecutionControlTests
             new FakeToolCatalog(tools),
             new ToolExecutionPipeline(
                 Options.Create(new ToolExecutionOptions()), NullLoggerFactory.Instance, services),
-            new ContextBuilder(),
             Options.Create(new ContextOptions { Enabled = false }),
             new SessionStore(Options.Create(new MemoryOptions()), TimeProvider.System),
             Options.Create(new MemoryOptions()),
             new AsyncLocalMemoryScopeAccessor(),
             new AgentLoopService(Options.Create(loopOptions), NullLogger<AgentLoopService>.Instance),
             traces,
-            Mock.Of<IKnowledgeEngine>(),
             NullLoggerFactory.Instance,
             services,
             NullLogger<AgentHarnessService>.Instance);

@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace AgentWorkbench.Webapi.Controllers;
 
-public sealed record HarnessRunBody(string? SessionId, string? Input, bool? UseKnowledge);
+public sealed record HarnessRunBody(string? SessionId, string? Input);
 
 [ApiController]
 [Route("api/harness")]
@@ -26,7 +26,7 @@ public sealed class HarnessController : ControllerBase
         try
         {
             var result = await _harness.RunAsync(
-                new HarnessRunRequest(body.SessionId, body.Input!, body.UseKnowledge ?? true),
+                new HarnessRunRequest(body.SessionId, body.Input!),
                 cancellationToken);
             return Ok(result);
         }
