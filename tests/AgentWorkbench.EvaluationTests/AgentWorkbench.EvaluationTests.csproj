@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    底座六能力域的 L4/L5/L6 驱动（详见 docs/测试标准/评测实现指南.md v0.2）。
+    判据全部自建（确定性）；MAF 只提供批量驱动 / 断言容器 / 回放与留存。
+    判定轨 0 个评测专用 PackageReference：Microsoft.Agents.AI 1.23.0 经
+    AgentHarness 的 ProjectReference 传递依赖到手（其 nuspec 依赖
+    Microsoft.Extensions.AI.Evaluation 10.10.0）。趋势轨启用 Reporting 时才新增。
+    隔离（《标准》§5）：进程内假模型 + 内存轨迹存储，零文件、零网络、零外部 provider。
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtools</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Moq" Version="4.20.72" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AgentWorkbench.AgentHarness\AgentWorkbench.AgentHarness.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -25,5 +25,6 @@
     <Project Path="tests/AgentWorkbench.MockLlm/AgentWorkbench.MockLlm.csproj" />
     <Project Path="tests/AgentWorkbench.ArchitectureTests/AgentWorkbench.ArchitectureTests.csproj" />
     <Project Path="tests/AgentWorkbench.UnitTests/AgentWorkbench.UnitTests.csproj" />
+    <Project Path="tests/AgentWorkbench.EvaluationTests/AgentWorkbench.EvaluationTests.csproj" />
   </Folder>
 </Solution>
