@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using AgentWorkbench.Safety;
 using AgentWorkbench.ToolExecution;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -127,6 +128,7 @@ public sealed class ToolFailureProbeTests
     private static ToolExecutionRun CreateRun(IChatClient client)
         => new ToolExecutionPipeline(
                 Options.Create(new ToolExecutionOptions()),
+                AutoToolApprovalPolicy.Instance,
                 NullLoggerFactory.Instance,
                 new ServiceCollection().BuildServiceProvider())
             .Create(client, new ToolExecutionLimits(MaxIterations: 10));

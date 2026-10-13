@@ -58,7 +58,7 @@ public sealed class ToolCatalogTests
     [Fact]
     public void IsAllowed_ReflectsConfigChangeWithoutRestart()
     {
-        var monitor = new MutableOptionsMonitor(new ToolPolicyOptions { Whitelist = ["a"] });
+        var monitor = new MutableOptionsMonitor<ToolPolicyOptions>(new ToolPolicyOptions { Whitelist = ["a"] });
         var policy = new ToolPolicy(monitor);
 
         Assert.True(policy.IsAllowed("a"));
@@ -72,31 +72,11 @@ public sealed class ToolCatalogTests
     }
 
     private static ToolCatalog BuildCatalog(IServiceProvider provider, ToolPolicyOptions policy)
-        => new(provider, new ToolPolicy(new MutableOptionsMonitor(policy)), NullLogger<ToolCatalog>.Instance);
+        => new(provider, new ToolPolicy(new MutableOptionsMonitor<ToolPolicyOptions>(policy)),
+            NullLogger<ToolCatalog>.Instance);
 
     private sealed class FakeToolProvider(string name) : IAgentToolProvider
     {
         public IReadOnlyList<AITool> GetTools() => [AIFunctionFactory.Create(() => name, name)];
-    }
-
-    /// <summary>可变的 IOptionsMonitor 测试替身：Update 模拟配置源热重载后的新值。</summary>
-    private sealed class MutableOptionsMonitor(ToolPolicyOptions initial) : IOptionsMonitor<ToolPolicyOptions>
-    {
-        private ToolPolicyOptions _current = initial;
-
-        public ToolPolicyOptions CurrentValue => _current;
-
-        public ToolPolicyOptions Get(string? name) => _current;
-
-        public IDisposable OnChange(Action<ToolPolicyOptions, string?> listener) => new NoopDisposable();
-
-        public void Update(ToolPolicyOptions value) => _current = value;
-
-        private sealed class NoopDisposable : IDisposable
-        {
-            public void Dispose()
-            {
-            }
-        }
     }
 }

@@ -8,7 +8,12 @@ namespace AgentWorkbench.ToolExecution;
 /// <param name="Guard">
 /// 执行控制守卫（重复调用 / token 预算）；为 <c>null</c> 时环内不做任何提前终止判定。
 /// </param>
-public sealed record ToolExecutionLimits(int MaxIterations, IAgentRunGuard? Guard = null);
+/// <param name="Approver">
+/// 审批执行者（run 级）：<c>Ask</c> 级工具靠它去问人；为 <c>null</c> 时任何 <c>Ask</c> 都按拒绝处理
+/// （fail-closed —— 无人可问就不放行）。
+/// </param>
+public sealed record ToolExecutionLimits(
+    int MaxIterations, IAgentRunGuard? Guard = null, IToolApprover? Approver = null);
 
 /// <summary>一次工具调用的轨迹（迭代号 / 工具名 / 参数 / 结果 / 失败原因）。</summary>
 /// <remarks>
@@ -87,15 +92,18 @@ public interface IToolExecutionPipeline
 public sealed class ToolExecutionPipeline : IToolExecutionPipeline
 {
     private readonly ToolExecutionOptions _options;
+    private readonly IToolApprovalPolicy _approval;
     private readonly ILoggerFactory _loggerFactory;
     private readonly IServiceProvider _services;
 
     public ToolExecutionPipeline(
         IOptions<ToolExecutionOptions> options,
+        IToolApprovalPolicy approval,
         ILoggerFactory loggerFactory,
         IServiceProvider services)
     {
         _options = options.Value;
+        _approval = approval;
         _loggerFactory = loggerFactory;
         _services = services;
     }
@@ -127,6 +135,20 @@ public sealed class ToolExecutionPipeline : IToolExecutionPipeline
                 return null;
             }
 
+            // 第二维（审批）：在白名单「能不能用」之外，再决定「这次调用要不要先问人」。
+            // 顺序放在守卫之后：守卫判的是「整轮要不要停」（循环 / 预算），是更上层的止损，
+            // 已经决定要停的调用不必再走审批。
+            var denial = await InspectApprovalAsync(limits, context.Function.Name, arguments, token);
+            if (denial is not null)
+            {
+                // 拒绝：工具绝不执行，把「被拒」当作这次调用的结果回填给模型 ——
+                // 模型据此换路或收口，而不是反复重试同一个被拒的调用。
+                // 轨迹里 result 是结构化拒绝载荷、error 是归类码，回放时「被拒」与「工具失败」分得开。
+                var payload = DenialPayload(context.Function.Name, denial);
+                run.CompleteCall(index, Truncate(payload), error: denial, fullResult: payload);
+                return payload;
+            }
+
             try
             {
                 var result = await context.Function.InvokeAsync(context.Arguments, token);
@@ -147,6 +169,66 @@ public sealed class ToolExecutionPipeline : IToolExecutionPipeline
 
         return run;
     }
+
+    /// <summary>
+    /// 审批闸门：返回 <c>null</c> = 放行执行；返回归类码 = 拒绝（工具不得执行）。
+    /// </summary>
+    /// <remarks>
+    /// <c>Auto</c> 不触碰审批者（不打扰、不引入通道故障面）；<c>Deny</c> 直接拒；
+    /// <c>Ask</c> 必须拿到明确批准，其余一切情况（无审批者 / 超时 / 通道故障）一律按拒绝处理 ——
+    /// 安全闸坏了必须往「不放行」倒，绝不能因为「没人回答」就当成同意。
+    /// </remarks>
+    private async Task<string?> InspectApprovalAsync(
+        ToolExecutionLimits limits, string toolName, string? arguments, CancellationToken token)
+    {
+        var mode = _approval.Decision(toolName);
+
+        if (mode == ToolApprovalMode.Auto)
+            return null;
+
+        if (mode == ToolApprovalMode.Deny)
+            return ToolApprovalCodes.PolicyDenied;
+
+        // Ask：无人可问 = 不放行。
+        if (limits.Approver is null)
+            return ToolApprovalCodes.Unavailable;
+
+        var timeout = _options.ApprovalTimeoutSeconds <= 0
+            ? Timeout.InfiniteTimeSpan
+            : TimeSpan.FromSeconds(_options.ApprovalTimeoutSeconds);
+
+        try
+        {
+            var approved = await limits.Approver
+                .RequestAsync(new ToolApprovalRequest(toolName, arguments), token)
+                .WaitAsync(timeout, token);
+            return approved ? null : ToolApprovalCodes.UserDenied;
+        }
+        catch (TimeoutException)
+        {
+            // 超时即拒绝：审批是安全闸，等不到答复不等于默认同意。
+            return ToolApprovalCodes.Unavailable;
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            // 调用方取消是取消本身，不是审批结论 —— 原样抛，由上层按取消归类。
+            throw;
+        }
+        catch (Exception)
+        {
+            // 审批通道自身故障同样按拒绝处理（fail-closed）。
+            return ToolApprovalCodes.Unavailable;
+        }
+    }
+
+    /// <summary>拒绝载荷：结构化的「被拒」结果，回填给模型也进轨迹（截断后）。</summary>
+    private static string DenialPayload(string toolName, string code)
+        => JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["denied"] = "true",
+            ["tool"] = toolName,
+            ["reason"] = code
+        });
 
     /// <summary>序列化工具参数，并按参数名排序 —— 键序稳定，重复调用的指纹才可比。</summary>
     private static string Serialize(AIFunctionArguments arguments)

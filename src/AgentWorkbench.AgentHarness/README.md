@@ -16,7 +16,7 @@
 ResolveAsync(端点)                                   Providers
   → IModelRuntime.Wrap(client)                       模型交互（超时 / 重试 / 并发 / 用量）
   → IAgentLoop.CreateGuard(用量来源)                  执行控制（一次 run 一个守卫）
-  → IToolExecutionPipeline.Create(client, 预算+守卫)   工具调用（工具环 + 轨迹采集 + 环内终止）
+  → IToolExecutionPipeline.Create(client, 预算+守卫+审批者)  工具调用（工具环 + 轨迹采集 + 环内终止 + 审批闸门）
   → ChatClientAgent（工具来自 IToolCatalog）           对话运行时 + 白名单目录（Safety）
   → 用户原文直接进模型（知识检索走 search_knowledge 工具，harness 不暗中拼装）
   → ISessionStore.GetOrCreateAsync(sessionId)         记忆
@@ -24,6 +24,17 @@ ResolveAsync(端点)                                   Providers
   → 收尾分类（循环 / 预算 / 跑满 / 取消 / 超时 / 失败）  执行控制 + 编排层
   → IExecutionTraceStore.SaveAsync(轨迹+状态+归类码)    可观测（四条路径都落库）
 ```
+
+### 审批怎么接进来（harness 只做透传，不做判断）
+
+审批是**两个正交维度**里的第二维，两半都不在 harness 里实现：
+
+- **级别**（`Auto` / `Ask` / `Deny`）由 `Safety` 的 `IToolApprovalPolicy` 按配置决定，
+  管道自己从 DI 取 —— harness 一行都不碰。
+- **通道**（`Ask` 时问谁）由调用方按 run 提供：`HarnessRunRequest.Approver`（`IToolApprover`）。
+  harness 只把它透传进 `ToolExecutionLimits`。为 `null` 时任何 `Ask` 一律按拒绝处理（fail-closed）。
+- 被拒的工具不执行，归类码（`approval_policy_denied` / `approval_user_denied` / `approval_unavailable`）
+  随工具步骤落进**同一本账**，被拒也不算 `tool_error`（没有异常冒出环）。
 
 ### 会话怎么被用起来
 
@@ -137,6 +148,12 @@ ResolveAsync(端点)                                   Providers
 - **同源对齐**：同一脚本走两条出口，账本的终态 / 迭代数 / 工具序列 / 工具调用次数必须逐项相同。
 - **刻意的不对称**：工具事件带完整结果，账本存截断结果——断言同时锁两侧，改单边即红。
 - **负控**：模型侧崩溃时事件流里不允许出现 `Completed`（伪造终态）；判据自身也有负控（缺终态 / 终态不在末尾 / 终态重复三种坏形状都必须抛）。
+
+审批透传（`tests/AgentWorkbench.EvaluationTests/HarnessApproval/`）：
+
+- 请求里的 `IToolApprover` **真的走到管道**（问了几次、问的是哪个工具都断言了）——防「契约加了没人用」。
+- 批准 → 工具执行；拒绝 → 工具**零执行**且归类码写进**账本**，整轮仍是 `succeeded`。
+- 不带 approver 的 `Ask` 必须 fail-closed。
 
 还没有的：真·跨进程重启会话延续（验收脚本未落地；`Memory` 侧已有进程内等价用例）、恢复后不重复副作用（P2-2）、按状态分流的消费口径。
 

@@ -17,7 +17,12 @@ public sealed record HarnessCapabilities(bool Loop, bool Llm, bool Context, bool
 /// （否则同一指令会随每轮对话重复累积）。<b>不要改用 Agent 的 AIContextProviders</b>——
 /// 那会让 MEA 在我们装配的函数调用环外再包一层，绕过守卫与轨迹采集。
 /// </param>
-public sealed record HarnessRunRequest(string? SessionId, string Input, string? Instructions = null);
+/// <param name="Approver">
+/// 审批执行者（<c>Ask</c> 级工具去问人的通道）；为 <c>null</c> 时任何 <c>Ask</c> 一律按拒绝处理。
+/// 审批级别本身由 <c>IToolApprovalPolicy</c> 按配置决定，这里只提供「问谁」。
+/// </param>
+public sealed record HarnessRunRequest(
+    string? SessionId, string Input, string? Instructions = null, IToolApprover? Approver = null);
 
 /// <summary>单步轨迹（loop 内的一次工具调用或最终答复）。</summary>
 /// <param name="Iteration">所在迭代轮次，从 0 起。</param>

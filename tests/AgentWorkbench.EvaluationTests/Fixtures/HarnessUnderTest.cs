@@ -7,6 +7,7 @@ using AgentWorkbench.Memory;
 using AgentWorkbench.ModelRuntime;
 using AgentWorkbench.Observability;
 using AgentWorkbench.Providers;
+using AgentWorkbench.Safety;
 using AgentWorkbench.ToolExecution;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -143,13 +144,16 @@ internal sealed class HarnessUnderTest
     /// <param name="sessions">会话存储探针；传入后可断言「取消时会话仍写回」（不变量 3.7）。</param>
     /// <param name="traceStoreShouldFail">置真后账本写入一律抛，模拟仓储故障（不变量 3.10 / 6.6）。</param>
     /// <param name="extraTools">追加到目录里的额外工具（如 <see cref="LongResultTool"/>）；默认只有故障注入工具。</param>
+    /// <param name="approval">审批策略；默认全部 Auto（与生产 appsettings 默认一致），
+    /// 传别的策略即可让某个工具落到 Ask / Deny 分支。</param>
     public static HarnessUnderTest Create(
         Func<int, ChatResponse> script,
         AgentLoopOptions loopOptions,
         IModelRuntime? runtime = null,
         RecordingSessionStore? sessions = null,
         bool traceStoreShouldFail = false,
-        IReadOnlyList<AITool>? extraTools = null)
+        IReadOnlyList<AITool>? extraTools = null,
+        IToolApprovalPolicy? approval = null)
     {
         var client = new ScriptedChatClient(script);
         var tool = new FaultInjectorTool();
@@ -157,7 +161,9 @@ internal sealed class HarnessUnderTest
         var tools = new List<AITool>(tool.GetTools());
         if (extraTools is not null)
             tools.AddRange(extraTools);
-        var harness = Build(client, runtime ?? new PassthroughModelRuntime(), tools, traces, loopOptions, sessions);
+        var harness = Build(
+            client, runtime ?? new PassthroughModelRuntime(), tools, traces, loopOptions, sessions,
+            approval ?? AutoToolApprovalPolicy.Instance);
         var agent = new HarnessAgent(harness);
         return new HarnessUnderTest(harness, agent, client, tool, traces, sessions);
     }
@@ -213,7 +219,8 @@ internal sealed class HarnessUnderTest
 
     private static IAgentHarness Build(
         IChatClient inner, IModelRuntime runtime, IReadOnlyList<AITool> tools,
-        IExecutionTraceStore traces, AgentLoopOptions loopOptions, RecordingSessionStore? sessions)
+        IExecutionTraceStore traces, AgentLoopOptions loopOptions, RecordingSessionStore? sessions,
+        IToolApprovalPolicy approval)
     {
         var factory = new Mock<IChatClientFactory>(MockBehavior.Strict);
         var endpoint = new ChatEndpoint(1, "http://test", "key", "model");
@@ -227,7 +234,7 @@ internal sealed class HarnessUnderTest
             runtime,
             new FakeToolCatalog(tools),
             new ToolExecutionPipeline(
-                Options.Create(new ToolExecutionOptions()), NullLoggerFactory.Instance, services),
+                Options.Create(new ToolExecutionOptions()), approval, NullLoggerFactory.Instance, services),
             Options.Create(new ContextOptions { Enabled = false }),
             (ISessionStore?)sessions ?? new SessionStore(Options.Create(new MemoryOptions()), TimeProvider.System),
             Options.Create(new MemoryOptions()),

@@ -321,7 +321,10 @@ public sealed class AgentHarnessService : IAgentHarness
         // 执行控制守卫：一次 run 一个实例，管住「卡在同一个调用上」与「把 token 烧光」；
         // 判定在工具环内进行（见 ToolExecutionPipeline），这里只负责把它装起来。
         var guard = _loop.CreateGuard(new RuntimeUsageSource(_runtime));
-        var execution = _pipeline.Create(chatClient, new ToolExecutionLimits(_loop.MaxIterations, guard));
+        // 审批级别由 IToolApprovalPolicy 决定（ToolExecution 侧消费）；这里只把「问谁」透传下去。
+        // 两者是正交的两维：白名单/审批级别来自配置模块，approver 来自本次 run 的调用方。
+        var execution = _pipeline.Create(
+            chatClient, new ToolExecutionLimits(_loop.MaxIterations, guard, request.Approver));
         // 指令（人格 / 引用规范）按 run 注入：装饰在工具环<b>外面</b>，只往模型请求里加一条系统消息。
         // 不能改用 Agent 的 AIContextProviders —— 那会让 MEA 再包一层函数调用环，
         // 绕过我们这层的守卫与轨迹采集（详见 RunInstructionsChatClient 注释）。

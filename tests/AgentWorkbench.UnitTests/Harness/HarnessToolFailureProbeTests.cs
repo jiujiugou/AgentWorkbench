@@ -6,6 +6,7 @@ using AgentWorkbench.Memory;
 using AgentWorkbench.ModelRuntime;
 using AgentWorkbench.Observability;
 using AgentWorkbench.Providers;
+using AgentWorkbench.Safety;
 using AgentWorkbench.ToolExecution;
 using AgentWorkbench.UnitTests.Conversation;
 using AgentWorkbench.UnitTests.Tools;
@@ -81,7 +82,7 @@ public sealed class HarnessToolFailureProbeTests
             new PassthroughModelRuntime(),
             new FakeToolCatalog([.. tool.GetTools()]),
             new ToolExecutionPipeline(
-                Options.Create(new ToolExecutionOptions()), NullLoggerFactory.Instance, services),
+                Options.Create(new ToolExecutionOptions()), AutoToolApprovalPolicy.Instance, NullLoggerFactory.Instance, services),
             Options.Create(new ContextOptions { Enabled = false }),
             new SessionStore(Options.Create(new MemoryOptions()), TimeProvider.System),
             Options.Create(new MemoryOptions()),

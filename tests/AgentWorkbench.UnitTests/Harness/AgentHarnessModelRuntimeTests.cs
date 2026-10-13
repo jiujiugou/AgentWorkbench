@@ -6,6 +6,7 @@ using AgentWorkbench.Memory;
 using AgentWorkbench.ModelRuntime;
 using AgentWorkbench.Observability;
 using AgentWorkbench.Providers;
+using AgentWorkbench.Safety;
 using AgentWorkbench.ToolExecution;
 using AgentWorkbench.UnitTests.Conversation;
 using Microsoft.Extensions.AI;
@@ -72,7 +73,7 @@ public sealed class AgentHarnessModelRuntimeTests
             runtime,
             new FakeToolCatalog(),
             new ToolExecutionPipeline(
-                Options.Create(new ToolExecutionOptions()), NullLoggerFactory.Instance, services),
+                Options.Create(new ToolExecutionOptions()), AutoToolApprovalPolicy.Instance, NullLoggerFactory.Instance, services),
             Options.Create(new ContextOptions { Enabled = false }),
             new SessionStore(Options.Create(new MemoryOptions()), TimeProvider.System),
             Options.Create(new MemoryOptions()),
