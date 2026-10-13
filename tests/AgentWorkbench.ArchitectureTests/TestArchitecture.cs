@@ -14,7 +14,6 @@ internal static class TestArchitecture
         "AgentWorkbench.Documents",
         "AgentWorkbench.Knowledge.Abstractions",
         "AgentWorkbench.Knowledge.Local",
-        "AgentWorkbench.Knowledge",
         "AgentWorkbench.Providers",
         "AgentWorkbench.ModelRuntime",
         "AgentWorkbench.Conversation",

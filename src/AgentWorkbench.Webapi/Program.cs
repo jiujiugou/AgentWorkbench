@@ -2,7 +2,7 @@ using AgentWorkbench.AgentLoop;
 using AgentWorkbench.AgentHarness;
 using AgentWorkbench.Conversation;
 using AgentWorkbench.Documents;
-using AgentWorkbench.Knowledge;
+using AgentWorkbench.Knowledge.Local;
 using AgentWorkbench.Memory;
 using AgentWorkbench.Memory.Persistence;
 using AgentWorkbench.ModelRuntime;

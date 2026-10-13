@@ -6,7 +6,6 @@
     <Project Path="src/AgentWorkbench.Documents/AgentWorkbench.Documents.csproj" />
     <Project Path="src/AgentWorkbench.Knowledge.Abstractions/AgentWorkbench.Knowledge.Abstractions.csproj" />
     <Project Path="src/AgentWorkbench.Knowledge.Local/AgentWorkbench.Knowledge.Local.csproj" />
-    <Project Path="src/AgentWorkbench.Knowledge/AgentWorkbench.Knowledge.csproj" />
     <Project Path="src/AgentWorkbench.Providers/AgentWorkbench.Providers.csproj" />
     <Project Path="src/AgentWorkbench.ModelRuntime/AgentWorkbench.ModelRuntime.csproj" />
     <Project Path="src/AgentWorkbench.Conversation/AgentWorkbench.Conversation.csproj" />

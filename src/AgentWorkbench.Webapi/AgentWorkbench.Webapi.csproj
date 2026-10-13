@@ -14,7 +14,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AgentWorkbench.Documents\AgentWorkbench.Documents.csproj" />
-    <ProjectReference Include="..\AgentWorkbench.Knowledge\AgentWorkbench.Knowledge.csproj" />
+    <ProjectReference Include="..\AgentWorkbench.Knowledge.Local\AgentWorkbench.Knowledge.Local.csproj" />
     <ProjectReference Include="..\AgentWorkbench.Conversation\AgentWorkbench.Conversation.csproj" />
     <ProjectReference Include="..\AgentWorkbench.AgentHarness\AgentWorkbench.AgentHarness.csproj" />
     <ProjectReference Include="..\AgentWorkbench.Workflow\AgentWorkbench.Workflow.csproj" />

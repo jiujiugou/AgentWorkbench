@@ -1,7 +1,6 @@
 using AgentWorkbench.Knowledge.Abstractions;
 using AgentWorkbench.Knowledge.Abstractions.Embedding;
 using AgentWorkbench.Knowledge.Abstractions.Retrieval;
-using AgentWorkbench.Knowledge.Local;
 using AgentWorkbench.Knowledge.Local.Embedding;
 using AgentWorkbench.Knowledge.Local.Indexing;
 using AgentWorkbench.Knowledge.Local.Retrieval;
@@ -11,12 +10,14 @@ using AgentWorkbench.Shared.Options;
 using AgentWorkbench.ToolExecution;
 using CommunityToolkit.VectorData.SqliteVec;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 
-namespace AgentWorkbench.Knowledge;
+namespace AgentWorkbench.Knowledge.Local;
 
-/// <summary>Knowledge 模块（P1 知识库）：Embedding + sqlite-vec + FTS5 混合检索 + 带引用问答。</summary>
+/// <summary>
+/// 知识库模块（P1）自注册入口。
+/// 原独立 <c>AgentWorkbench.Knowledge</c> 项目只装这一行注册，阶段 4 砍伐并入本地实现
+/// （合并的是项目边界，注册签名 <c>AddNitroKnowledge</c> 与装配内容一字未动）。
+/// </summary>
 public static class KnowledgeServiceCollectionExtensions
 {
     public static IServiceCollection AddNitroKnowledge(
