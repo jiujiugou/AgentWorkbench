@@ -141,7 +141,6 @@ public sealed class TerminationInvariants
     public async Task SessionSaved_OnCancellation_TokenNotCanceled()
     {
         // 取消后断言 Sessions.Saves 有记录且令牌不可取消
-        // 需要在 Create 时传入 RecordingSessionStore
         var sessions = new RecordingSessionStore();
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var harness = HarnessUnderTest.Create(
@@ -151,25 +150,39 @@ public sealed class TerminationInvariants
         harness.Tool.HangGate = gate;
 
         var cts = new CancellationTokenSource();
-        var runTask = harness.RunExpectingFailureAsync("取消时会话仍写回");
+        // 必须把令牌真的传进 run，取消才会走「调用方取消」这条路径（此前漏传，靠 30s 超时兜底）。
+        var runTask = harness.RunExpectingFailureAsync("取消时会话仍写回", cts.Token);
         await Task.Delay(50);
         cts.Cancel();
 
         await runTask;
 
         // 断言：会话写回被调用，且令牌不可取消
-        Assert.Single(sessions.Saves);
-        Assert.False(sessions.Saves[0].TokenCanBeCanceled, "取消时会话写回必须传 CancellationToken.None");
+        AssertSessionWriteBackIsUncancellable(sessions.Saves);
     }
 
     [Fact]
     public async Task SessionSaved_TokenCanceled_Skipped_NegativeControl()
     {
-        // 负控：如果传原令牌（取消后写回被跳过），Saves 为空或令牌可取消
-        // 这里通过验证正例的反面来证明检查有区分度（正例已验证 TokenCanBeCanceled=false）
-        // 实际上无法在同一测试中同时验证两种行为，正例已覆盖
-        // 此处仅作占位，真正的负控在源码层面：若 SaveSessionQuietlyAsync 传原令牌，则 Saves 为空
-        Assert.True(true, "正例已验证 TokenCanBeCanceled=false，若源码传原令牌则 Saves.Count=0");
+        // 真实负控：把会话写回判据对两种坏形状也验一遍，证明它不是恒绿——
+        //  (a) 令牌可取消（若源码传原令牌，取消后写回会被跳过/失效）→ 必须红；
+        //  (b) 写回缺失（传原令牌导致 finally 里跳过写回）→ 必须红。
+        Assert.ThrowsAny<Exception>(() => AssertSessionWriteBackIsUncancellable([("session", true)]));
+        Assert.ThrowsAny<Exception>(() => AssertSessionWriteBackIsUncancellable([]));
+
+        // 正例形状（写回过、令牌不可取消）必须绿——否则判据恒红、同样没牙。
+        AssertSessionWriteBackIsUncancellable([("session", false)]);
+    }
+
+    /// <summary>
+    /// 会话写回判据：取消场景下必须写回过，且写回令牌不可取消
+    /// （唯一实现手段就是 <c>SaveSessionQuietlyAsync</c> 传 <c>CancellationToken.None</c>）。
+    /// </summary>
+    private static void AssertSessionWriteBackIsUncancellable(
+        IReadOnlyList<(string SessionId, bool TokenCanBeCanceled)> saves)
+    {
+        Assert.True(saves.Count > 0, "取消场景下会话必须写回（传 CancellationToken.None 而非原令牌）");
+        Assert.All(saves, save => Assert.False(save.TokenCanBeCanceled, "写回令牌必须不可取消"));
     }
 
     // ========== 3.8 空答复不落 assistant 步 ==========
@@ -272,18 +285,17 @@ public sealed class TerminationInvariants
     [Fact]
     public async Task PersistErrorDoesNotMaskOriginal_WhenTraceSaveFails_ThrowsOriginal()
     {
-        // 注入账本写失败 + 工具失败 → 抛出的仍是工具异常
+        // 注入账本写失败 + run 本身抛异常（模型侧崩溃）→ 冒泡的必须仍是原始异常，不是账本异常。
+        // 关键：先让 run 真的抛（否则「掩盖」无从谈起）——旧版用「工具失败一次」当原始异常，
+        // 但工具异常在环内被容忍、run 其实正常收尾，最后冒泡的是账本异常，旧断言只查类型所以蒙混过关。
         var harness = HarnessUnderTest.Create(
-            call => ScriptedResponses.ToolCall(
-                FaultInjectorTool.ToolName,
-                ScriptedResponses.Args(("mode", "throw"), ("failTimes", 1), ("delayMs", 0))),
+            _ => throw new InvalidOperationException("模型侧崩溃（原始异常）"),
             new AgentLoopOptions { MaxIterations = 10, TimeoutSeconds = 30, MaxRepeatedToolCalls = 0 },
             traceStoreShouldFail: true);
 
-        var failure = await harness.RunExpectingFailureAsync("账本写失败时仍抛工具异常");
+        var failure = await harness.RunExpectingFailureAsync("账本写失败时仍抛原始异常");
 
-        // 原始异常是工具异常
-        Assert.IsType<InvalidOperationException>(failure.Exception);
+        AssertOriginalExceptionSurfaced(failure.Exception, originalMarker: "模型侧崩溃");
 
         // 验证账本确实没落下（WasPersisted 为假）
         var results = await harness.EvaluateAsync("domain3-persist-error",
@@ -296,13 +308,25 @@ public sealed class TerminationInvariants
     }
 
     [Fact]
-    public async Task PersistErrorLeaks_MaskingOriginal_NegativeControl()
+    public void PersistErrorLeaks_MaskingOriginal_NegativeControl()
     {
-        // 负控：如果落库异常外泄（掩盖原始异常），则抛出的异常类型会变
-        // 正例已验证抛出的是工具异常；若源码改为让落库异常外泄，则抛出的会是落库异常
-        Assert.True(true, "正例已验证抛出工具异常；若源码让落库异常外泄，则测试会因异常类型不匹配而失败");
+        // 真实负控：把「落库异常外泄（顶替原始异常）」这件事直接喂给判据 → 必须红。
+        // 证明判据真的会拒绝账本异常，而不是只看异常类型（两者同为 InvalidOperationException）。
+        Assert.ThrowsAny<Exception>(
+            () => AssertOriginalExceptionSurfaced(
+                new InvalidOperationException("故障注入：账本写入失败"), originalMarker: "模型侧崩溃"));
+
+        // 正例形状（原始异常在场、无账本异常）必须绿——否则判据恒红、同样没牙。
+        AssertOriginalExceptionSurfaced(new InvalidOperationException("模型侧崩溃（原始异常）"), originalMarker: "模型侧崩溃");
+    }
+
+    /// <summary>
+    /// 「落库错误不得掩盖原始异常」判据：冒泡上来的必须是<b>原始</b>异常，而不是账本写入异常。
+    /// 只看异常类型不够——两者可以同为 <see cref="InvalidOperationException"/>，必须看消息归属。
+    /// </summary>
+    private static void AssertOriginalExceptionSurfaced(Exception surfaced, string originalMarker)
+    {
+        Assert.DoesNotContain("账本写入失败", surfaced.Message);
+        Assert.Contains(originalMarker, surfaced.Message);
     }
 }
-
-// 需要扩展 HarnessUnderTest.Create 支持 traceStoreShouldFail 参数
-// 以及 RecordingTraceStore 支持 ShouldFailOnSave

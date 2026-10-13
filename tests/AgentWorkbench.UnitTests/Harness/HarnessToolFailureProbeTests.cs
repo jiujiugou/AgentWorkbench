@@ -108,5 +108,9 @@ public sealed class HarnessToolFailureProbeTests
 
         public Task<ExecutionTrace?> GetAsync(long runId, CancellationToken cancellationToken = default)
             => Task.FromResult<ExecutionTrace?>(null);
+
+        public Task<IReadOnlyList<ExecutionTrace>> QueryAsync(
+            ExecutionTraceQuery query, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<ExecutionTrace>>([]);
     }
 }

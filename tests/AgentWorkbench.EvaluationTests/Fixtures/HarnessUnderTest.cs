@@ -40,6 +40,22 @@ internal sealed class RecordingTraceStore : IExecutionTraceStore
 
     public Task<ExecutionTrace?> GetAsync(long runId, CancellationToken cancellationToken = default)
         => Task.FromResult(runId >= 1 && runId <= Saved.Count ? Saved[(int)runId - 1] : null);
+
+    public Task<IReadOnlyList<ExecutionTrace>> QueryAsync(
+        ExecutionTraceQuery query, CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<ExecutionTrace>>(Saved
+            .Where(trace => query.SessionId is null || trace.SessionId == query.SessionId)
+            .Where(trace => query.Status is null || trace.Status == query.Status)
+            .Reverse()
+            .Take(query.Limit > 0 ? query.Limit : 50)
+            .ToList());
+
+    /// <summary>
+    /// 篡改已落库轨迹（<paramref name="index"/> 从 0 起）。回放负控专用：
+    /// 先把真实轨迹写进去、再改成坏形状，回放事实必须随之变化——否则回放根本没读账本。
+    /// </summary>
+    public void Tamper(int index, Func<ExecutionTrace, ExecutionTrace> mutate)
+        => Saved[index] = mutate(Saved[index]);
 }
 
 /// <summary>一次评测 run 的全部可观测量：结果 + 轨迹 + 计数器。</summary>
@@ -169,9 +185,15 @@ internal sealed class HarnessUnderTest
     }
 
     /// <summary>跑一次 run；取消 / 失败路径按原语义抛出（用 <see cref="RunExpectingFailureAsync"/> 捕获）。</summary>
-    public async Task<HarnessOutcome> RunAsync(string query, CancellationToken cancellationToken = default)
+    public Task<HarnessOutcome> RunAsync(string query, CancellationToken cancellationToken = default)
+        => RunAsync(query, sessionId: null, cancellationToken);
+
+    /// <summary>
+    /// 跑一次 run 并显式指定会话（回放回归用：同一会话连跑多次，验证按 sessionId 检索轨迹）。
+    /// </summary>
+    public async Task<HarnessOutcome> RunAsync(string query, string? sessionId, CancellationToken cancellationToken = default)
     {
-        var result = await Harness.RunAsync(new HarnessRunRequest(null, query), cancellationToken);
+        var result = await Harness.RunAsync(new HarnessRunRequest(sessionId, query), cancellationToken);
         var trace = Traces.Saved[^1];
         var outcome = new HarnessOutcome(query, result, trace, Tool.Calls, Client.Calls);
         _cases.Add(new EvalCase(query, HarnessConversation.ToAgentResponse(query, result), LedgerFact.From(trace)));

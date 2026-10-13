@@ -24,6 +24,12 @@ public class ArchitectureBudgets
     private const int MaxHarnessCtorParams = 13;
     private const int MaxProgramRegistrations = 15;
 
+    /// <summary>轨迹回放入口的源码标记：评测必须有一条用例消费它（阶段 3：轨迹不得退回「只写不读」）。</summary>
+    private const string ReplayConsumptionMarker = "GetRunAsync(";
+
+    /// <summary>永远不该出现的标记：用于负控自证「扫描不是恒真」。</summary>
+    private const string ImpossibleMarker = "GetRunAsyncThisMarkerNeverAppearsOnEarth(";
+
     [Fact]
     public void Src_project_count_should_not_exceed_budget()
     {
@@ -69,8 +75,32 @@ public class ArchitectureBudgets
             $"Program.cs 注册调用 {registrations} 处超预算 {MaxProgramRegistrations}。装配根本身必须保持薄；");
     }
 
+    /// <summary>
+    /// 阶段 3 收尾的<b>消费断言</b>：轨迹回放入口必须被评测用例消费。
+    /// 防的是「回归链被静默移除」——把回放测试删掉后，轨迹又回到「只写不读」的死数据状态，
+    /// 而所有既有测试仍然全绿（这正是「验收假绿」的形态）。所以这条断言本身就是那道保险。
+    /// </summary>
+    [Fact]
+    public void Trace_replay_must_be_consumed_by_evaluation_tests()
+    {
+        var evaluationDir = Path.Combine(RepoRoot, "tests", "AgentWorkbench.EvaluationTests");
+        var consumers = CountMarker(evaluationDir, ReplayConsumptionMarker);
+
+        Assert.True(
+            consumers > 0,
+            $"评测项目里没有任何源码引用回放入口 `{ReplayConsumptionMarker}`——轨迹会退回「只写不读」的死数据。"
+            + "若确实删掉了回放用例，请先想清楚「每次 run 的轨迹，还有哪条测试会因它被篡改而变红」；");
+
+        // 判据自身的负控：同一扫描对「绝不可能出现的标记」必须返回 0，证明它不是恒真门禁。
+        Assert.Equal(0, CountMarker(evaluationDir, ImpossibleMarker));
+    }
+
     private static int CountLoc(string projectDir)
         => SourceFiles(projectDir).Sum(file => File.ReadAllLines(file).Length);
+
+    /// <summary>统计目录下 .cs 源文件中出现 <paramref name="marker"/> 的次数（排除 obj / bin）。</summary>
+    private static int CountMarker(string projectDir, string marker)
+        => SourceFiles(projectDir).Sum(file => Regex.Count(File.ReadAllText(file), Regex.Escape(marker)));
 
     private static IEnumerable<string> SourceFiles(string projectDir)
         => Directory.GetFiles(projectDir, "*.cs", SearchOption.AllDirectories)

@@ -10,6 +10,9 @@ public interface IAgentRunRepository
     Task InsertStepsAsync(long runId, IReadOnlyList<AgentStepRecord> steps);
     Task<AgentRunRecord?> GetRunAsync(long id);
     Task<IReadOnlyList<AgentStepRecord>> GetStepsAsync(long runId);
+
+    /// <summary>按会话 / 终态检索运行记录（最近优先，最多 <paramref name="limit"/> 条）；两个过滤条件传 <c>null</c> 表示不过滤。</summary>
+    Task<IReadOnlyList<AgentRunRecord>> QueryRunsAsync(string? sessionId, string? status, int limit);
 }
 
 /// <inheritdoc />
@@ -72,6 +75,20 @@ public sealed class AgentRunRepository : IAgentRunRepository
         using var connection = _factory.Create();
         var rows = await connection.QueryAsync<AgentStepRecord>(
             "SELECT * FROM agent_steps WHERE run_id = @runId ORDER BY iteration, id", new { runId });
+        return rows.AsList();
+    }
+
+    public async Task<IReadOnlyList<AgentRunRecord>> QueryRunsAsync(string? sessionId, string? status, int limit)
+    {
+        using var connection = _factory.Create();
+        var rows = await connection.QueryAsync<AgentRunRecord>(
+            """
+            SELECT * FROM agent_runs
+            WHERE (@sessionId IS NULL OR session_id = @sessionId)
+              AND (@status IS NULL OR status = @status)
+            ORDER BY id DESC
+            LIMIT @limit
+            """, new { sessionId, status, limit });
         return rows.AsList();
     }
 }

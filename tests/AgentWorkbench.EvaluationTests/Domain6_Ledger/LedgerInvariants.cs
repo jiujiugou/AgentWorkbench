@@ -133,16 +133,25 @@ public sealed class LedgerInvariants
     [Fact]
     public async Task GetRunAsync_MissingErrorCode_NegativeControl()
     {
-        // 负控：丢掉 ErrorCode（置 null）→ 回放时 code 为 null，断言失败
+        // 真实负控：失败 run 落库后把 error_code 篡改为 null → 回放就不再能区分「为什么失败」。
+        // 锁住「失败路径必须留下归类码」——只留人话（Error）的回放，调用方无法决定重试还是降级。
         var harness = HarnessUnderTest.Create(
-            call => call == 1 ? HealthyToolCall() : ScriptedResponses.Text("done"),
+            _ => throw new InvalidOperationException("model side error"),
             new AgentLoopOptions { MaxIterations = 10, TimeoutSeconds = 30, MaxRepeatedToolCalls = 0 });
 
-        await harness.RunAsync("回放测试负控");
+        await harness.RunExpectingFailureAsync("回放负控：失败但归类码被抹掉");
 
-        var runId = harness.Ledger.Values.First().ErrorCode is null ? 0L : 1L; // 简化：实际需要更复杂的设置
-        // 这里仅作占位：真正的负控需要手动篡改账本或构造特定场景
-        Assert.True(true, "负控：若 ErrorCode 丢失，回放无法区分失败类型");
+        // 正例：回放拿得到归类码。
+        var healthy = await harness.Harness.GetRunAsync(1);
+        Assert.NotNull(healthy);
+        Assert.Equal(AgentRunCode.Unhandled, healthy!.Code);
+
+        // 篡改账本：抹掉归类码 → 回放事实随之丢码，「必须带归类码」的断言于是必须红。
+        harness.Traces.Tamper(0, trace => trace with { ErrorCode = null });
+        var tampered = await harness.Harness.GetRunAsync(1);
+        Assert.NotNull(tampered);
+        Assert.Null(tampered!.Code);
+        Assert.ThrowsAny<Exception>(() => Assert.Equal(AgentRunCode.Unhandled, tampered.Code));
     }
 
     // ========== 6.4 失败路径 ErrorCode 非空 ==========
@@ -196,8 +205,23 @@ public sealed class LedgerInvariants
 
         results.AssertAllPassed("长文本：assistant 步截断到 400 字");
 
-        // 负控：不截断（若源码改为不截断） → 必须红
-        // 这里仅作占位：正例已验证截断逻辑
-        Assert.True(true, "正例验证截断；若源码移除截断，测试会因长度 > 400 而失败");
+        // 真实负控：同一判据喂「未截断」的 500 字步子 → 必须红。
+        // 也就是把「源码移除截断」这件事在内存里复现一次：判据确有区分度，而不是恒绿。
+        var untruncated = harness.Ledger.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value with
+            {
+                Steps = pair.Value.Steps
+                    .Select(step => step.Kind == "assistant" ? step with { Result = longText } : step)
+                    .ToList()
+            });
+
+        var negative = await harness.EvaluateAsync("domain6-assistant-truncated-negative",
+        [
+            LedgerChecks.AssistantStepWithin(untruncated, 400)
+        ]);
+
+        Assert.False(negative.AllPassed, "未截断的 500 字步子下，AssistantStepWithin(400) 必须失败");
+        Assert.ThrowsAny<Exception>(() => negative.AssertAllPassed("负控：未截断必须红"));
     }
 }

@@ -342,5 +342,14 @@ public sealed class AgentHarnessExecutionControlTests
 
         public Task<ExecutionTrace?> GetAsync(long runId, CancellationToken cancellationToken = default)
             => Task.FromResult(runId >= 1 && runId <= Saved.Count ? Saved[(int)runId - 1] : null);
+
+        public Task<IReadOnlyList<ExecutionTrace>> QueryAsync(
+            ExecutionTraceQuery query, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<ExecutionTrace>>(Saved
+                .Where(t => query.SessionId is null || t.SessionId == query.SessionId)
+                .Where(t => query.Status is null || t.Status == query.Status)
+                .Reverse()
+                .Take(query.Limit > 0 ? query.Limit : 50)
+                .ToList());
     }
 }

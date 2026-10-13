@@ -101,6 +101,10 @@ public sealed class AgentHarnessModelRuntimeTests
 
         public Task<ExecutionTrace?> GetAsync(long runId, CancellationToken cancellationToken = default)
             => Task.FromResult<ExecutionTrace?>(null);
+
+        public Task<IReadOnlyList<ExecutionTrace>> QueryAsync(
+            ExecutionTraceQuery query, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<ExecutionTrace>>([]);
     }
 
     private sealed class CountingChatClient(Func<CancellationToken, Task<ChatResponse>> handler) : IChatClient

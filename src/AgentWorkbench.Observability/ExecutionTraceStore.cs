@@ -3,6 +3,9 @@ namespace AgentWorkbench.Observability;
 /// <inheritdoc />
 public sealed class ExecutionTraceStore : IExecutionTraceStore
 {
+    /// <summary>未指定或非正数时的返回条数上限。</summary>
+    private const int DefaultLimit = 50;
+
     private readonly IAgentRunRepository _repository;
     private readonly ILogger<ExecutionTraceStore> _logger;
 
@@ -52,7 +55,29 @@ public sealed class ExecutionTraceStore : IExecutionTraceStore
             return null;
 
         var steps = await _repository.GetStepsAsync(runId);
-        return new ExecutionTrace(
+        return Map(run, steps);
+    }
+
+    public async Task<IReadOnlyList<ExecutionTrace>> QueryAsync(
+        ExecutionTraceQuery query, CancellationToken cancellationToken = default)
+    {
+        var limit = query.Limit > 0 ? query.Limit : DefaultLimit;
+        var runs = await _repository.QueryRunsAsync(query.SessionId, query.Status, limit);
+
+        var traces = new List<ExecutionTrace>(runs.Count);
+        foreach (var run in runs)
+        {
+            // 逐条补步骤：一次检索最多 Limit 条，属于排障 / 回放路径，不做批量联表优化。
+            var steps = await _repository.GetStepsAsync(run.Id);
+            traces.Add(Map(run, steps));
+        }
+
+        return traces;
+    }
+
+    /// <summary>运行行 + 步骤行 → 轨迹；<see cref="GetAsync"/> 与 <see cref="QueryAsync"/> 共用，避免两处映射漂移。</summary>
+    private static ExecutionTrace Map(AgentRunRecord run, IReadOnlyList<AgentStepRecord> steps)
+        => new(
             run.SessionId,
             run.Status,
             run.Iterations,
@@ -61,5 +86,4 @@ public sealed class ExecutionTraceStore : IExecutionTraceStore
             run.Error,
             run.ErrorCode,
             steps.Select(s => new ExecutionStep(s.Iteration, s.Kind, s.Tool, s.Arguments, s.Result, s.Error)).ToList());
-    }
 }
