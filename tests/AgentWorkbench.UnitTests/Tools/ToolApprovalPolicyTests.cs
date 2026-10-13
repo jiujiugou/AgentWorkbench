@@ -1,4 +1,4 @@
-using AgentWorkbench.Safety;
+using AgentWorkbench.ToolExecution;
 using Xunit;
 
 namespace AgentWorkbench.UnitTests.Tools;

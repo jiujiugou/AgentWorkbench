@@ -9,7 +9,6 @@ using AgentWorkbench.ModelRuntime;
 using AgentWorkbench.Observability;
 using AgentWorkbench.Persistence;
 using AgentWorkbench.Providers;
-using AgentWorkbench.Safety;
 using AgentWorkbench.ToolExecution;
 using AgentWorkbench.Workflow;
 using AgentWorkbench.Webapi.Hubs;
@@ -31,7 +30,6 @@ builder.Services.Configure<FormOptions>(options => options.MultipartBodyLengthLi
 
 // ── 模块注册（新增能力 = 新增一行 AddNitroXxx）──
 builder.Services.AddNitroPersistence(builder.Configuration, builder.Environment);
-builder.Services.AddNitroSafety(builder.Configuration);
 builder.Services.AddNitroProviders(builder.Configuration);
 builder.Services.AddNitroModelRuntime(builder.Configuration);
 builder.Services.AddNitroToolExecution(builder.Configuration);

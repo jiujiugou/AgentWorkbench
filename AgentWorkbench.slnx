@@ -11,7 +11,6 @@
     <Project Path="src/AgentWorkbench.ModelRuntime/AgentWorkbench.ModelRuntime.csproj" />
     <Project Path="src/AgentWorkbench.Conversation/AgentWorkbench.Conversation.csproj" />
     <Project Path="src/AgentWorkbench.ToolExecution/AgentWorkbench.ToolExecution.csproj" />
-    <Project Path="src/AgentWorkbench.Safety/AgentWorkbench.Safety.csproj" />
     <Project Path="src/AgentWorkbench.AgentLoop/AgentWorkbench.AgentLoop.csproj" />
     <Project Path="src/AgentWorkbench.Memory/AgentWorkbench.Memory.csproj" />
     <Project Path="src/AgentWorkbench.Memory.Persistence/AgentWorkbench.Memory.Persistence.csproj" />

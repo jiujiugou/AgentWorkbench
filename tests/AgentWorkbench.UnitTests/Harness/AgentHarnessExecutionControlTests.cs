@@ -5,7 +5,6 @@ using AgentWorkbench.Memory;
 using AgentWorkbench.ModelRuntime;
 using AgentWorkbench.Observability;
 using AgentWorkbench.Providers;
-using AgentWorkbench.Safety;
 using AgentWorkbench.Shared;
 using AgentWorkbench.ToolExecution;
 using AgentWorkbench.UnitTests.Conversation;

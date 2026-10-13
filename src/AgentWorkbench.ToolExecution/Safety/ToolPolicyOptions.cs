@@ -1,4 +1,4 @@
-namespace AgentWorkbench.Safety;
+namespace AgentWorkbench.ToolExecution;
 
 /// <summary>
 /// 工具授权配置：白名单内的工具才允许注册与调用（不在其中 = 模型看不到、也调不动）。

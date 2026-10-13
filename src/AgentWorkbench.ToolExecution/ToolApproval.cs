@@ -34,10 +34,10 @@ public interface IToolApprover
 /// </summary>
 public static class ToolApprovalCodes
 {
-    /// <summary>策略直接拒绝（<see cref="AgentWorkbench.Safety.ToolApprovalMode.Deny"/>）。</summary>
+    /// <summary>策略直接拒绝（<see cref="ToolApprovalMode.Deny"/>）。</summary>
     public const string PolicyDenied = "approval_policy_denied";
 
-    /// <summary>人工明确拒绝（<see cref="AgentWorkbench.Safety.ToolApprovalMode.Ask"/> 且应答为否）。</summary>
+    /// <summary>人工明确拒绝（<see cref="ToolApprovalMode.Ask"/> 且应答为否）。</summary>
     public const string UserDenied = "approval_user_denied";
 
     /// <summary>无法取得批准：超时 / 未提供审批者 / 审批通道故障 —— 一律 fail-closed。</summary>

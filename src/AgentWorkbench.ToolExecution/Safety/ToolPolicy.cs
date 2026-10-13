@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Options;
 
-namespace AgentWorkbench.Safety;
+namespace AgentWorkbench.ToolExecution;
 
 /// <summary>工具授权策略：决定某个工具名是否被允许。</summary>
 public interface IToolPolicy

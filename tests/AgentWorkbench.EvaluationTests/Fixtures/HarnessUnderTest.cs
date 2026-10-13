@@ -6,7 +6,6 @@ using AgentWorkbench.Memory;
 using AgentWorkbench.ModelRuntime;
 using AgentWorkbench.Observability;
 using AgentWorkbench.Providers;
-using AgentWorkbench.Safety;
 using AgentWorkbench.ToolExecution;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;

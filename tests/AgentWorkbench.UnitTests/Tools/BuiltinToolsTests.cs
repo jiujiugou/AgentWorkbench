@@ -2,7 +2,7 @@ using AgentWorkbench.Documents.Tools;
 using AgentWorkbench.Knowledge.Local.Tools;
 using AgentWorkbench.Memory;
 using AgentWorkbench.Memory.Persistence.Tools;
-using AgentWorkbench.Safety;
+using AgentWorkbench.ToolExecution;
 using AgentWorkbench.ToolExecution.Builtin;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;

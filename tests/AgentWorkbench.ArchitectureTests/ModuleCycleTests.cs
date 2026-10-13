@@ -32,7 +32,6 @@ public class ModuleCycleTests
             "ModelRuntime",
             "Conversation",
             "ToolExecution",
-            "Safety",
             "AgentLoop",
             "Memory",
             "Observability",

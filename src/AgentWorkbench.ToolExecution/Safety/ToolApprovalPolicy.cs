@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Options;
 
-namespace AgentWorkbench.Safety;
+namespace AgentWorkbench.ToolExecution;
 
 /// <summary>工具审批级别：某个可见的工具，执行前要不要先问人。</summary>
 public enum ToolApprovalMode

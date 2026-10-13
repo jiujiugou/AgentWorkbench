@@ -1,7 +1,6 @@
 using AgentWorkbench.AgentHarness;
 using AgentWorkbench.AgentLoop;
 using AgentWorkbench.EvaluationTests.Fixtures;
-using AgentWorkbench.Safety;
 using AgentWorkbench.Shared;
 using AgentWorkbench.ToolExecution;
 using Microsoft.Extensions.AI;

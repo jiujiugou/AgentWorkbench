@@ -32,7 +32,6 @@
     <ProjectReference Include="..\..\src\AgentWorkbench.Conversation\AgentWorkbench.Conversation.csproj" />
     <ProjectReference Include="..\..\src\AgentWorkbench.ModelRuntime\AgentWorkbench.ModelRuntime.csproj" />
     <ProjectReference Include="..\..\src\AgentWorkbench.ToolExecution\AgentWorkbench.ToolExecution.csproj" />
-    <ProjectReference Include="..\..\src\AgentWorkbench.Safety\AgentWorkbench.Safety.csproj" />
     <ProjectReference Include="..\..\src\AgentWorkbench.AgentLoop\AgentWorkbench.AgentLoop.csproj" />
     <ProjectReference Include="..\..\src\AgentWorkbench.Providers\AgentWorkbench.Providers.csproj" />
     <ProjectReference Include="..\..\src\AgentWorkbench.AgentHarness\AgentWorkbench.AgentHarness.csproj" />

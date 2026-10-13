@@ -19,10 +19,11 @@ public class ArchitectureBudgets
     private static readonly string RepoRoot = FindRepoRoot();
 
     // ── 预算值（2026-10-13 首轮冻结 20 / 300 / 15 / 15；当日拆 UseKnowledge 暗路后 Harness 依赖 15 → 13，随即收紧）──
-    private const int MaxSrcProjects = 19;
+    // 阶段 4 砍伐：删 Context（项目 20→19）、并 Safety 进 ToolExecution（19→18），Program 注册 15→13。
+    private const int MaxSrcProjects = 18;
     private const int MaxAgentLoopLoc = 300;
     private const int MaxHarnessCtorParams = 13;
-    private const int MaxProgramRegistrations = 15;
+    private const int MaxProgramRegistrations = 13;
 
     /// <summary>轨迹回放入口的源码标记：评测必须有一条用例消费它（阶段 3：轨迹不得退回「只写不读」）。</summary>
     private const string ReplayConsumptionMarker = "GetRunAsync(";
