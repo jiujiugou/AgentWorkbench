@@ -19,8 +19,10 @@ public class ArchitectureBudgets
     private static readonly string RepoRoot = FindRepoRoot();
 
     // ── 预算值（2026-10-13 首轮冻结 20 / 300 / 15 / 15；当日拆 UseKnowledge 暗路后 Harness 依赖 15 → 13，随即收紧）──
-    // 阶段 4 砍伐：删 Context（项目 20→19）、并 Safety 进 ToolExecution（19→18），Program 注册 15→13。
-    private const int MaxSrcProjects = 18;
+    // 阶段 4 砍伐：删 Context（20→19）、并 Safety 进 ToolExecution（19→18）、并 Knowledge 注册进 Knowledge.Local（18→17）。
+    //              Program 注册 15→13；新增 src 总行数棘轮（砍伐成果只减不增）。
+    private const int MaxSrcProjects = 17;
+    private const int MaxSrcLoc = 10000;
     private const int MaxAgentLoopLoc = 300;
     private const int MaxHarnessCtorParams = 13;
     private const int MaxProgramRegistrations = 13;
@@ -40,6 +42,18 @@ public class ArchitectureBudgets
         Assert.True(
             projects <= MaxSrcProjects,
             $"src 项目数 {projects} 超预算 {MaxSrcProjects}。新能力应以「工具」进入 AgentLoop 已有的函数调用环，不准新开 src 项目；");
+    }
+
+    [Fact]
+    public void Src_total_loc_should_not_exceed_budget()
+    {
+        var srcRoot = Path.Combine(RepoRoot, "src");
+        var loc = Directory.GetDirectories(srcRoot).Sum(CountLoc);
+
+        Assert.True(
+            loc <= MaxSrcLoc,
+            $"src 总行数 {loc} 超预算 {MaxSrcLoc}（阶段 4 砍伐后的棘轮）。"
+            + "想加代码又不想超：先把等量的东西删掉，或把能力做成工具而不是新模块；");
     }
 
     [Fact]

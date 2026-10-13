@@ -35,14 +35,13 @@ public interface IWorkflowService
 /// <inheritdoc />
 public sealed class WorkflowService : IWorkflowService
 {
-    public const string DefaultWorkflowKey = "document_analysis";
-
     private readonly IWorkflowRepository _repository;
     private readonly IDocumentRepository _documents;
     private readonly WorkflowStepRegistry _steps;
     private readonly IPromptStore _prompts;
     private readonly IWorkflowRunQueue _queue;
     private readonly WorkflowGraphBuilder _graphs;
+    private readonly WorkflowOptions _options;
     private readonly ILogger<WorkflowService> _logger;
 
     private readonly ConcurrentDictionary<long, CancellationTokenSource> _cancellations = new();
@@ -54,6 +53,7 @@ public sealed class WorkflowService : IWorkflowService
         IPromptStore prompts,
         IWorkflowRunQueue queue,
         WorkflowGraphBuilder graphs,
+        IOptions<WorkflowOptions> options,
         ILogger<WorkflowService> logger)
     {
         _repository = repository;
@@ -62,6 +62,7 @@ public sealed class WorkflowService : IWorkflowService
         _prompts = prompts;
         _queue = queue;
         _graphs = graphs;
+        _options = options.Value;
         _logger = logger;
     }
 
@@ -78,7 +79,7 @@ public sealed class WorkflowService : IWorkflowService
         if (!string.Equals(document.Status, DocumentStatus.Parsed, StringComparison.Ordinal))
             throw new WorkflowDocumentNotReadyException(documentId, document.Status);
 
-        var key = string.IsNullOrWhiteSpace(workflowKey) ? DefaultWorkflowKey : workflowKey!;
+        var key = string.IsNullOrWhiteSpace(workflowKey) ? _options.DefaultWorkflowKey : workflowKey!;
         var definition = await LoadDefinitionAsync(key)
             ?? throw new WorkflowDefinitionNotFoundException(key);
 

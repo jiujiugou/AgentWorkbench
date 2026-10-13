@@ -10,6 +10,9 @@ public static class WorkflowServiceCollectionExtensions
     public static IServiceCollection AddNitroWorkflow(
         this IServiceCollection services, IConfiguration configuration)
     {
+        // 提示词是配置项（配置节 Workflow），不是代码常量。
+        services.AddOptions<WorkflowOptions>().Bind(configuration.GetSection(WorkflowOptions.SectionName));
+
         services.AddSingleton<IWorkflowStepExecutor, AgentStepExecutor>();
         services.AddSingleton<IWorkflowStepExecutor, ReportStepExecutor>();
         services.AddSingleton<WorkflowStepRegistry>();
