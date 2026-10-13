@@ -47,14 +47,30 @@ public sealed class ToolExecutionRun
     /// <summary>工具实际抛出的异常实例（用于把冒泡到编排层的异常归类成「工具异常」）。</summary>
     public IReadOnlyList<Exception> ToolFailures => _toolFailures;
 
+    /// <summary>
+    /// 工具调用完成时触发（成功 / 失败 / 被守卫终止都触发），在函数调用环内同步抛出——
+    /// 订阅方只应做非阻塞写入（如 Channel.TryWrite），否则会拖住模型循环。
+    /// </summary>
+    /// <remarks>
+    /// 事件里的 <see cref="ToolCallTrace.Result"/> 是<b>未截断</b>的完整结果（供流式出口做实时桥接，
+    /// 如知识库来源面板）；轨迹 <see cref="Traces"/> 内仍是截断版（<see cref="ToolExecutionOptions.MaxResultChars"/>，
+    /// 回放 / 判分用）——两者刻意不同：大结果不该进账本，但要能到界面。
+    /// </remarks>
+    public event Action<ToolCallTrace>? ToolCompleted;
+
     internal int BeginCall(ToolCallTrace trace)
     {
         _traces.Add(trace);
         return _traces.Count - 1;
     }
 
-    internal void CompleteCall(int index, string? result, string? error = null)
-        => _traces[index] = _traces[index] with { Result = result, Error = error };
+    internal void CompleteCall(int index, string? result, string? error = null, string? fullResult = null)
+    {
+        var completed = _traces[index] with { Result = result, Error = error };
+        _traces[index] = completed;
+        // 事件payload 用完整结果；轨迹本体保持截断语义不变。
+        ToolCompleted?.Invoke(completed with { Result = fullResult ?? result });
+    }
 
     internal void StopAt(AgentRunStop stop) => Stop = stop;
 
@@ -114,7 +130,9 @@ public sealed class ToolExecutionPipeline : IToolExecutionPipeline
             try
             {
                 var result = await context.Function.InvokeAsync(context.Arguments, token);
-                run.CompleteCall(index, Truncate(result?.ToString()));
+                var text = result?.ToString();
+                // 轨迹存截断版（省账本），事件带完整版（来源面板要用）。
+                run.CompleteCall(index, Truncate(text), fullResult: text);
                 return result;
             }
             catch (Exception ex)

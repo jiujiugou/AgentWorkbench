@@ -22,15 +22,25 @@
 
 ### 问答怎么做
 
-- `RagService.StreamAnswerAsync`：检索 → 拼「只能依据资料回答 + 强制标注 `[编号]` 出处」的系统提示词 →
-  经 `IChatService` 流式生成。
-- **无命中或最高融合分低于 `MinFusedScore` 直接拒答**（回一句「资料不足以回答该问题。」），不硬编。
+两条路径，**聊天场景走工具、REST 场景走 `RagService`**：
+
+- **工具路径（聊天 / 知识问答的主路径）**：模型主动调 `search_knowledge` → 拿到结构化命中 JSON →
+  依据资料作答并在正文里标出处。约束（先检索、只依据资料、必须标出处、资料不足就如实说）由
+  `KnowledgeInstructions.AnswerWithCitations` 作为 run 级系统指令注入。好处是**每次检索都在执行轨迹里留名**，
+  可回放、可判分；代价是「资料不足就拒答」从服务端硬保证前移为指令约束（由模型自行判断）。
+- `RagService.StreamAnswerAsync`（REST 端点 `/api/knowledge/*` 用）：检索 → 拼「只能依据资料回答 +
+  强制标注 `[编号]` 出处」的系统提示词 → 经 `IChatService` 流式生成。
+  **无命中或最高融合分低于 `MinFusedScore` 直接拒答**（回一句「资料不足以回答该问题。」），不硬编。
 - 历史轮次由调用方传入并原样透传 —— 本模块不裁剪、不压缩。
 
 ### 对外暴露
 
 - 只读工具 `search_knowledge`：**放在本模块内**，避免工具平台（`ToolExecution`）反向依赖知识库；
   引擎经 `IServiceProvider` 惰性解析，绕开 DI 环。
+  返回**结构化 JSON 数组**（字段同 `RetrievalHit`：`fileName` / `seq` / `heading` / `pageFrom` /
+  `pageTo` / `content` / 各路分数），无命中返回空数组。同一份 JSON 两个消费者：模型据此作答，
+  界面 `AgentHub` 解析后当来源面板数据（`ReceiveSources`）。
+- `KnowledgeInstructions`：知识问答的系统指令常量（引用规范 + 资料不足时的口径）。
 - `KnowledgeEngineRegistry`：按配置解析引擎；未实现的引擎（anythingllm / ragflow 等）降级为不可用 stub，
   能力位（`Capabilities`）告诉前端按钮该不该亮。
 - 向量化两实现：Ollama（`bge-m3`，默认）与 OpenAI 兼容 `/embeddings`（回退），
@@ -40,8 +50,9 @@
 
 | 接口 | 成员 | 实现 | 消费者 |
 | --- | --- | --- | --- |
-| `IRagService` | `RetrieveAsync`、`StreamAnswerAsync` | `RagService` | Webapi `AgentHub`（`Ask`）、`KnowledgeController` |
-| `IKnowledgeEngine` | 能力位、状态、索引、检索、问答 | `LocalKnowledgeEngine` | `AgentHarness`、Workflow `AgentStepExecutor` |
+| `IRagService` | `RetrieveAsync`、`StreamAnswerAsync` | `RagService` | `LocalKnowledgeEngine`（检索）、Webapi `KnowledgeController`（REST 流式问答） |
+| `IKnowledgeEngine` | 能力位、状态、索引、检索、问答 | `LocalKnowledgeEngine` | `search_knowledge` 工具、Workflow `AgentStepExecutor` |
+| `IAgentToolProvider` | `search_knowledge` | `SearchKnowledgeTool` | `AgentHarness`（经 `IToolCatalog` 白名单裁剪） |
 | `IEmbeddingProvider` | `EmbedAsync` | Ollama / OpenAI 兼容 | `ChunkIndexer`、`HybridRetriever` |
 | `IReranker` | `RerankAsync` | `NullReranker`（占位） | `HybridRetriever` |
 

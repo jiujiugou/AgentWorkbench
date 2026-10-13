@@ -142,18 +142,22 @@ internal sealed class HarnessUnderTest
     /// 多台机器可挂同一个 <see cref="UsageMeter"/>，用于复现并发用量串扰。</param>
     /// <param name="sessions">会话存储探针；传入后可断言「取消时会话仍写回」（不变量 3.7）。</param>
     /// <param name="traceStoreShouldFail">置真后账本写入一律抛，模拟仓储故障（不变量 3.10 / 6.6）。</param>
+    /// <param name="extraTools">追加到目录里的额外工具（如 <see cref="LongResultTool"/>）；默认只有故障注入工具。</param>
     public static HarnessUnderTest Create(
         Func<int, ChatResponse> script,
         AgentLoopOptions loopOptions,
         IModelRuntime? runtime = null,
         RecordingSessionStore? sessions = null,
-        bool traceStoreShouldFail = false)
+        bool traceStoreShouldFail = false,
+        IReadOnlyList<AITool>? extraTools = null)
     {
         var client = new ScriptedChatClient(script);
         var tool = new FaultInjectorTool();
         var traces = new RecordingTraceStore { FailSaves = traceStoreShouldFail };
-        var harness = Build(client, runtime ?? new PassthroughModelRuntime(), [.. tool.GetTools()],
-            traces, loopOptions, sessions);
+        var tools = new List<AITool>(tool.GetTools());
+        if (extraTools is not null)
+            tools.AddRange(extraTools);
+        var harness = Build(client, runtime ?? new PassthroughModelRuntime(), tools, traces, loopOptions, sessions);
         var agent = new HarnessAgent(harness);
         return new HarnessUnderTest(harness, agent, client, tool, traces, sessions);
     }

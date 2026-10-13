@@ -91,3 +91,23 @@ internal sealed class FakeToolCatalog(IReadOnlyList<AITool> tools) : IToolCatalo
 
     public IReadOnlyList<string> GetToolNames() => tools.Select(tool => tool.Name).ToList();
 }
+
+/// <summary>
+/// 返回固定超长文本的工具：验证「工具事件带完整结果、轨迹存截断版」这对<b>刻意不同</b>的语义
+/// （大结果不该进账本，但界面来源面板需要完整内容）。长度固定，断言可直接对数字。
+/// </summary>
+internal sealed class LongResultTool : IAgentToolProvider
+{
+    public const string ToolName = "long_result";
+
+    /// <summary>返回的字符数；刻意大于 <c>ToolExecutionOptions.MaxResultChars</c>（默认 400）。</summary>
+    public const int ResultChars = 1000;
+
+    public IReadOnlyList<AITool> GetTools() =>
+    [
+        AIFunctionFactory.Create(
+            () => new string('x', ResultChars),
+            ToolName,
+            "返回固定长度（1000 字符）的长文本，用于验证结果截断语义（评测夹具）。")
+    ];
+}

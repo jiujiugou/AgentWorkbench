@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using AgentWorkbench.ModelRuntime;
 using Microsoft.Extensions.AI;
 
@@ -8,27 +9,71 @@ namespace AgentWorkbench.EvaluationTests.Fixtures;
 /// 用来驱动真实的函数调用环（FunctionInvokingChatClient），而不是绕过它。
 /// 与 UnitTests 的同名替身同形；这里是评测项目的自有副本（测试项目不互相引用）。
 /// </summary>
+/// <remarks>
+/// 同一个脚本同时供非流式与流式两条出口使用：流式把文本按 <see cref="ChunkChars"/> 切片成多个更新
+/// （工具调用整块透传）——这样「增量累积」这条逻辑才会被真的测到，而不是收到一整段。
+/// </remarks>
 internal sealed class ScriptedChatClient(Func<int, ChatResponse> respond) : IChatClient
 {
+    /// <summary>流式文本切片长度：切得越小，流式路径的增量序列越接近真实 token 流。</summary>
+    private const int ChunkChars = 4;
+
     /// <summary>已发生的模型请求次数（序号从 1 起）。</summary>
     public int Calls { get; private set; }
+
+    /// <summary>每次模型请求实际收到的消息（按请求顺序）；用来断言「指令确实到了模型」，而不只是「调用了模型」。</summary>
+    public List<IReadOnlyList<ChatMessage>> Requests { get; } = [];
 
     public Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages, ChatOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        Calls++;
-        return Task.FromResult(respond(Calls));
+        Requests.Add(messages as IReadOnlyList<ChatMessage> ?? messages.ToList());
+        return Task.FromResult(Respond());
     }
 
-    public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+    public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> messages, ChatOptions? options = null,
-        CancellationToken cancellationToken = default)
-        => throw new NotSupportedException("评测只走非流式路径");
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        // 请求序号与节流在两条出口上完全一致：流式不该因为「分片」而多算一次模型请求。
+        var response = Respond();
+        Requests.Add(messages as IReadOnlyList<ChatMessage> ?? messages.ToList());
+        foreach (var update in Split(response))
+            yield return update;
+
+        await Task.CompletedTask;
+    }
 
     public object? GetService(Type serviceType, object? serviceKey = null) => null;
 
     public void Dispose() { }
+
+    private ChatResponse Respond()
+    {
+        Calls++;
+        return respond(Calls);
+    }
+
+    /// <summary>把一整条响应拆成流式更新：文本切片，其余内容（函数调用等）整块透传。</summary>
+    private static IEnumerable<ChatResponseUpdate> Split(ChatResponse response)
+    {
+        foreach (var message in response.Messages)
+        {
+            foreach (var content in message.Contents)
+            {
+                if (content is TextContent { Text.Length: > 0 } text)
+                {
+                    for (var offset = 0; offset < text.Text.Length; offset += ChunkChars)
+                        yield return new ChatResponseUpdate(message.Role,
+                            [new TextContent(text.Text.Substring(offset, Math.Min(ChunkChars, text.Text.Length - offset)))]);
+                    continue;
+                }
+
+                yield return new ChatResponseUpdate(message.Role, [content]);
+            }
+        }
+    }
 }
 
 /// <summary>构造脚本化响应的辅助方法。</summary>

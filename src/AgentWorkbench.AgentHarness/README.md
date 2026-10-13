@@ -56,7 +56,34 @@ ResolveAsync(端点)                                   Providers
 
 | 接口 | 成员 | 实现 | 消费者 |
 | --- | --- | --- | --- |
-| `IAgentHarness` | `GetCapabilitiesAsync`、`RunAsync`、`GetRunAsync` | `AgentHarnessService` | Webapi `HarnessController`、Workflow `AgentStepExecutor` |
+| `IAgentHarness` | `GetCapabilitiesAsync`、`RunAsync`、`StreamAsync`、`GetRunAsync` | `AgentHarnessService` | Webapi `HarnessController`、Webapi `AgentHub`（对话/知识问答两条入口）、Workflow `AgentStepExecutor` |
+
+### 两条出口，一处收尾
+
+`RunAsync`（等最终结果）与 `StreamAsync`（实时事件流）是**同一 run 的两种产出形态**：
+两者共用 `PrepareRunAsync`（解析模型 → 装配工具环与守卫 → 建 Agent → 取/建会话）与
+`FinishSucceededAsync`（分类提前终止 → 组装步骤 → 落轨迹），因此**同一 loop、同一守卫、同一账本**。
+流式侧额外把工具完成事件从执行环里桥接出来，事件流以唯一终态收尾：
+
+| 事件 | 何时产出 | 载荷 |
+| --- | --- | --- |
+| `TextDelta` | 模型每次吐出文本增量 | 增量文本 |
+| `ToolCompleted` | 一次工具调用结束（成功 / 失败 / 被守卫终止都算） | 工具轨迹，**结果未截断**（账本里仍是截断版） |
+| `Completed` | 正常收尾（含跑满迭代等提前终止） | 完整 `HarnessRunResult`（带 `RunId`） |
+| `Failed` | 失败 / 取消 / 超时 | 面向用户的错误描述 |
+
+生产侧吞掉全部异常并转成 `Failed`，消费者侧永不因生产侧故障而中断读取；
+消费者提前退出（`break` / 取消）时仍会等生产侧收尾——落轨迹与写回会话不能被跳过。
+
+指令（人格 / 引用规范）走 `RunInstructionsChatClient` —— 一个装饰在**工具环外面**的模型客户端，
+转发前只往消息前插一条 `system`。两条硬约束：
+
+- **不能用 MEA 的 `AIContextProviders`**。只在 Agent 上挂 provider，MEA 会在我们自己装配的
+  `FunctionInvokingChatClient` **外面**再包一层函数调用环，于是 `ToolExecutionPipeline` 的守卫与
+  轨迹采集全被绕过：实测症状是连续同参调用不再判 `loop_detected`、工具异常不再归类 `tool_error`，
+  全部退化成 `succeeded`。回归闸在 `tests/AgentWorkbench.EvaluationTests/HarnessInstructions/`。
+- 指令进的是**模型请求**而不是 `run.Messages`：会话历史由 `ChatHistoryProvider` 按输入消息记录，
+  装饰器在它下游，所以指令不会随每轮对话在历史里累积。
 
 ---
 
@@ -103,6 +130,13 @@ ResolveAsync(端点)                                   Providers
 - 工具连续失败到上限 → `failed` + `tool_error`，每一步带失败原因；**负控**：只改一个故障旋钮，结果跟着变。
 - 失败 / 取消 / 超时路径都调用了 `SaveAsync`，且状态与归类码正确。
 - run 级超时与单次请求超时被归类成不同的码。
+
+流式出口（`tests/AgentWorkbench.EvaluationTests/HarnessStreaming/`）：
+
+- 增量分片拼接等于完整答复；工具完成事件带工具名与迭代号；终态唯一且在末尾、带 `RunId`。
+- **同源对齐**：同一脚本走两条出口，账本的终态 / 迭代数 / 工具序列 / 工具调用次数必须逐项相同。
+- **刻意的不对称**：工具事件带完整结果，账本存截断结果——断言同时锁两侧，改单边即红。
+- **负控**：模型侧崩溃时事件流里不允许出现 `Completed`（伪造终态）；判据自身也有负控（缺终态 / 终态不在末尾 / 终态重复三种坏形状都必须抛）。
 
 还没有的：真·跨进程重启会话延续（验收脚本未落地；`Memory` 侧已有进程内等价用例）、恢复后不重复副作用（P2-2）、按状态分流的消费口径。
 

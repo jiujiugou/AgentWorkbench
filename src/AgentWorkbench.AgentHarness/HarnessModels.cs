@@ -11,7 +11,13 @@ public sealed record HarnessCapabilities(bool Loop, bool Llm, bool Context, bool
 /// <summary>一次 Harness run 请求。</summary>
 /// <param name="SessionId">会话标识；为空时本次调用使用随机会话（无跨 run 记忆）。</param>
 /// <param name="Input">用户输入原文。知识检索不再由 harness 暗做——模型需要依据时调 <c>search_knowledge</c> 工具，轨迹留名。</param>
-public sealed record HarnessRunRequest(string? SessionId, string Input);
+/// <param name="Instructions">
+/// 本次 run 的系统指令（人格 / 约束，如知识问答的引用规范）。经 <c>RunInstructionsChatClient</c>
+/// 装饰在工具环外面注入：只往模型请求前插一条 system 消息，不写进会话历史
+/// （否则同一指令会随每轮对话重复累积）。<b>不要改用 Agent 的 AIContextProviders</b>——
+/// 那会让 MEA 在我们装配的函数调用环外再包一层，绕过守卫与轨迹采集。
+/// </param>
+public sealed record HarnessRunRequest(string? SessionId, string Input, string? Instructions = null);
 
 /// <summary>单步轨迹（loop 内的一次工具调用或最终答复）。</summary>
 /// <param name="Iteration">所在迭代轮次，从 0 起。</param>

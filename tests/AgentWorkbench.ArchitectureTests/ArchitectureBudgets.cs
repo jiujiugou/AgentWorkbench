@@ -18,10 +18,10 @@ public class ArchitectureBudgets
 {
     private static readonly string RepoRoot = FindRepoRoot();
 
-    // ── 预算值（冻结于 2026-10-13 实测：src 20 项目 / AgentLoop 222 行 / Harness 15 依赖 / Program.cs 15 行注册）──
+    // ── 预算值（2026-10-13 首轮冻结 20 / 300 / 15 / 15；当日拆 UseKnowledge 暗路后 Harness 依赖 15 → 13，随即收紧）──
     private const int MaxSrcProjects = 20;
     private const int MaxAgentLoopLoc = 300;
-    private const int MaxHarnessCtorParams = 15;
+    private const int MaxHarnessCtorParams = 13;
     private const int MaxProgramRegistrations = 15;
 
     [Fact]

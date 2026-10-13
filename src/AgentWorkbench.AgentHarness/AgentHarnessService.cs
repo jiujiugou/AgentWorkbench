@@ -1,4 +1,8 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using System.Text;
+using System.Threading.Channels;
+using AgentWorkbench.ToolExecution;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -18,6 +22,13 @@ public interface IAgentHarness
     /// 无论成功、失败、取消还是超时，都会留下一条执行轨迹后再向上抛出（取消/失败等）。
     /// </summary>
     Task<HarnessRunResult> RunAsync(HarnessRunRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 流式执行一次 Agent run：与 <see cref="RunAsync"/> 同一 loop、同一 guard、同一轨迹落库、同一会话写回，
+    /// 差别只在产出形态——文本增量与工具完成事件实时推送（供 SignalR 等实时通道桥接），
+    /// 终态只有一个 <see cref="HarnessStreamEventKind.Completed"/> 或 <see cref="HarnessStreamEventKind.Failed"/> 事件。
+    /// </summary>
+    IAsyncEnumerable<HarnessStreamEvent> StreamAsync(HarnessRunRequest request, CancellationToken cancellationToken = default);
 
     /// <summary>按 runId 回放历史轨迹；未找到返回 <c>null</c>。</summary>
     Task<HarnessRunResult?> GetRunAsync(long runId, CancellationToken cancellationToken = default);
@@ -93,16 +104,200 @@ public sealed class AgentHarnessService : IAgentHarness
     /// <inheritdoc />
     public async Task<HarnessRunResult> RunAsync(HarnessRunRequest request, CancellationToken cancellationToken = default)
     {
-        // 缺省 sessionId 时随机生成，保证「无状态调用」也能各 run 隔离；显式传入则复用同一会话。
-        var sessionId = string.IsNullOrWhiteSpace(request.SessionId)
-            ? Guid.NewGuid().ToString("N")
-            : request.SessionId!;
+        var sessionId = ResolveSessionId(request.SessionId);
+        using var memoryScope = _memoryScope.Begin(MemoryScope.Session(sessionId));
+        var run = await PrepareRunAsync(request, sessionId, cancellationToken);
+
+        try
+        {
+            // 执行控制：run 级超时由 AgentLoop 施加（超时抛 AgentRunTimeoutException）
+            var response = await _loop.ExecuteAsync(
+                async token => await run.Agent.RunAsync(
+                    run.Messages, run.Session,
+                    new ChatClientAgentRunOptions(new ChatOptions { Temperature = Temperature }),
+                    token),
+                cancellationToken);
+
+            return await FinishSucceededAsync(run, response.Text ?? string.Empty, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // 调用方取消不是失败：它是「按用户意愿停下」，必须与 failed 分开，否则前端会把它当成故障上报。
+            run.Stopwatch.Stop();
+            await PersistQuietlyAsync(
+                run.SessionId, AgentRunStatus.Cancelled, AgentRunCode.Cancelled, "调用方取消", run.Endpoint.Model,
+                run.Stopwatch.ElapsedMilliseconds, run.Execution.Traces);
+            throw;
+        }
+        catch (AgentRunTimeoutException ex)
+        {
+            // run 级墙钟预算（AgentLoop 施加）先于单次请求超时被识别，两者归类码不同。
+            run.Stopwatch.Stop();
+            await PersistQuietlyAsync(
+                run.SessionId, AgentRunStatus.Timeout, AgentRunCode.RunTimeout, ex.Message, run.Endpoint.Model,
+                run.Stopwatch.ElapsedMilliseconds, run.Execution.Traces);
+            throw;
+        }
+        catch (TimeoutException ex)
+        {
+            run.Stopwatch.Stop();
+            await PersistQuietlyAsync(
+                run.SessionId, AgentRunStatus.Timeout, AgentRunCode.ModelTimeout, ex.Message, run.Endpoint.Model,
+                run.Stopwatch.ElapsedMilliseconds, run.Execution.Traces);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            run.Stopwatch.Stop();
+            await PersistQuietlyAsync(
+                run.SessionId, AgentRunStatus.Failed, ClassifyFailure(ex, run.Execution), ex.Message, run.Endpoint.Model,
+                run.Stopwatch.ElapsedMilliseconds, run.Execution.Traces);
+            throw;
+        }
+        finally
+        {
+            // 会话写回：成功 / 失败 / 取消 / 超时都要落，否则重启后只有成功那轮记得住。
+            if (_memoryOptions.Value.SessionEnabled)
+                await SaveSessionQuietlyAsync(run.SessionId, run.SessionFactory, run.Session);
+        }
+    }
+
+    /// <inheritdoc />
+    public async IAsyncEnumerable<HarnessStreamEvent> StreamAsync(
+        HarnessRunRequest request,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var sessionId = ResolveSessionId(request.SessionId);
+        using var memoryScope = _memoryScope.Begin(MemoryScope.Session(sessionId));
+        var run = await PrepareRunAsync(request, sessionId, cancellationToken);
+
+        // 工具完成 → 事件：管道在函数调用环内同步触发，这里只做非阻塞写入，不拖住模型循环。
+        var channel = Channel.CreateUnbounded<HarnessStreamEvent>(new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = false
+        });
+        void OnToolCompleted(ToolCallTrace trace)
+            => channel.Writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.ToolCompleted, Tool: trace));
+        run.Execution.ToolCompleted += OnToolCompleted;
+
+        // 生产者单独跑：它吞掉全部异常并转成 Failed 事件 + 完成通道，消费者侧永不因生产侧故障而中断读取。
+        var producer = StreamRunAsync(channel.Writer, run, cancellationToken);
+        try
+        {
+            await foreach (var evt in channel.Reader.ReadAllAsync(cancellationToken))
+                yield return evt;
+        }
+        finally
+        {
+            run.Execution.ToolCompleted -= OnToolCompleted;
+            // 消费者提前退出（调用方 break / 取消）时也要等生产者收尾——它负责落轨迹与写回会话。
+            await producer;
+        }
+    }
+
+    /// <summary>
+    /// 流式 run 的生产者：跑模型循环、把文本增量与工具完成事件写进通道，收尾落轨迹 + 写回会话。
+    /// 结构与 <see cref="RunAsync"/> 一一对应（同一 loop / guard / trace），异常全部转成 <see cref="HarnessStreamEventKind.Failed"/>。
+    /// </summary>
+    private async Task StreamRunAsync(
+        ChannelWriter<HarnessStreamEvent> writer, PreparedRun run, CancellationToken cancellationToken)
+    {
+        var answer = new StringBuilder();
+        try
+        {
+            // run 级超时同样施加：把整段流式 drain 包进 AgentLoop 的墙钟预算（超时抛 AgentRunTimeoutException）。
+            // drain 的返回值即累积全文，随后交给 FinishSucceededAsync 落轨迹——两条出口的收尾完全同路。
+            var streamed = await _loop.ExecuteAsync(
+                async token =>
+                {
+                    await foreach (var update in run.Agent.RunStreamingAsync(
+                        run.Messages, run.Session,
+                        new ChatClientAgentRunOptions(new ChatOptions { Temperature = Temperature }),
+                        token))
+                    {
+                        if (string.IsNullOrEmpty(update.Text))
+                            continue;
+                        answer.Append(update.Text);
+                        writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.TextDelta, Text: update.Text));
+                    }
+
+                    return answer.ToString();
+                },
+                cancellationToken);
+
+            run.Stopwatch.Stop();
+            var result = await FinishSucceededAsync(run, streamed, cancellationToken);
+            writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.Completed, Result: result));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            run.Stopwatch.Stop();
+            await PersistQuietlyAsync(
+                run.SessionId, AgentRunStatus.Cancelled, AgentRunCode.Cancelled, "调用方取消", run.Endpoint.Model,
+                run.Stopwatch.ElapsedMilliseconds, run.Execution.Traces);
+            writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.Failed, Error: "已停止生成。"));
+        }
+        catch (AgentRunTimeoutException ex)
+        {
+            run.Stopwatch.Stop();
+            await PersistQuietlyAsync(
+                run.SessionId, AgentRunStatus.Timeout, AgentRunCode.RunTimeout, ex.Message, run.Endpoint.Model,
+                run.Stopwatch.ElapsedMilliseconds, run.Execution.Traces);
+            writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.Failed, Error: ex.Message));
+        }
+        catch (TimeoutException ex)
+        {
+            run.Stopwatch.Stop();
+            await PersistQuietlyAsync(
+                run.SessionId, AgentRunStatus.Timeout, AgentRunCode.ModelTimeout, ex.Message, run.Endpoint.Model,
+                run.Stopwatch.ElapsedMilliseconds, run.Execution.Traces);
+            writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.Failed, Error: ex.Message));
+        }
+        catch (Exception ex)
+        {
+            run.Stopwatch.Stop();
+            await PersistQuietlyAsync(
+                run.SessionId, AgentRunStatus.Failed, ClassifyFailure(ex, run.Execution), ex.Message, run.Endpoint.Model,
+                run.Stopwatch.ElapsedMilliseconds, run.Execution.Traces);
+            writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.Failed, Error: ex.Message));
+        }
+        finally
+        {
+            if (_memoryOptions.Value.SessionEnabled)
+                await SaveSessionQuietlyAsync(run.SessionId, run.SessionFactory, run.Session);
+            writer.TryComplete();
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<HarnessRunResult?> GetRunAsync(long runId, CancellationToken cancellationToken = default)
+    {
+        var trace = await _traces.GetAsync(runId, cancellationToken);
+        if (trace is null)
+            return null;
+        // 从轨迹还原：最终答复取最后一条 assistant 步（已截断），其余字段直接映射。
+        return new HarnessRunResult(
+            runId, trace.SessionId,
+            trace.Steps.LastOrDefault(s => s.Kind == "assistant")?.Result ?? string.Empty,
+            trace.Iterations, trace.Model, trace.LatencyMs,
+            trace.Steps.Select(s => new HarnessStep(s.Iteration, s.Kind, s.Tool, s.Arguments, s.Result, s.Error)).ToList(),
+            trace.Status, trace.ErrorCode);
+    }
+
+    /// <summary>缺省 sessionId 时随机生成，保证「无状态调用」也能各 run 隔离；显式传入则复用同一会话。</summary>
+    private static string ResolveSessionId(string? sessionId)
+        => string.IsNullOrWhiteSpace(sessionId) ? Guid.NewGuid().ToString("N") : sessionId!;
+
+    /// <summary>
+    /// 一次 run 的公共准备（<see cref="RunAsync"/> 与 <see cref="StreamAsync"/> 共用）：
+    /// 解析模型 → 装配工具环与守卫 → 建 Agent → 开/建会话。模型未配置时已落轨迹并抛出。
+    /// </summary>
+    private async Task<PreparedRun> PrepareRunAsync(
+        HarnessRunRequest request, string sessionId, CancellationToken cancellationToken)
+    {
         // 墙钟计时覆盖整条 run（含检索 / 工具 / 模型），最终写入轨迹的 LatencyMs 即取自这里。
         var sw = Stopwatch.StartNew();
-
-        // 记忆作用域：本次 run 里模型调 remember / recall 时，记的/查的就是这个会话（或显式 global），
-        // 模型无法用参数指定别人的 scope_id。并发 run 各在自己的 async 上下文里，互不串扰。
-        using var memoryScope = _memoryScope.Begin(MemoryScope.Session(sessionId));
 
         ChatEndpoint endpoint;
         try
@@ -127,15 +322,19 @@ public sealed class AgentHarnessService : IAgentHarness
         // 判定在工具环内进行（见 ToolExecutionPipeline），这里只负责把它装起来。
         var guard = _loop.CreateGuard(new RuntimeUsageSource(_runtime));
         var execution = _pipeline.Create(chatClient, new ToolExecutionLimits(_loop.MaxIterations, guard));
+        // 指令（人格 / 引用规范）按 run 注入：装饰在工具环<b>外面</b>，只往模型请求里加一条系统消息。
+        // 不能改用 Agent 的 AIContextProviders —— 那会让 MEA 再包一层函数调用环，
+        // 绕过我们这层的守卫与轨迹采集（详见 RunInstructionsChatClient 注释）。
+        var agentClient = string.IsNullOrWhiteSpace(request.Instructions)
+            ? execution.Client
+            : new RunInstructionsChatClient(execution.Client, request.Instructions!);
         // 用「带工具环的 client」构建 Agent：模型每轮的工具调用都会经过 execution 管线。
-        var agent = BuildAgent(execution.Client);
+        var agent = BuildAgent(agentClient);
 
         // 用户原文直接进模型：知识检索不再由 harness 暗中做——需要依据时由模型主动调
         // search_knowledge 工具，调用留痕、可回放、可判分。曾经的 UseKnowledge 暗路与工具
         // 路径重复（同一能力两条路），且全仓零测试覆盖，已拆。
-        var userText = request.Input;
-
-        var messages = new List<ChatMessage> { new(ChatRole.User, userText) };
+        var messages = new List<ChatMessage> { new(ChatRole.User, request.Input) };
 
         // 会话启用走存储（可跨 run 续接历史），否则用进程内一次性会话（无记忆）。
         var sessionFactory = new AgentSessionFactory(agent);
@@ -143,103 +342,63 @@ public sealed class AgentHarnessService : IAgentHarness
             ? await _sessions.GetOrCreateAsync(sessionId, sessionFactory, cancellationToken)
             : await agent.CreateSessionAsync(cancellationToken);
 
-        try
-        {
-            // 执行控制：run 级超时由 AgentLoop 施加（超时抛 AgentRunTimeoutException）
-            var response = await _loop.ExecuteAsync(
-                async token => await agent.RunAsync(
-                    messages, session,
-                    new ChatClientAgentRunOptions(new ChatOptions { Temperature = Temperature }),
-                    token),
-                cancellationToken);
-
-            sw.Stop();
-
-            // 收尾分类：环内提前终止（重复调用 / 预算耗尽）优先；否则问守卫「是不是跑满迭代被强制收口」
-            // —— 框架跑满迭代时不报错，而是清空工具逼模型用文本收口再正常返回，不主动问就与「答完了」无法区分。
-            var stop = execution.Stop ?? guard.InspectCompletion();
-            var text = response.Text ?? string.Empty;
-            var steps = BuildSteps(execution.Traces, text);
-            var iterations = steps.Count == 0 ? 0 : steps.Max(s => s.Iteration) + 1;
-            var status = stop?.Status ?? AgentRunStatus.Succeeded;
-
-            var runId = await _traces.SaveAsync(
-                ExecutionTrace.Create(
-                    sessionId, status, stop?.Code, iterations, endpoint.Model, sw.ElapsedMilliseconds,
-                    stop?.Message, ToTraceSteps(steps)),
-                cancellationToken);
-
-            _logger.LogInformation(
-                "Harness run {RunId} session={SessionId} status={Status} code={Code} iterations={Iterations} tools={ToolSteps} failedToolSteps={FailedToolSteps} in {ElapsedMs}ms",
-                runId, sessionId, status, stop?.Code, iterations,
-                steps.Count(s => s.Kind == "tool"), steps.Count(s => s.Error is not null),
-                sw.ElapsedMilliseconds);
-
-            return new HarnessRunResult(
-                runId, sessionId, text, iterations, endpoint.Model, sw.ElapsedMilliseconds,
-                steps, status, stop?.Code);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            // 调用方取消不是失败：它是「按用户意愿停下」，必须与 failed 分开，否则前端会把它当成故障上报。
-            sw.Stop();
-            await PersistQuietlyAsync(
-                sessionId, AgentRunStatus.Cancelled, AgentRunCode.Cancelled, "调用方取消", endpoint.Model,
-                sw.ElapsedMilliseconds, execution.Traces);
-            throw;
-        }
-        catch (AgentRunTimeoutException ex)
-        {
-            // run 级墙钟预算（AgentLoop 施加）先于单次请求超时被识别，两者归类码不同。
-            sw.Stop();
-            await PersistQuietlyAsync(
-                sessionId, AgentRunStatus.Timeout, AgentRunCode.RunTimeout, ex.Message, endpoint.Model,
-                sw.ElapsedMilliseconds, execution.Traces);
-            throw;
-        }
-        catch (TimeoutException ex)
-        {
-            sw.Stop();
-            await PersistQuietlyAsync(
-                sessionId, AgentRunStatus.Timeout, AgentRunCode.ModelTimeout, ex.Message, endpoint.Model,
-                sw.ElapsedMilliseconds, execution.Traces);
-            throw;
-        }
-        catch (Exception ex)
-        {
-            sw.Stop();
-            await PersistQuietlyAsync(
-                sessionId, AgentRunStatus.Failed, ClassifyFailure(ex, execution), ex.Message, endpoint.Model,
-                sw.ElapsedMilliseconds, execution.Traces);
-            throw;
-        }
-        finally
-        {
-            // 会话写回：成功 / 失败 / 取消 / 超时都要落，否则重启后只有成功那轮记得住。
-            if (_memoryOptions.Value.SessionEnabled)
-                await SaveSessionQuietlyAsync(sessionId, sessionFactory, session);
-        }
+        return new PreparedRun(sessionId, endpoint, execution, agent, session, sessionFactory, sw, guard, messages);
     }
 
-    /// <inheritdoc />
-    public async Task<HarnessRunResult?> GetRunAsync(long runId, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// 成功收尾（两条出口共用）：分类提前终止 → 组装步骤 → 落轨迹 → 记日志 → 产出结果。
+    /// </summary>
+    private async Task<HarnessRunResult> FinishSucceededAsync(
+        PreparedRun run, string assistantText, CancellationToken cancellationToken)
     {
-        var trace = await _traces.GetAsync(runId, cancellationToken);
-        if (trace is null)
-            return null;
-        // 从轨迹还原：最终答复取最后一条 assistant 步（已截断），其余字段直接映射。
+        // 收尾分类：环内提前终止（重复调用 / 预算耗尽）优先；否则问守卫「是不是跑满迭代被强制收口」
+        // —— 框架跑满迭代时不报错，而是清空工具逼模型用文本收口再正常返回，不主动问就与「答完了」无法区分。
+        var stop = run.Execution.Stop ?? run.Guard.InspectCompletion();
+        var steps = BuildSteps(run.Execution.Traces, assistantText);
+        var iterations = steps.Count == 0 ? 0 : steps.Max(s => s.Iteration) + 1;
+        var status = stop?.Status ?? AgentRunStatus.Succeeded;
+
+        var runId = await _traces.SaveAsync(
+            ExecutionTrace.Create(
+                run.SessionId, status, stop?.Code, iterations, run.Endpoint.Model, run.Stopwatch.ElapsedMilliseconds,
+                stop?.Message, ToTraceSteps(steps)),
+            cancellationToken);
+
+        _logger.LogInformation(
+            "Harness run {RunId} session={SessionId} status={Status} code={Code} iterations={Iterations} tools={ToolSteps} failedToolSteps={FailedToolSteps} in {ElapsedMs}ms",
+            runId, run.SessionId, status, stop?.Code, iterations,
+            steps.Count(s => s.Kind == "tool"), steps.Count(s => s.Error is not null),
+            run.Stopwatch.ElapsedMilliseconds);
+
         return new HarnessRunResult(
-            runId, trace.SessionId,
-            trace.Steps.LastOrDefault(s => s.Kind == "assistant")?.Result ?? string.Empty,
-            trace.Iterations, trace.Model, trace.LatencyMs,
-            trace.Steps.Select(s => new HarnessStep(s.Iteration, s.Kind, s.Tool, s.Arguments, s.Result, s.Error)).ToList(),
-            trace.Status, trace.ErrorCode);
+            runId, run.SessionId, assistantText, iterations, run.Endpoint.Model, run.Stopwatch.ElapsedMilliseconds,
+            steps, status, stop?.Code);
     }
+
+    /// <summary>
+    /// 一次 run 的公共准备产物：装配结果 + 会话 + 计时 + 守卫，两条出口（同步 / 流式）都消费它。
+    /// </summary>
+    private sealed record PreparedRun(
+        string SessionId,
+        ChatEndpoint Endpoint,
+        ToolExecutionRun Execution,
+        ChatClientAgent Agent,
+        AgentSession Session,
+        AgentSessionFactory SessionFactory,
+        Stopwatch Stopwatch,
+        IAgentRunGuard Guard,
+        List<ChatMessage> Messages);
 
     /// <summary>
     /// 用工具环 client 构建框架 Agent。工具列表来自 <see cref="IToolCatalog"/>（已按白名单裁剪）；
     /// 历史由内存 provider 托管，跨 run 持久化则由外层会话存储负责。
     /// </summary>
+    /// <param name="client">已装配好的模型客户端（工具环 + 可选的指令装饰器）。</param>
+    /// <remarks>
+    /// <c>UseProvidedChatClientAsIs = true</c> 是硬要求：它让 MEA 原样使用我们这条链路，
+    /// 而不是另包一层函数调用环（那会绕过 <c>ToolExecutionPipeline</c> 的守卫与轨迹采集）。
+    /// 同理这里<b>不设置</b> <c>AIContextProviders</c>——指令走 <see cref="RunInstructionsChatClient"/>。
+    /// </remarks>
     private ChatClientAgent BuildAgent(IChatClient client)
     {
         var options = new ChatClientAgentOptions
@@ -353,7 +512,7 @@ public sealed class AgentHarnessService : IAgentHarness
     private static string? Truncate(string? value)
         => value is null ? null : value.Length <= MaxAssistantChars ? value : value[..MaxAssistantChars];
 
-    /// <summary>会话写回 best-effort：写库失败不能掩盖本次 run 的结局，也绝不能因调用方取消而丢写。</summary>
+    /// <summary>会话写回 best-effort：写库失败不能掩盖本次 run 的结局，也绝不能因调用方已取消而丢写。</summary>
     private async Task SaveSessionQuietlyAsync(string sessionId, ISessionFactory factory, AgentSession session)
     {
         try
