@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>AgentWorkbench.ModelInvocation</AssemblyName>
+    <RootNamespace>AgentWorkbench.ModelInvocation</RootNamespace>
+  </PropertyGroup>
+
+  <!--
+    τ²-bench 适配面（不是底座能力，也不是产品面）：
+    对外暴露单步模型调用 POST /api/model/invoke——给 messages[] + tools[]，
+    返回单条 assistant 消息（文本或 tool_calls），不执行工具、不循环、不落库。
+    工具执行权与判分权都在 τ² 的 Python orchestrator 侧，本服务只当「模型嘴」。
+
+    放在 tests/ 下是有意为之（原 V9 计划放 src/AgentWorkbench.ModelInvocation，已修正）：
+      - 它只服务于外部基准适配，没有任何 src 消费者；
+      - 架构测试的 AssemblyNames 是硬编码的 src 清单，看不到本目录，
+        因此本项目的存在不会改动任何架构边界（原计划要同步的 4 处全部归零）；
+      - Webapi 不必长出评测专用 Controller。
+    先例：tests/AgentWorkbench.BenchmarkHost（同理由）、tests/AgentWorkbench.MockLlm。
+
+    将来若产品真需要单步调用出口：git mv 到 src/ + 补 4 处架构测试名单即可，
+    引用集合（Providers / ModelRuntime / Persistence）全在 src，迁移成本一小时。
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AgentWorkbench.Providers\AgentWorkbench.Providers.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.ModelRuntime\AgentWorkbench.ModelRuntime.csproj" />
+    <!-- ChatClientFactory 解析端点时读数据库（激活供应商），因此需要数据层。 -->
+    <ProjectReference Include="..\..\src\AgentWorkbench.Persistence\AgentWorkbench.Persistence.csproj" />
+  </ItemGroup>
+
+</Project>
