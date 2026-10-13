@@ -60,6 +60,35 @@ internal sealed class PassthroughModelRuntime : IModelRuntime
 }
 
 /// <summary>
+/// 抛固定异常的模型运行时替身：让「单次模型请求超时」这条路径可在评测里被走到。
+/// 用途是把两套超时区分开——run 级墙钟（<c>AgentRunTimeoutException</c>）与
+/// 单次模型请求超时（<c>TimeoutException</c>）：二者是继承关系，最容易在账本里混成一类。
+/// </summary>
+internal sealed class ThrowingModelRuntime(Exception exception) : IModelRuntime
+{
+    public IChatClient Wrap(IChatClient innerClient) => new ThrowingChatClient(exception);
+
+    public ModelUsageSnapshot GetUsage() => new(0, 0, 0);
+
+    private sealed class ThrowingChatClient(Exception exception) : IChatClient
+    {
+        public Task<ChatResponse> GetResponseAsync(
+            IEnumerable<ChatMessage> messages, ChatOptions? options = null,
+            CancellationToken cancellationToken = default)
+            => Task.FromException<ChatResponse>(exception);
+
+        public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages, ChatOptions? options = null,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException("评测只走非流式路径");
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+        public void Dispose() { }
+    }
+}
+
+/// <summary>
 /// 进程级共享用量计量器——对应生产里的 <c>ModelUsageMeter</c> 单例：
 /// 所有看到同一计量器的运行时，用量都汇入同一本账。P2 负控靠它复现串扰。
 /// </summary>

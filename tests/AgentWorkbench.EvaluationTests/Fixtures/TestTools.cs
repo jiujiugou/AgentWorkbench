@@ -44,7 +44,12 @@ internal sealed class FaultInjectorTool : IAgentToolProvider
             {
                 if (HangGate is not null)
                 {
-                    await HangGate.Task;   // 外部闸门：等待测试放行（本身不可取消，由调用方令牌在外层兜底）
+                    // 等待闸门或取消，二者谁先完成就继续
+                    var gateTask = HangGate.Task;
+                    var cancelTask = WaitForCancellation(cancellationToken);
+                    var completed = await Task.WhenAny(gateTask, cancelTask);
+                    if (completed == cancelTask)
+                        cancellationToken.ThrowIfCancellationRequested();
                 }
                 else
                 {
@@ -65,6 +70,13 @@ internal sealed class FaultInjectorTool : IAgentToolProvider
             throw new InvalidOperationException($"故障注入：第 {call} 次调用失败（failTimes={failTimes}）");
 
         return "ok";
+    }
+
+    private static Task WaitForCancellation(CancellationToken cancellationToken)
+    {
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        cancellationToken.Register(() => tcs.TrySetResult());
+        return tcs.Task;
     }
 }
 
