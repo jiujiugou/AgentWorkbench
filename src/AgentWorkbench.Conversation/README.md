@@ -19,22 +19,19 @@ Webapi `AgentHub`），也不管执行预算（迭代与墙钟在 `AgentLoop`，
 
 ### 工具与降级
 
-- 工具来自 `IToolCatalog`（已按 `Safety` 白名单裁剪）；`ProviderOptions.SupportsTools=false` 时不带工具。
+- 工具来自 `IToolCatalog`（已按白名单裁剪 —— 白名单两轴现居 `ToolExecution`，原 `Safety` 项目已在阶段 4 并入它，能力不变）；
+  `ProviderOptions.SupportsTools=false` 时不带工具。
 - 带工具的请求撞上客户端错误（`ClientResultException`，4xx）且**一个 token 都还没吐**时，
   自动降级为无工具重试一次。只重试一次，不会反复空转。
-
-### 结构化输出
-
-- `IStructuredChatService.GetJsonAsync<T>`：首次 JSON 解析失败 → 追加修复提示 + `temperature=0` 重试一次。
-- `IChatClientProvider`：给需要原生函数调用的模块复用同一个网关，当前**没有消费者**。
 
 ### 接口
 
 | 接口 | 成员 | 实现 | 消费者 |
 | --- | --- | --- | --- |
-| `IChatService` | `IsConfiguredAsync`、`StreamAsync` | `ChatService` | Webapi `AgentHub`、Knowledge `RagService` |
-| `IStructuredChatService` | `IsConfiguredAsync`、`GetJsonAsync<T>` | `StructuredChatService` | 无（预留） |
-| `IChatClientProvider` | `GetClientAsync` | `ChatClientProvider` | 无（预留） |
+| `IChatService` | `IsConfiguredAsync`、`StreamAsync` | `ChatService` | Knowledge `RagService`（`/api/knowledge/ask`）、Webapi `HealthController`（模型是否就绪） |
+
+> 阶段 4 砍伐：原 `IStructuredChatService`（结构化输出）与 `IChatClientProvider`（原生客户端出口）
+> 全仓零消费者、只有「定义 + 注册」两行，已删。**先有消费者再有 API** —— 要结构化输出时再按需加回。
 
 ---
 
@@ -54,7 +51,7 @@ Webapi `AgentHub`），也不管执行预算（迭代与墙钟在 `AgentLoop`，
 
 ## 三、加一个新的对话入口要做什么
 
-1. 直接消费 `IChatService`（或 `IStructuredChatService`）。
+1. 直接消费 `IChatService`。
 2. **不要复制**降级 / 重试逻辑，也不要自己 `new ChatClientAgent` —— 网关与运行时策略在
    `Providers` / `ModelRuntime`。
 3. 历史从哪来要自己说清楚：要么无状态传历史，要么走 `ISessionStore`。
@@ -79,7 +76,7 @@ Webapi `AgentHub`），也不管执行预算（迭代与墙钟在 `AgentLoop`，
 - 消息装配：`history` 的角色与顺序正确，本轮输入在最后。
 - tools 4xx 降级：带工具首次失败 → 第二次不带工具且成功；已经吐过 token 时不重试（不重复输出）。
 
-还没有的：历史裁剪的正例 / 负控（能力未实现）、取消传播的判定用例、结构化输出重试的判定用例。
+还没有的：历史裁剪的正例 / 负控（能力未实现）、取消传播的判定用例。
 
 ## 依赖
 
