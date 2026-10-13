@@ -6,6 +6,10 @@ namespace AgentWorkbench.AgentHarness;
 /// </summary>
 public static class HarnessServiceCollectionExtensions
 {
+    /// <summary>
+    /// 注册 AgentHarness 编排门面。无状态，故用单例；其依赖（模型运行时 / 工具 / 上下文 / 会话 / 执行环 /
+    /// 轨迹 / 知识）由各自模块的 AddNitro* 注册，本方法不负责装配它们。
+    /// </summary>
     public static IServiceCollection AddNitroAgentHarness(
         this IServiceCollection services, IConfiguration configuration)
     {

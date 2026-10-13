@@ -85,8 +85,9 @@ Domain → Shared；所有模块 → Shared
 - 标准：docs/测试标准/Agent-测试与验收标准.md（判定型 + 度量型双轨；模板见 docs/测试标准/模板/）
 - 单元：tests/AgentWorkbench.UnitTests（确定性纯逻辑；LLM 走 mock）
 - 架构：tests/AgentWorkbench.ArchitectureTests（依赖边界 + 无环）
+- 评测（L4/L5/L6）：docs/测试标准/评测实现指南.md（MAF Evaluation 提供流水线/容器/缓存；判据、金标、阈值、基线与门禁必须自建）
 - **端到端验收脚本尚未落地**：仓库无 `scripts/` 目录；docs/验收标准/ 与 docs/设计步骤/ 中引用的 acceptance/eval 脚本均未实现，相关内容以「未实现」标注为准
 - 全过退出码 0
 
 ## 参考
-- 设计：docs/设计步骤/ ｜ 验收：docs/验收标准/ ｜ 测试标准：docs/测试标准/ ｜ ADR：docs/adr/ ｜ 缺口清单：docs/底座建设清单.md
+- 设计：docs/设计步骤/ ｜ 验收：docs/验收标准/ ｜ 测试标准：docs/测试标准/ ｜ 评测实现：docs/测试标准/评测实现指南.md ｜ ADR：docs/adr/ ｜ 缺口清单：docs/底座建设清单.md
