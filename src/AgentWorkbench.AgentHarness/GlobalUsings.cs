@@ -1,5 +1,4 @@
 global using AgentWorkbench.AgentLoop;
-global using AgentWorkbench.Context;
 global using AgentWorkbench.Knowledge.Abstractions;
 global using AgentWorkbench.Memory;
 global using AgentWorkbench.ModelRuntime;

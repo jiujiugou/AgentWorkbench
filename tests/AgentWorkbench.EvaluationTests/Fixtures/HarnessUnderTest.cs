@@ -1,7 +1,6 @@
 using System.Text.Json;
 using AgentWorkbench.AgentHarness;
 using AgentWorkbench.AgentLoop;
-using AgentWorkbench.Context;
 using AgentWorkbench.Knowledge.Abstractions;
 using AgentWorkbench.Memory;
 using AgentWorkbench.ModelRuntime;

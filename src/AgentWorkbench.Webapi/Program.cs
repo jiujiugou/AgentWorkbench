@@ -1,6 +1,5 @@
 using AgentWorkbench.AgentLoop;
 using AgentWorkbench.AgentHarness;
-using AgentWorkbench.Context;
 using AgentWorkbench.Conversation;
 using AgentWorkbench.Documents;
 using AgentWorkbench.Knowledge;
@@ -39,7 +38,6 @@ builder.Services.AddNitroToolExecution(builder.Configuration);
 builder.Services.AddNitroConversation(builder.Configuration);
 builder.Services.AddNitroKnowledge(builder.Configuration);
 builder.Services.AddNitroDocuments(builder.Configuration);
-builder.Services.AddNitroContext(builder.Configuration);
 builder.Services.AddNitroMemory(builder.Configuration);
 builder.Services.AddNitroMemoryPersistence(builder.Configuration);
 builder.Services.AddNitroObservability();

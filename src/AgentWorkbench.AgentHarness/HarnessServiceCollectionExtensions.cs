@@ -13,6 +13,9 @@ public static class HarnessServiceCollectionExtensions
     public static IServiceCollection AddNitroAgentHarness(
         this IServiceCollection services, IConfiguration configuration)
     {
+        // 上下文能力位（Harness:Context）随本模块装配：检索组装器已删，这里只剩能力位供 GetCapabilitiesAsync 读取。
+        services.AddOptions<ContextOptions>()
+            .Bind(configuration.GetSection(ContextOptions.SectionName));
         services.AddSingleton<IAgentHarness, AgentHarnessService>();
         return services;
     }

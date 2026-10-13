@@ -21,7 +21,6 @@ internal static class TestArchitecture
         "AgentWorkbench.ToolExecution",
         "AgentWorkbench.Safety",
         "AgentWorkbench.AgentLoop",
-        "AgentWorkbench.Context",
         "AgentWorkbench.Memory",
         "AgentWorkbench.Memory.Persistence",
         "AgentWorkbench.Observability",

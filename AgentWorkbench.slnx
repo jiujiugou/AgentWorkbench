@@ -13,7 +13,6 @@
     <Project Path="src/AgentWorkbench.ToolExecution/AgentWorkbench.ToolExecution.csproj" />
     <Project Path="src/AgentWorkbench.Safety/AgentWorkbench.Safety.csproj" />
     <Project Path="src/AgentWorkbench.AgentLoop/AgentWorkbench.AgentLoop.csproj" />
-    <Project Path="src/AgentWorkbench.Context/AgentWorkbench.Context.csproj" />
     <Project Path="src/AgentWorkbench.Memory/AgentWorkbench.Memory.csproj" />
     <Project Path="src/AgentWorkbench.Memory.Persistence/AgentWorkbench.Memory.Persistence.csproj" />
     <Project Path="src/AgentWorkbench.Observability/AgentWorkbench.Observability.csproj" />

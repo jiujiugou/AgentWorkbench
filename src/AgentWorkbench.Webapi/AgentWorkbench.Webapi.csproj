@@ -25,7 +25,6 @@
     <ProjectReference Include="..\AgentWorkbench.Safety\AgentWorkbench.Safety.csproj" />
     <ProjectReference Include="..\AgentWorkbench.ModelRuntime\AgentWorkbench.ModelRuntime.csproj" />
     <ProjectReference Include="..\AgentWorkbench.ToolExecution\AgentWorkbench.ToolExecution.csproj" />
-    <ProjectReference Include="..\AgentWorkbench.Context\AgentWorkbench.Context.csproj" />
     <ProjectReference Include="..\AgentWorkbench.Memory\AgentWorkbench.Memory.csproj" />
     <ProjectReference Include="..\AgentWorkbench.Memory.Persistence\AgentWorkbench.Memory.Persistence.csproj" />
     <ProjectReference Include="..\AgentWorkbench.Observability\AgentWorkbench.Observability.csproj" />

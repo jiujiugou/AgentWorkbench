@@ -17,7 +17,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AgentWorkbench.AgentLoop\AgentWorkbench.AgentLoop.csproj" />
-    <ProjectReference Include="..\AgentWorkbench.Context\AgentWorkbench.Context.csproj" />
     <ProjectReference Include="..\AgentWorkbench.Knowledge.Abstractions\AgentWorkbench.Knowledge.Abstractions.csproj" />
     <ProjectReference Include="..\AgentWorkbench.Memory\AgentWorkbench.Memory.csproj" />
     <ProjectReference Include="..\AgentWorkbench.ModelRuntime\AgentWorkbench.ModelRuntime.csproj" />

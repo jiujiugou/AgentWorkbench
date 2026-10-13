@@ -34,7 +34,6 @@ public class ModuleCycleTests
             "ToolExecution",
             "Safety",
             "AgentLoop",
-            "Context",
             "Memory",
             "Observability",
             "AgentHarness",
