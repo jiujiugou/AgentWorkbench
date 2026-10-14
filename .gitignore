@@ -17,6 +17,9 @@ logs/
 # Env / secrets
 .env
 
+# Agent local data (work logs, personal notes — never publish)
+.workbuddy/
+
 # IDE
 .vs/
 .vscode/
