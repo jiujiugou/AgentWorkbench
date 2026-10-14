@@ -8,12 +8,27 @@
   </PropertyGroup>
 
   <!--
-    底座六能力域的 L4/L5/L6 驱动（详见 docs/测试标准/评测实现指南.md v0.2）。
-    判据全部自建（确定性）；MAF 只提供批量驱动 / 断言容器 / 回放与留存。
+    Agent 任务评估 · 集成层承载工程（Microsoft.Agents.AI Evaluation）。
+
+    层级定位（判据 = 隔离了什么，详见 docs/测试标准/测试分层职责.md）：
+    本工程与 UnitTests/Harness **同属集成层**——同样直接 new 真实的 AgentHarnessService 全链路，
+    只把模型与网络换成替身。所以两者靠**用途**区分，而不是靠层级：
+
+      UnitTests/Harness                = 单条 run、深断言、快反馈  → 集成回归
+      Evaluation.AgentTask（本工程）    = 批量驱动、汇总、失败路径入容器、轨迹回放不重跑
+
+    据此：单条 run 的结局正负控**唯一归属 UnitTests/Harness**，本工程不再重复
+    （2026-10-14 已按此裁撤 13 条同层同判据用例）。
+
+    质量度量轨（分数 / 等级，非门禁）归 tests/AgentWorkbench.Evaluation.ModelQuality
+    （Microsoft.Extensions.AI.Evaluation，当前封存）。
+
     判定轨 0 个评测专用 PackageReference：Microsoft.Agents.AI 1.23.0 经
     AgentHarness 的 ProjectReference 传递依赖到手（其 nuspec 依赖
     Microsoft.Extensions.AI.Evaluation 10.10.0）。趋势轨启用 Reporting 时才新增。
     隔离（《标准》§5）：进程内假模型 + 内存轨迹存储，零文件、零网络、零外部 provider。
+
+    （本工程原名 AgentWorkbench.EvaluationTests，2026-10-14 改名为 Evaluation.AgentTask。）
   -->
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />

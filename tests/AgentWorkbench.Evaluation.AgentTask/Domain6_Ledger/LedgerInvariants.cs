@@ -1,11 +1,11 @@
 using AgentWorkbench.AgentLoop;
-using AgentWorkbench.EvaluationTests.Checks;
-using AgentWorkbench.EvaluationTests.Fixtures;
+using AgentWorkbench.Evaluation.AgentTask.Checks;
+using AgentWorkbench.Evaluation.AgentTask.Fixtures;
 using AgentWorkbench.Shared;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentWorkbench.EvaluationTests.Domain6_Ledger;
+namespace AgentWorkbench.Evaluation.AgentTask.Domain6_Ledger;
 
 /// <summary>
 /// 域 6｜可观测与评估（账本）
@@ -106,30 +106,8 @@ public sealed class LedgerInvariants
     }
 
     // ========== 6.3 轨迹可回放 ==========
-
-    [Fact]
-    public async Task GetRunAsync_RoundtripsStatusCodeSteps()
-    {
-        // 落库后 GetRunAsync 复原 status / code / steps
-        var harness = HarnessUnderTest.Create(
-            call => call == 1 ? HealthyToolCall() : ScriptedResponses.Text("done"),
-            new AgentLoopOptions { MaxIterations = 10, TimeoutSeconds = 30, MaxRepeatedToolCalls = 0 });
-
-        var outcome = await harness.RunAsync("回放测试");
-
-        var runId = outcome.Result.RunId;
-        var replayed = await harness.Harness.GetRunAsync(runId);
-
-        Assert.NotNull(replayed);
-        Assert.Equal(outcome.Result.Status, replayed!.Status);
-        Assert.Equal(outcome.Result.Code, replayed.Code);
-        Assert.Equal(outcome.Result.Steps.Count, replayed.Steps.Count);
-        for (int i = 0; i < outcome.Result.Steps.Count; i++)
-        {
-            Assert.Equal(outcome.Result.Steps[i].Kind, replayed.Steps[i].Kind);
-            Assert.Equal(outcome.Result.Steps[i].Tool, replayed.Steps[i].Tool);
-        }
-    }
+    // 单条回放的 Status / Code / Steps 复原已归 UnitTests/Harness（GetRunAsync_SurfacesStatusAndCode，含 Steps 断言）；
+    // 此处只留「失败路径必须留下归类码」的篡改负控——那是账本层独有的判据。
 
     [Fact]
     public async Task GetRunAsync_MissingErrorCode_NegativeControl()

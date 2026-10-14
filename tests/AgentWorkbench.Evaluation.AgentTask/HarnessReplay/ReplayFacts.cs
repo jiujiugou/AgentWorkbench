@@ -1,7 +1,7 @@
 using AgentWorkbench.AgentHarness;
 using Xunit;
 
-namespace AgentWorkbench.EvaluationTests.HarnessReplay;
+namespace AgentWorkbench.Evaluation.AgentTask.HarnessReplay;
 
 /// <summary>
 /// 一次 run 的「回放事实」：从轨迹里重建出的三件事——工具调用序列、迭代次数、终态（+ 归类码）。

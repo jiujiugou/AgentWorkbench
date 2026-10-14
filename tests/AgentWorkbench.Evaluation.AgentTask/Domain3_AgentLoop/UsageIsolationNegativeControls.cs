@@ -1,10 +1,10 @@
 using AgentWorkbench.AgentLoop;
-using AgentWorkbench.EvaluationTests.Fixtures;
+using AgentWorkbench.Evaluation.AgentTask.Fixtures;
 using AgentWorkbench.Shared;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentWorkbench.EvaluationTests.Domain3_AgentLoop;
+namespace AgentWorkbench.Evaluation.AgentTask.Domain3_AgentLoop;
 
 /// <summary>
 /// P2 负控（《评测实现指南》§7，用户已拍板「先建负控，src 不动」）：

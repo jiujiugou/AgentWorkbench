@@ -2,7 +2,7 @@ using System.Runtime.CompilerServices;
 using AgentWorkbench.ModelRuntime;
 using Microsoft.Extensions.AI;
 
-namespace AgentWorkbench.EvaluationTests.Fixtures;
+namespace AgentWorkbench.Evaluation.AgentTask.Fixtures;
 
 /// <summary>
 /// 脚本化模型客户端：按请求序号返回预设响应（工具调用 / 文本），

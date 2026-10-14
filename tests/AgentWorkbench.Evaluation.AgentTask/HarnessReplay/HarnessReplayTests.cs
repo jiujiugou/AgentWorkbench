@@ -1,12 +1,12 @@
 using AgentWorkbench.AgentHarness;
 using AgentWorkbench.AgentLoop;
-using AgentWorkbench.EvaluationTests.Fixtures;
+using AgentWorkbench.Evaluation.AgentTask.Fixtures;
 using AgentWorkbench.Observability;
 using AgentWorkbench.Shared;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentWorkbench.EvaluationTests.HarnessReplay;
+namespace AgentWorkbench.Evaluation.AgentTask.HarnessReplay;
 
 /// <summary>
 /// 阶段 3｜轨迹事件源与回放回归。

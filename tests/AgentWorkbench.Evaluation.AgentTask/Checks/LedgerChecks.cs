@@ -1,8 +1,8 @@
-using AgentWorkbench.EvaluationTests.Fixtures;
+using AgentWorkbench.Evaluation.AgentTask.Fixtures;
 using AgentWorkbench.Observability;
 using Microsoft.Agents.AI;
 
-namespace AgentWorkbench.EvaluationTests.Checks;
+namespace AgentWorkbench.Evaluation.AgentTask.Checks;
 
 /// <summary>
 /// 自建判定原语（对应《评测实现指南》§2 第 10–16 行：判据全部自建，MAF 只出容器）。

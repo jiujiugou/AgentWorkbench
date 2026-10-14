@@ -1,12 +1,12 @@
 using AgentWorkbench.AgentHarness;
 using AgentWorkbench.AgentLoop;
-using AgentWorkbench.EvaluationTests.Fixtures;
+using AgentWorkbench.Evaluation.AgentTask.Fixtures;
 using AgentWorkbench.Shared;
 using AgentWorkbench.ToolExecution;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentWorkbench.EvaluationTests.HarnessApproval;
+namespace AgentWorkbench.Evaluation.AgentTask.HarnessApproval;
 
 /// <summary>
 /// 阶段 2 的端到端判据：审批闸门必须**真的接在 harness 这条路上**，
@@ -44,7 +44,7 @@ public sealed class HarnessApprovalTests
         Assert.Equal(FaultInjectorTool.ToolName, approver.LastTool);
         Assert.Equal(1, harness.Tool.Calls);                   // 批准 → 才执行
 
-        var step = Assert.Single(result.Steps.Where(s => s.Kind == "tool"));
+        var step = Assert.Single(result.Steps, s => s.Kind == "tool");
         Assert.Null(step.Error);                               // 放行 → 不落审批归类码
         Assert.Equal(AgentRunStatus.Succeeded, result.Status);
     }
@@ -61,7 +61,7 @@ public sealed class HarnessApprovalTests
         Assert.Equal(1, approver.Requests);
         Assert.Equal(0, harness.Tool.Calls);                   // 负控：闸门失效 → 1 → 红
 
-        var step = Assert.Single(result.Steps.Where(s => s.Kind == "tool"));
+        var step = Assert.Single(result.Steps, s => s.Kind == "tool");
         Assert.Equal(ToolApprovalCodes.UserDenied, step.Error);
 
         // 账本是回放与判分的唯一事实源：拒绝必须落进去，而不只在内存结果对象里。
@@ -79,7 +79,7 @@ public sealed class HarnessApprovalTests
         var result = await harness.Harness.RunAsync(new HarnessRunRequest(null, "不带 approver"));
 
         Assert.Equal(0, harness.Tool.Calls);
-        var step = Assert.Single(result.Steps.Where(s => s.Kind == "tool"));
+        var step = Assert.Single(result.Steps, s => s.Kind == "tool");
         Assert.Equal(ToolApprovalCodes.Unavailable, step.Error);
     }
 

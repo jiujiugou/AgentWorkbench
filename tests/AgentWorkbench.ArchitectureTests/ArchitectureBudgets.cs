@@ -98,7 +98,7 @@ public class ArchitectureBudgets
     [Fact]
     public void Trace_replay_must_be_consumed_by_evaluation_tests()
     {
-        var evaluationDir = Path.Combine(RepoRoot, "tests", "AgentWorkbench.EvaluationTests");
+        var evaluationDir = Path.Combine(RepoRoot, "tests", "AgentWorkbench.Evaluation.AgentTask");
         var consumers = CountMarker(evaluationDir, ReplayConsumptionMarker);
 
         Assert.True(

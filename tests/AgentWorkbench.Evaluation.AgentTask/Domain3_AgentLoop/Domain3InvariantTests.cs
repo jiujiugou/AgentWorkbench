@@ -1,20 +1,20 @@
 using AgentWorkbench.AgentHarness;
 using AgentWorkbench.AgentLoop;
-using AgentWorkbench.EvaluationTests.Fixtures;
+using AgentWorkbench.Evaluation.AgentTask.Fixtures;
 using AgentWorkbench.Shared;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentWorkbench.EvaluationTests.Domain3_AgentLoop;
+namespace AgentWorkbench.Evaluation.AgentTask.Domain3_AgentLoop;
 
 /// <summary>
-/// 域 3（执行控制 Agent Loop / Harness）首批：MAF Evaluation 容器落地 + 判据自建。
+/// 域 3（执行控制 Agent Loop / Harness）：MAF 容器的**新增价值**验证。
 ///
-/// 与 UnitTests 的分工（避免重复建设）：<c>AgentHarnessExecutionControlTests</c> 已用直接断言
-/// 覆盖了预算 / 迭代 / 取消 / 失败分类的正负控；本文件只放 MAF 容器的**新增价值**部分——
-/// 批量驱动（跑一批 outcome）→ 轨迹重建 → EvalCheck 判分 → AssertAllPassed 门禁，
-/// 以及「检查本身有区分度」的负控（同一检查在对立场景必须红）。
+/// 职责边界（见 docs/测试标准/测试分层职责.md）：结局的正负控（预算 / 迭代 / 取消 / 失败分类）
+/// 已由 <c>UnitTests/Harness</c> 用直接断言覆盖，不在此重复。
+/// 本文件只回答一件事：**轨迹重建成对话后，MAF 的 EvalCheck 判得对不对**——
+/// 即「检查本身有区分度」（同一批检查在对立场景必须红）。
 /// </summary>
 public sealed class Domain3InvariantTests
 {
@@ -77,44 +77,5 @@ public sealed class Domain3InvariantTests
         // 断言容器本身也必须有牙：检查未通过时 AssertAllPassed 必须抛——
         // 否则「全绿」可能只是门禁是空的（假绿）。
         Assert.ThrowsAny<Exception>(() => results.AssertAllPassed("负控：检查未通过，断言容器必须抛"));
-    }
-
-    [Fact]
-    public async Task RepeatedIdenticalCalls_StopAsLoopDetected()
-    {
-        // 不变量 3.1：同工具 + 同参数连续 MaxRepeatedToolCalls 次 → LoopDetected 且干净收口。
-        var harness = HarnessUnderTest.Create(
-            _ => HealthyToolCall(),
-            new AgentLoopOptions { MaxIterations = 10, TimeoutSeconds = 30, MaxRepeatedToolCalls = 3 });
-
-        var outcome = await harness.RunAsync("同一调用反复来");
-
-        Assert.Equal(AgentRunStatus.LoopDetected, outcome.Result.Status);
-        Assert.Equal(AgentRunCode.LoopDetected, outcome.Result.Code);
-        Assert.Equal(2, outcome.ToolCalls);   // 第 3 次相同调用在真正执行前就被拦下
-        Assert.Equal(AgentRunStatus.LoopDetected, outcome.Trace.Status);
-
-        // 循环终止同样留下可判分的对话：工具调用发生过，且不混入失败。
-        var results = await harness.EvaluateAsync("domain3-harness-loop",
-        [
-            EvalChecks.ToolCalledCheck([FaultInjectorTool.ToolName])
-        ]);
-
-        results.AssertAllPassed("循环被干净收口：轨迹里必须看得到工具调用");
-    }
-
-    [Fact]
-    public async Task SameScript_LoopDetectionDisabled_RunsToIterationLimit()
-    {
-        // 3.1 负控：同一份脚本，只把重复检测关掉（0）——结局必须从 loop_detected 变成 iteration_limit。
-        var harness = HarnessUnderTest.Create(
-            _ => HealthyToolCall(),
-            new AgentLoopOptions { MaxIterations = 10, TimeoutSeconds = 30, MaxRepeatedToolCalls = 0 });
-
-        var outcome = await harness.RunAsync("同一调用反复来，但关掉循环检测");
-
-        Assert.Equal(AgentRunStatus.IterationLimit, outcome.Result.Status);
-        Assert.Equal(AgentRunCode.IterationLimit, outcome.Result.Code);
-        Assert.Equal(10, outcome.ToolCalls);
     }
 }

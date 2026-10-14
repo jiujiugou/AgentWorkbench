@@ -14,7 +14,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 
-namespace AgentWorkbench.EvaluationTests.Fixtures;
+namespace AgentWorkbench.Evaluation.AgentTask.Fixtures;
 
 /// <summary>
 /// 内存轨迹存储：不落盘，按保存顺序编号（runId 从 1 起）。
@@ -194,7 +194,7 @@ internal sealed class HarnessUnderTest
         var result = await Harness.RunAsync(new HarnessRunRequest(sessionId, query), cancellationToken);
         var trace = Traces.Saved[^1];
         var outcome = new HarnessOutcome(query, result, trace, Tool.Calls, Client.Calls);
-        _cases.Add(new EvalCase(query, HarnessConversation.ToAgentResponse(query, result), LedgerFact.From(trace)));
+        _cases.Add(new EvalCase(query, HarnessConversation.ToAgentResponse(result), LedgerFact.From(trace)));
         return outcome;
     }
 
@@ -220,7 +220,7 @@ internal sealed class HarnessUnderTest
             throw new InvalidOperationException($"期望 run 以抛出收场，但它正常返回了：{query}");
 
         var trace = Traces.Saved.Count > before ? Traces.Saved[^1] : null;
-        _cases.Add(new EvalCase(query, HarnessConversation.FromTrace(query, trace),
+        _cases.Add(new EvalCase(query, HarnessConversation.FromTrace(trace),
             trace is null ? LedgerFact.NotPersisted : LedgerFact.From(trace)));
         return new HarnessFailure(query, captured, Tool.Calls, Client.Calls);
     }
@@ -236,6 +236,33 @@ internal sealed class HarnessUnderTest
         var queries = _cases.Select(item => item.Query).ToList();
         return await _agent.EvaluateAsync(responses, queries, new LocalEvaluator(checks), evalName, null, null, cancellationToken);
     }
+
+    /// <summary>
+    /// 跨夹具批量判分：把本夹具已跑出的样本与 <paramref name="extraCases"/>（别的 harness 跑出的）合并后一次进容器。
+    /// 跨场景套件用——每个场景一台独立 harness（不共享实例），最后并进同一个判分容器，
+    /// 于是 Passed / Failed / Total 直接等于「契约成立的场景数」。
+    /// 判据须按 query 限定到各自场景（见 <c>ScenarioExecutor.ChecksFor</c>），否则互斥契约会互相误伤。
+    /// </summary>
+    public async Task<AgentEvaluationResults> EvaluateAsync(
+        string evalName, IEnumerable<EvalCase> extraCases, EvalCheck[] checks, CancellationToken cancellationToken = default)
+    {
+        var all = _cases.Concat(extraCases).ToList();
+        return await _agent.EvaluateAsync(
+            all.Select(item => item.Response).ToList(),
+            all.Select(item => item.Query).ToList(),
+            new LocalEvaluator(checks), evalName, null, null, cancellationToken);
+    }
+
+    /// <summary>
+    /// 驱动轨判分：把 query 交给 MAF，由 <see cref="HarnessAgent"/> 真的跑一遍 harness，再由同一容器判分。
+    /// 与回放轨（先自己跑、再喂结果）互补：驱动轨让 MAF 拥有「执行」这一环
+    /// （<c>EvaluateAsync</c> 的 <c>numRepetitions</c> 参数 = 每条 query 重复跑的稳定性，真实模型下才用得上）。
+    /// 判据若读账本要小心：账本在 MAF 跑完之后才有，故驱动轨优选用对话侧判据（<c>EvalChecks</c>）。
+    /// </summary>
+    public async Task<AgentEvaluationResults> EvaluateDrivenAsync(
+        string evalName, IEnumerable<string> queries, EvalCheck[] checks, CancellationToken cancellationToken = default)
+        => await _agent.EvaluateAsync(
+            queries, new LocalEvaluator(checks), evalName, null, null, null, 1, cancellationToken);
 
     private static IAgentHarness Build(
         IChatClient inner, IModelRuntime runtime, IReadOnlyList<AITool> tools,
@@ -299,20 +326,24 @@ internal sealed class HarnessAgent(IAgentHarness harness) : AIAgent
     {
         var query = messages.LastOrDefault(message => message.Role == ChatRole.User)?.Text ?? string.Empty;
         var result = await harness.RunAsync(new HarnessRunRequest(null, query), cancellationToken);
-        return HarnessConversation.ToAgentResponse(query, result);
+        return HarnessConversation.ToAgentResponse(result);
     }
 }
 
 /// <summary>
 /// 轨迹 → 对话：把 <see cref="HarnessRunResult"/> 重建成 MAF 评测看得懂的消息序列
-/// （user → 每步 assistant(FunctionCall) + tool(FunctionResult) → 最终 assistant 文本）。
+/// （每步 assistant(FunctionCall) + tool(FunctionResult) → 最终 assistant 文本）。
+/// **user 消息不在这里补**——MAF 会按 query 回填，补了会重复并污染 <c>EvalItem.Response</c>。
 /// 工具调用能不能被 <see cref="EvalChecks"/> 看见，全靠这一步保真。
 /// </summary>
 internal static class HarnessConversation
 {
-    public static AgentResponse ToAgentResponse(string query, HarnessRunResult result)
+    public static AgentResponse ToAgentResponse(HarnessRunResult result)
     {
-        var messages = new List<ChatMessage> { new(ChatRole.User, query) };
+        // 不自己补 user 消息：MAF 会按 query 回填一条 user，我方再补一条就重复
+        // （实测 Conversation 变成 [user, user, assistant]），并把 EvalItem.Response 污染成
+        // 「query + 答复」的拼接文本 —— 那会让 EvalChecks.NonEmpty / ContainsExpected / KeywordCheck 恒真。
+        var messages = new List<ChatMessage>();
         var index = 0;
 
         foreach (var step in result.Steps)
@@ -338,9 +369,10 @@ internal static class HarnessConversation
     /// 唯一的可观测量就是账本里留下的步骤。重建后仍可被 <see cref="EvalChecks"/> 判分——
     /// 「异常路径也进同一个评测容器」是批量驱动的关键，否则失败路径只能靠散落的断言。
     /// </summary>
-    public static AgentResponse FromTrace(string query, ExecutionTrace? trace)
+    public static AgentResponse FromTrace(ExecutionTrace? trace)
     {
-        var messages = new List<ChatMessage> { new(ChatRole.User, query) };
+        // 同上：不补 user 消息，交给 MAF 按 query 回填，避免重复与 Response 污染。
+        var messages = new List<ChatMessage>();
         if (trace is null)
             return new AgentResponse(messages);
 

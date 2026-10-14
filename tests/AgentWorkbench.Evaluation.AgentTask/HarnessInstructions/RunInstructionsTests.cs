@@ -1,11 +1,11 @@
 using AgentWorkbench.AgentHarness;
 using AgentWorkbench.AgentLoop;
-using AgentWorkbench.EvaluationTests.Fixtures;
+using AgentWorkbench.Evaluation.AgentTask.Fixtures;
 using AgentWorkbench.Shared;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentWorkbench.EvaluationTests.HarnessInstructions;
+namespace AgentWorkbench.Evaluation.AgentTask.HarnessInstructions;
 
 /// <summary>
 /// 指令通道（run 级系统指令）的判据，重点是**它不能把执行控制绕过去**。
@@ -41,7 +41,7 @@ public sealed class RunInstructionsTests
         // 每一轮都要带上指令：工具轮之后的收口轮如果丢了指令，引用规范就只在第一轮生效。
         foreach (var request in harness.Client.Requests)
         {
-            var system = Assert.Single(request.Where(m => m.Role == ChatRole.System));
+            var system = Assert.Single(request, m => m.Role == ChatRole.System);
             Assert.Equal(Instructions, system.Text);
         }
 

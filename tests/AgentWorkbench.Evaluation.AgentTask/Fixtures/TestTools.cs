@@ -1,7 +1,7 @@
 using AgentWorkbench.ToolExecution;
 using Microsoft.Extensions.AI;
 
-namespace AgentWorkbench.EvaluationTests.Fixtures;
+namespace AgentWorkbench.Evaluation.AgentTask.Fixtures;
 
 /// <summary>
 /// 测试专用故障注入工具（探针，不是产品能力）：让两条生产里从未被稳定触发过的路径可复现——

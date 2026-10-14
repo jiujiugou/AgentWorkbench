@@ -1,10 +1,10 @@
 using AgentWorkbench.AgentHarness;
 using AgentWorkbench.AgentLoop;
-using AgentWorkbench.EvaluationTests.Fixtures;
+using AgentWorkbench.Evaluation.AgentTask.Fixtures;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentWorkbench.EvaluationTests.HarnessReplay;
+namespace AgentWorkbench.Evaluation.AgentTask.HarnessReplay;
 
 /// <summary>
 /// 阶段 3｜流式事件与轨迹的关系（阶段 1 的收口）。
@@ -46,7 +46,7 @@ public sealed class TraceTruncationTests
 
         // 轨迹：assistant 步必须截断到上限（大答复不撑爆账本）。
         var trace = Assert.Single(harness.Traces.Saved);
-        var assistantStep = Assert.Single(trace.Steps.Where(s => s.Kind == "assistant"));
+        var assistantStep = Assert.Single(trace.Steps, s => s.Kind == "assistant");
         Assert.Equal(LedgerAssistantLimit, assistantStep.Result!.Length);
 
         // 回放：以轨迹为准 → 只看到截断版，而不是流式事件里的完整版。
@@ -65,7 +65,7 @@ public sealed class TraceTruncationTests
         var outcome = await harness.RunAsync("长答复非流式");
 
         var trace = Assert.Single(harness.Traces.Saved);
-        var assistantStep = Assert.Single(trace.Steps.Where(s => s.Kind == "assistant"));
+        var assistantStep = Assert.Single(trace.Steps, s => s.Kind == "assistant");
         Assert.Equal(LedgerAssistantLimit, assistantStep.Result!.Length);
 
         var replayed = await TraceReplay.ReadTextAsync(harness.Harness, outcome.Result.RunId);

@@ -237,6 +237,13 @@ public sealed class AgentHarnessExecutionControlTests
         Assert.NotNull(replay);
         Assert.Equal(result.Status, replay.Status);
         Assert.Equal(result.Code, replay.Code);
+        // 步序列也必须逐项复原（原子 AgentTask 的 GetRunAsync_RoundtripsStatusCodeSteps，按分层职责归此层）
+        Assert.Equal(result.Steps.Count, replay.Steps.Count);
+        for (var i = 0; i < result.Steps.Count; i++)
+        {
+            Assert.Equal(result.Steps[i].Kind, replay.Steps[i].Kind);
+            Assert.Equal(result.Steps[i].Tool, replay.Steps[i].Tool);
+        }
     }
 
     private static ChatResponse HealthyCall()

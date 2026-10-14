@@ -1,13 +1,13 @@
 using AgentWorkbench.AgentHarness;
 using AgentWorkbench.AgentLoop;
-using AgentWorkbench.EvaluationTests.Fixtures;
+using AgentWorkbench.Evaluation.AgentTask.Fixtures;
 using AgentWorkbench.Observability;
 using AgentWorkbench.Shared;
 using AgentWorkbench.ToolExecution;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentWorkbench.EvaluationTests.HarnessStreaming;
+namespace AgentWorkbench.Evaluation.AgentTask.HarnessStreaming;
 
 /// <summary>
 /// 阶段 1「三条路并一条」的验收：流式出口必须与非流式出口<b>同源</b>——
@@ -79,7 +79,7 @@ public sealed class HarnessStreamingTests
         Assert.Equal(Answer, string.Concat(deltas));
 
         // ② 工具完成事件：工具名在、成功调用不带 Error，且工具确实被执行了一次（不是纸面事件）。
-        var toolEvent = Assert.Single(events.Where(e => e.Kind == HarnessStreamEventKind.ToolCompleted));
+        var toolEvent = Assert.Single(events, e => e.Kind == HarnessStreamEventKind.ToolCompleted);
         Assert.Equal(FaultInjectorTool.ToolName, toolEvent.Tool!.Name);
         Assert.Null(toolEvent.Tool.Error);
         Assert.Equal(1, harness.Tool.Calls);
@@ -179,7 +179,7 @@ public sealed class HarnessStreamingTests
 
         var events = await CollectAsync(harness.Harness, new HarnessRunRequest(null, "取一段长文本"));
 
-        var toolEvent = Assert.Single(events.Where(e => e.Kind == HarnessStreamEventKind.ToolCompleted));
+        var toolEvent = Assert.Single(events, e => e.Kind == HarnessStreamEventKind.ToolCompleted);
         Assert.Equal(LongResultTool.ToolName, toolEvent.Tool!.Name);
         Assert.Equal(LongResultTool.ResultChars, toolEvent.Tool.Result!.Length);
 
