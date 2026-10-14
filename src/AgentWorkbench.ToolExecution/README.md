@@ -138,7 +138,7 @@
   Ask+批准执行 / Ask+拒绝不执行 / Ask+无应答超时按拒绝。**负控**：每条「未执行」断言就是它自己 ——
   闸门失效则探针计数变 1，用例当场红。策略层另见 `ToolApprovalPolicyTests`（含配置热重载负控）。
 - 审批真的接在 harness 那条路上：请求里的 `IToolApprover` 走到管道、拒绝归类码落进**账本**
-  （`tests/AgentWorkbench.EvaluationTests/HarnessApproval/`）—— 防「代码写好了没人调用」。
+  （`tests/AgentWorkbench.Evaluation.AgentTask/HarnessApproval/`）—— 防「代码写好了没人调用」。
 - 端到端到落库那层：连续失败落成 failed 且每步带原因；健康工具落成成功且没有失败原因。
 
 专门用来「故意搞坏」的探针工具**刻意放在测试项目里，不进生产工具目录** ——

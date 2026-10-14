@@ -92,7 +92,7 @@ ResolveAsync(端点)                                   Providers
 - **不能用 MEA 的 `AIContextProviders`**。只在 Agent 上挂 provider，MEA 会在我们自己装配的
   `FunctionInvokingChatClient` **外面**再包一层函数调用环，于是 `ToolExecutionPipeline` 的守卫与
   轨迹采集全被绕过：实测症状是连续同参调用不再判 `loop_detected`、工具异常不再归类 `tool_error`，
-  全部退化成 `succeeded`。回归闸在 `tests/AgentWorkbench.EvaluationTests/HarnessInstructions/`。
+  全部退化成 `succeeded`。回归闸在 `tests/AgentWorkbench.Evaluation.AgentTask/HarnessInstructions/`。
 - 指令进的是**模型请求**而不是 `run.Messages`：会话历史由 `ChatHistoryProvider` 按输入消息记录，
   装饰器在它下游，所以指令不会随每轮对话在历史里累积。
 
@@ -142,14 +142,14 @@ ResolveAsync(端点)                                   Providers
 - 失败 / 取消 / 超时路径都调用了 `SaveAsync`，且状态与归类码正确。
 - run 级超时与单次请求超时被归类成不同的码。
 
-流式出口（`tests/AgentWorkbench.EvaluationTests/HarnessStreaming/`）：
+流式出口（`tests/AgentWorkbench.Evaluation.AgentTask/HarnessStreaming/`）：
 
 - 增量分片拼接等于完整答复；工具完成事件带工具名与迭代号；终态唯一且在末尾、带 `RunId`。
 - **同源对齐**：同一脚本走两条出口，账本的终态 / 迭代数 / 工具序列 / 工具调用次数必须逐项相同。
 - **刻意的不对称**：工具事件带完整结果，账本存截断结果——断言同时锁两侧，改单边即红。
 - **负控**：模型侧崩溃时事件流里不允许出现 `Completed`（伪造终态）；判据自身也有负控（缺终态 / 终态不在末尾 / 终态重复三种坏形状都必须抛）。
 
-审批透传（`tests/AgentWorkbench.EvaluationTests/HarnessApproval/`）：
+审批透传（`tests/AgentWorkbench.Evaluation.AgentTask/HarnessApproval/`）：
 
 - 请求里的 `IToolApprover` **真的走到管道**（问了几次、问的是哪个工具都断言了）——防「契约加了没人用」。
 - 批准 → 工具执行；拒绝 → 工具**零执行**且归类码写进**账本**，整轮仍是 `succeeded`。

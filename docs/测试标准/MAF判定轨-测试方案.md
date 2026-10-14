@@ -15,6 +15,11 @@
 > 判据全部自建、布尔可判定、零 LLM；MAF 只出三样东西：**批量驱动**（`LocalEvaluator` + `EvalChecks`）、**断言容器**（`AssertAllPassed`）、**判分结果的聚合**。
 > 因此本轨是**唯一可以进 CI 门禁**的轨——退出码非 0 即阻断。
 
+> **⚠️ 2026-10-14 更正**：上面「只出三样」是**用到的**三样，不是 MAF **拥有**的全部。
+> 反射实测该子系统共 **28 个公开类型 / 6 个功能族**（预期数据通道、会话切分、循环终止评估、MEA 适配器……），
+> 其中 4 族本轨一个类型都没用；另有 6 个字段在本地路径下为 `null`、2 个 `Assert*` 是 no-op。
+> 完整盘查与实测证据见 **`docs/测试标准/MAF评估能力盘查.md`**。
+
 ---
 
 ## 1. 这一轨在整体评测里的位置
@@ -113,7 +118,7 @@ ScriptedChatClient（按请求序号回放，可抛异常）
 ## 4. 目录与文件
 
 ```
-tests/AgentWorkbench.EvaluationTests/
+tests/AgentWorkbench.Evaluation.AgentTask/
   Fixtures/
     ModelFakes.cs            ScriptedChatClient（按序号回放，可抛异常）/
                              PassthroughModelRuntime / MeteredModelRuntime + UsageMeter（可共享，复现串扰）/
@@ -158,7 +163,7 @@ tests/AgentWorkbench.EvaluationTests/
 
 ```bash
 dotnet build AgentWorkbench.slnx
-dotnet test tests/AgentWorkbench.EvaluationTests      # 退出码 0 = 通过；非 0 = 阻断
+dotnet test tests/AgentWorkbench.Evaluation.AgentTask      # 退出码 0 = 通过；非 0 = 阻断
 ```
 
 **门禁牙齿的验证**（每条轨必须做一次）：把期望值换成对立值，`AssertAllPassed` **必须抛**。
