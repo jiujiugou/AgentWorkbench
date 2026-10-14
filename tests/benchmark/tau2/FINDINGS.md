@@ -200,3 +200,27 @@
 - **反例**：
 - **未解释的现象**：
 - **产出物**：
+
+---
+
+## V12 — 接入落地：链路能否端到端跑通并判分？（M1/M2，2026-10-14）
+
+- **结论**：**PASS。** 在无任何 API key 的前提下，完整链路跑通，正控 reward=1.0、负控 reward=0.0。
+  确定性由两端保证：模型侧 = MockLlm replay fixture，用户侧 = `ScriptedUser`。
+- **证据**（`run_smoke.py` 17 项断言全绿）：
+  - 正控：`reward = 1.0`，`db_match = True`，轨迹含 1 条 assistant tool_call + 1 条 ToolMessage，
+    终止 `AGENT_STOP`。
+  - 负控：错误 order_id → 工具返回 `Error: Order not found` → `reward = 0.0`，`db_match = False`。
+  - MockLlm 两次都**恰好消费 2 轮回放**（`{"calls":2,"turn":2}`）→ 证明 ModelRuntime 未重试错位。
+  - `register_all()` 在运行时向 τ² registry 注册成功（`agentworkbench` + `scripted_user`），
+    **未改动 `D:\Code\tau2-bench` 任何文件**。
+- **反例**：正控单独绿不构成证据——必须负控同时为 0.0；否则只是「链路能出声」而非「判分有牙」。
+- **未解释的现象**：无。
+- **产出物**：
+  - M1：`tests/AgentWorkbench.MockLlm/Program.cs` 重写（replay 场景 + fixture 解析 + 控制面），
+    探针 `probes/mockllm_replay_probe.py` 21 项断言通过（含全新进程负控）。
+  - M2：`adapter/`（`harness_agent.py` / `scripted_user.py` / `__init__.py`）、
+    `fixtures/task73_{golden,bad_order}.jsonl`、`run_smoke.py`。
+  - 详见 `README.md`。
+- **边界**：本结论只覆盖**接入链路**；不覆盖 harness 编排（工具执行权在 τ²），
+  不覆盖带 `nl_assertions` 的 LLM-judge 任务。

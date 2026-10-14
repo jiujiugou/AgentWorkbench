@@ -3,3 +3,4 @@ _*.json
 _*.log
 __pycache__/
 *.pyc
+.run/

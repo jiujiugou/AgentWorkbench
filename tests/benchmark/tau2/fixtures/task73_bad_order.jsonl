@@ -1,0 +1,8 @@
+# τ² retail task 73 — NEGATIVE CONTROL. Same shape as the golden fixture, but the
+# order_id is deliberately wrong, so the environment changes nothing and the final DB
+# state cannot match the golden state. The evaluator must return reward == 0.0.
+#
+# This is what makes the golden run trustworthy: a 1.0 only means something if the
+# harness can also *fail* when the action is wrong.
+{"tool_calls":[{"id":"call_bad_1","name":"return_delivered_order_items","arguments":{"order_id":"#WRONG_ORDER_ID","item_ids":["7228247242","2698416822","8098621301","3320557165"],"payment_method_id":"credit_card_6824399"}}]}
+{"content":"已为您办理退货。###STOP###"}

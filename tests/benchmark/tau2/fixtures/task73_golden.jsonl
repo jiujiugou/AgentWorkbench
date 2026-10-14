@@ -1,0 +1,10 @@
+# τ² retail task 73 — golden trajectory, replayed verbatim by MockLlm (replay scenario).
+# One JSON object per line = one model turn. Blank lines and '#' comments are ignored.
+#
+# turn 1: the agent issues the exact golden action from task 73's evaluation_criteria.actions.
+#         `arguments` is a JSON object here; MockLlm re-serializes it to the JSON *string*
+#         that OpenAI-compatible tool calls require.
+{"tool_calls":[{"id":"call_golden_1","name":"return_delivered_order_items","arguments":{"order_id":"#W5272531","item_ids":["7228247242","2698416822","8098621301","3320557165"],"payment_method_id":"credit_card_6824399"}}]}
+# turn 2: after the tool result comes back, the agent terminates.
+#         `###STOP###` is mandatory — without it τ² runs to max_steps and scores 0 (V7).
+{"content":"已按您的订单办理退货，退款将原路返回。###STOP###"}
