@@ -65,7 +65,8 @@ public sealed class LedgerInvariants
         {
             var fact = h.Ledger.Values.First();
             Assert.True(fact.Persisted, $"路径 {fact.Status} 必须落库");
-            allStatuses.Add(fact.Status);
+            Assert.False(string.IsNullOrEmpty(fact.Status), "落库的 run 必须有终态 status");
+            allStatuses.Add(fact.Status!);
         }
 
         Assert.Contains(AgentRunStatus.Succeeded, allStatuses);
