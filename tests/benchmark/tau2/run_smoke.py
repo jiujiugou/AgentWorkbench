@@ -160,7 +160,7 @@ def run_scenario(
     expect_reward: float,
     agent_cls,
     user_cls,
-) -> float:
+) -> dict:
     print(f"\n--- {name} ---")
 
     # 1) 装载 fixture：MockLlm 会自动切到 replay 并把轮次游标归零。
@@ -230,7 +230,43 @@ def run_scenario(
     db_match = getattr(db, "db_match", None) if db is not None else None
     print(f"    reward = {reward}   (期望 {expect_reward})   db_match = {db_match}")
     check(f"{name} · reward == {expect_reward}", abs(reward - expect_reward) < 1e-9, f"实得 {reward}")
-    return reward
+    return {
+        "scenario": name,
+        "task_id": str(task.id),
+        "reward": reward,
+        "db_match": db_match,
+        "expected_reward": expect_reward,
+        "ok": abs(reward - expect_reward) < 1e-9,
+        "termination": term,
+        "tool_calls": len(calls),
+        "tool_results": len(results),
+    }
+
+
+def write_results(out_arg: str | None, task_id: str, results: list[dict]) -> None:
+    """把冒烟结果落盘成 results.json + meta.json（与 run_real.py 同构）。"""
+    from datetime import datetime
+
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    out_dir = Path(out_arg) if out_arg else (LOG_DIR / f"smoke-{stamp}")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "results.json").write_text(
+        json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
+    passed = sum(1 for r in results if r.get("ok"))
+    meta = {
+        "mode": "smoke",
+        "status": "done",
+        "finished_at": datetime.now().isoformat(timespec="seconds"),
+        "tasks": [task_id],
+        "agent_model": "MockLlm(replay fixture)",
+        "user_model": "ScriptedUser",
+        "passed": passed,
+        "total": len(results),
+        "pass_at_1": round(passed / len(results), 3) if results else 0.0,
+    }
+    (out_dir / "meta.json").write_text(
+        json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"\n落盘：{out_dir / 'results.json'}")
 
 
 def main() -> int:
@@ -238,6 +274,7 @@ def main() -> int:
     ap.add_argument("--task", default=DEFAULT_TASK, help="零售域任务 id（默认 73）")
     ap.add_argument("--no-start", action="store_true", help="假定两个 .NET 服务已在运行，不自行启动")
     ap.add_argument("--keep-services", action="store_true", help="结束后保留自启的服务进程")
+    ap.add_argument("--out", help="显式指定输出目录（默认 .run/smoke-<stamp>）")
     args = ap.parse_args()
 
     print("τ²-bench ⇄ AgentWorkbench 端到端冒烟")
@@ -290,22 +327,28 @@ def main() -> int:
         basis = [getattr(b, "value", str(b)) for b in (task.evaluation_criteria.reward_basis or [])]
         print(f"\n载入 task {task.id}   reward_basis={basis}   nl_assertions={task.evaluation_criteria.nl_assertions}")
 
-        run_scenario(
-            "正控(golden)",
-            HERE / "fixtures" / f"task{args.task}_golden.jsonl",
-            task,
-            1.0,
-            HarnessAgent,
-            ScriptedUser,
+        results: list[dict] = []
+        results.append(
+            run_scenario(
+                "正控(golden)",
+                HERE / "fixtures" / f"task{args.task}_golden.jsonl",
+                task,
+                1.0,
+                HarnessAgent,
+                ScriptedUser,
+            )
         )
-        run_scenario(
-            "负控(bad_order)",
-            HERE / "fixtures" / f"task{args.task}_bad_order.jsonl",
-            task,
-            0.0,
-            HarnessAgent,
-            ScriptedUser,
+        results.append(
+            run_scenario(
+                "负控(bad_order)",
+                HERE / "fixtures" / f"task{args.task}_bad_order.jsonl",
+                task,
+                0.0,
+                HarnessAgent,
+                ScriptedUser,
+            )
         )
+        write_results(args.out, args.task, results)
     finally:
         if started and not args.keep_services:
             print("\n关闭自启的服务…")
