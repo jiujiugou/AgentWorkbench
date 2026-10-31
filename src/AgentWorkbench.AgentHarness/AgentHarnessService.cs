@@ -236,7 +236,7 @@ public sealed class AgentHarnessService : IAgentHarness
             await PersistQuietlyAsync(
                 run.SessionId, AgentRunStatus.Cancelled, AgentRunCode.Cancelled, "调用方取消", run.Endpoint.Model,
                 run.Stopwatch.ElapsedMilliseconds, run.Execution.Traces);
-            writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.Failed, Error: "已停止生成。"));
+            writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.Failed, Error: "已停止生成。", Status: AgentRunStatus.Cancelled));
         }
         catch (AgentRunTimeoutException ex)
         {
@@ -244,7 +244,7 @@ public sealed class AgentHarnessService : IAgentHarness
             await PersistQuietlyAsync(
                 run.SessionId, AgentRunStatus.Timeout, AgentRunCode.RunTimeout, ex.Message, run.Endpoint.Model,
                 run.Stopwatch.ElapsedMilliseconds, run.Execution.Traces);
-            writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.Failed, Error: ex.Message));
+            writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.Failed, Error: ex.Message, Status: AgentRunStatus.Timeout));
         }
         catch (TimeoutException ex)
         {
@@ -252,7 +252,7 @@ public sealed class AgentHarnessService : IAgentHarness
             await PersistQuietlyAsync(
                 run.SessionId, AgentRunStatus.Timeout, AgentRunCode.ModelTimeout, ex.Message, run.Endpoint.Model,
                 run.Stopwatch.ElapsedMilliseconds, run.Execution.Traces);
-            writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.Failed, Error: ex.Message));
+            writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.Failed, Error: ex.Message, Status: AgentRunStatus.Timeout));
         }
         catch (Exception ex)
         {
@@ -260,7 +260,7 @@ public sealed class AgentHarnessService : IAgentHarness
             await PersistQuietlyAsync(
                 run.SessionId, AgentRunStatus.Failed, ClassifyFailure(ex, run.Execution), ex.Message, run.Endpoint.Model,
                 run.Stopwatch.ElapsedMilliseconds, run.Execution.Traces);
-            writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.Failed, Error: ex.Message));
+            writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.Failed, Error: ex.Message, Status: AgentRunStatus.Failed));
         }
         finally
         {

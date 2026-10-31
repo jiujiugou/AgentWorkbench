@@ -234,7 +234,14 @@ public sealed class ToolExecutionPipeline : IToolExecutionPipeline
     private static string Serialize(AIFunctionArguments arguments)
         => JsonSerializer.Serialize(arguments
             .OrderBy(kv => kv.Key, StringComparer.Ordinal)
-            .ToDictionary(kv => kv.Key, kv => kv.Value?.ToString()));
+            .ToDictionary(kv => kv.Key, kv => ArgValue(kv.Value)));
+
+    /// <summary>轨迹参数值：JsonElement 按其 JSON 值写入，标量保持 ToString()（字符串不带引号）。</summary>
+    private static object? ArgValue(object? value) => value switch
+    {
+        JsonElement element => element.Clone(),
+        _ => value?.ToString()
+    };
 
     private string? Truncate(string? value)
         => value is null || value.Length <= _options.MaxResultChars

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtools</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <!-- 真实 SQLite 与 FluentMigrator 由 Persistence 传递进来，这里不重复声明。 -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AgentWorkbench.Shared\AgentWorkbench.Shared.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.Domain\AgentWorkbench.Domain.csproj" />
+    <ProjectReference Include="..\..\src\AgentWorkbench.Persistence\AgentWorkbench.Persistence.csproj" />
+  </ItemGroup>
+</Project>

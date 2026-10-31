@@ -14,6 +14,7 @@ public static class DocumentsServiceCollectionExtensions
     {
         services.AddSingleton<IDocumentParseQueue, DocumentParseQueue>();
         services.AddSingleton<IPdfTextExtractor, PdfTextExtractor>();
+        services.AddSingleton<ITextFileExtractor, TextFileExtractor>();
         services.AddSingleton<ITextCleaner, TextCleaner>();
         services.AddSingleton<IChunker, Chunker>();
         services.AddSingleton<DocumentIngestionService>();

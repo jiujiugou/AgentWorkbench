@@ -1,6 +1,7 @@
 using AgentWorkbench.Shared.Options;
 using Dapper;
 using FluentMigrator.Runner;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -24,10 +25,19 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton(storagePaths);
 
         services.AddSingleton<IDbConnectionFactory, SqliteDbConnectionFactory>();
+
+        // 用「工厂」而不是 Scoped DbContext：6 个 Repository 与 3 个 BackgroundService 全是 Singleton，
+        // 注入 Scoped DbContext 会在启动时直接抛 "Cannot consume scoped service from singleton"。
+        // 工厂模式下每个方法自建一个 DbContext，开销与原先每次 _factory.Create() 开连接相当。
+        services.AddDbContextFactory<AppDbContext>(options => options
+            .UseSqlite(storagePaths.ConnectionString)
+            .UseSnakeCaseNamingConvention());
+
         services.AddSingleton<IDocumentRepository, DocumentRepository>();
         services.AddSingleton<IProviderRepository, ProviderRepository>();
         services.AddSingleton<IAgentRunRepository, AgentRunRepository>();
         services.AddSingleton<IConversationRepository, ConversationRepository>();
+        services.AddSingleton<IIdentityRepository, IdentityRepository>();
         services.AddSingleton<IWorkflowRepository, WorkflowRepository>();
 
         services.AddFluentMigratorCore()

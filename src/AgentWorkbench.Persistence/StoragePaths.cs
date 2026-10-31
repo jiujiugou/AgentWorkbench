@@ -26,7 +26,11 @@ public sealed class StoragePaths
         ConnectionString = new SqliteConnectionStringBuilder
         {
             DataSource = DbPath,
-            Cache = SqliteCacheMode.Shared
+            Cache = SqliteCacheMode.Shared,
+            // foreign_keys 是连接级开关且默认关闭。SqliteDbConnectionFactory 每次建连都执行
+            // PRAGMA foreign_keys=ON，但 EF 自己建连时不走那条路径 → 级联删除会静默失效
+            // （删 documents 不再连带 chunks / document_pages）。写进连接串，两条路径都生效。
+            ForeignKeys = true
         }.ToString();
     }
 

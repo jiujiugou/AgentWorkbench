@@ -19,10 +19,10 @@
     <Project Path="src/AgentWorkbench.Webapi/AgentWorkbench.Webapi.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/AgentWorkbench.MockLlm/AgentWorkbench.MockLlm.csproj" />
+    <Project Path="tests/AgentWorkbench.ApiContractTests/AgentWorkbench.ApiContractTests.csproj" />
+    <Project Path="tests/AgentWorkbench.ApplicationTests/AgentWorkbench.ApplicationTests.csproj" />
+    <Project Path="tests/AgentWorkbench.DataIntegrationTests/AgentWorkbench.DataIntegrationTests.csproj" />
+    <Project Path="tests/AgentWorkbench.EndToEndTests/AgentWorkbench.EndToEndTests.csproj" />
     <Project Path="tests/AgentWorkbench.ArchitectureTests/AgentWorkbench.ArchitectureTests.csproj" />
-    <Project Path="tests/AgentWorkbench.UnitTests/AgentWorkbench.UnitTests.csproj" />
-    <Project Path="tests/AgentWorkbench.Evaluation.AgentTask/AgentWorkbench.Evaluation.AgentTask.csproj" />
-    <Project Path="tests/AgentWorkbench.ModelInvocation/AgentWorkbench.ModelInvocation.csproj" />
   </Folder>
 </Solution>

@@ -1,4 +1,5 @@
-using Dapper;
+using AgentWorkbench.Domain;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace AgentWorkbench.Persistence;
@@ -29,81 +30,109 @@ public interface IWorkflowRepository
 }
 
 /// <inheritdoc />
-public sealed class WorkflowRepository : IWorkflowRepository
+/// <remarks>
+/// <para><b>EF Core 实现</b>（Dapper 版换成 LINQ 的试点）。改变的是"怎么表达查询"，不是行为：
+/// 同一条业务意图仍然产生同样的 SQL 语义，只是字段名与参数绑定交给编译器检查。</para>
+/// <para><b>为什么用 <see cref="IDbContextFactory{TContext}"/></b>：本类注册为 Singleton
+/// （3 个 BackgroundService 都在用它），而 <c>DbContext</c> 是 Scoped，直接注入会在启动时抛
+/// "Cannot consume scoped service from singleton"。工厂模式每次方法自建一个上下文，
+/// 开销与原来每次 <c>IDbConnectionFactory.Create()</c> 开连接相当。</para>
+/// <para><b>局部更新优先用 ExecuteUpdate/ExecuteDelete</b>：不加载实体、不发 SELECT，
+/// 且表达的是"改哪几列"，与原来的 <c>UPDATE ... SET 指定列</c> 完全等价。</para>
+/// </remarks>
+public sealed class WorkflowRepository(
+    IDbContextFactory<AppDbContext> contextFactory,
+    ILogger<WorkflowRepository> logger) : IWorkflowRepository
 {
-    private readonly IDbConnectionFactory _factory;
-    private readonly ILogger<WorkflowRepository> _logger;
-
-    public WorkflowRepository(IDbConnectionFactory factory, ILogger<WorkflowRepository> logger)
-    {
-        _factory = factory;
-        _logger = logger;
-    }
-
     // ---------------- definitions ----------------
 
     public async Task<WorkflowDefinitionRecord?> GetDefinitionAsync(string key)
     {
-        using var connection = _factory.Create();
-        return await connection.QuerySingleOrDefaultAsync<WorkflowDefinitionRecord>(
-            "SELECT * FROM workflow_definitions WHERE key = @key AND enabled = 1", new { key });
+        await using var db = await contextFactory.CreateDbContextAsync();
+        return await db.WorkflowDefinitions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(d => d.Key == key && d.Enabled == 1);
     }
 
     public async Task<IReadOnlyList<WorkflowDefinitionRecord>> ListDefinitionsAsync()
     {
-        using var connection = _factory.Create();
-        var rows = await connection.QueryAsync<WorkflowDefinitionRecord>(
-            "SELECT * FROM workflow_definitions ORDER BY key");
-        return rows.AsList();
+        await using var db = await contextFactory.CreateDbContextAsync();
+        return await db.WorkflowDefinitions
+            .AsNoTracking()
+            .OrderBy(d => d.Key)
+            .ToListAsync();
     }
 
+    /// <remarks>
+    /// 原来是一条 <c>INSERT ... ON CONFLICT(key) DO UPDATE</c>。EF 没有原生 upsert，
+    /// 这里退化成"先查再改"，多一次 SELECT 换来表达清晰——这也是本次试点里唯一明显变啰嗦的方法。
+    /// </remarks>
     public async Task UpsertDefinitionAsync(WorkflowDefinitionRecord definition)
     {
-        using var connection = _factory.Create();
-        await connection.ExecuteAsync(
-            """
-            INSERT INTO workflow_definitions (id, key, name, definition, enabled, created_at, updated_at)
-            VALUES (@Id, @Key, @Name, @Definition, @Enabled, @CreatedAt, @UpdatedAt)
-            ON CONFLICT(key) DO UPDATE SET name = @Name, definition = @Definition, enabled = @Enabled, updated_at = @UpdatedAt
-            """, definition);
+        await using var db = await contextFactory.CreateDbContextAsync();
+
+        var existing = await db.WorkflowDefinitions
+            .FirstOrDefaultAsync(d => d.Key == definition.Key);
+
+        if (existing is null)
+        {
+            db.WorkflowDefinitions.Add(definition);
+        }
+        else
+        {
+            existing.Name = definition.Name;
+            existing.Definition = definition.Definition;
+            existing.Enabled = definition.Enabled;
+            existing.UpdatedAt = definition.UpdatedAt;
+        }
+
+        await db.SaveChangesAsync();
     }
 
     // ---------------- prompts ----------------
 
     public async Task<IReadOnlyList<PromptVersionRecord>> ListPromptsAsync(string? promptKey)
     {
-        using var connection = _factory.Create();
-        var rows = string.IsNullOrWhiteSpace(promptKey)
-            ? await connection.QueryAsync<PromptVersionRecord>("SELECT * FROM prompt_versions ORDER BY prompt_key, version")
-            : await connection.QueryAsync<PromptVersionRecord>(
-                "SELECT * FROM prompt_versions WHERE prompt_key = @promptKey ORDER BY version", new { promptKey });
-        return rows.AsList();
+        await using var db = await contextFactory.CreateDbContextAsync();
+
+        var query = db.PromptVersions.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(promptKey))
+            query = query.Where(p => p.PromptKey == promptKey);
+
+        return await query
+            .OrderBy(p => p.PromptKey)
+            .ThenBy(p => p.Version)
+            .ToListAsync();
     }
 
     public async Task<PromptVersionRecord?> GetPromptAsync(string promptKey, string? version)
     {
-        using var connection = _factory.Create();
-        if (!string.IsNullOrWhiteSpace(version))
-        {
-            return await connection.QuerySingleOrDefaultAsync<PromptVersionRecord>(
-                "SELECT * FROM prompt_versions WHERE prompt_key = @promptKey AND version = @version",
-                new { promptKey, version });
-        }
+        await using var db = await contextFactory.CreateDbContextAsync();
 
-        return await connection.QuerySingleOrDefaultAsync<PromptVersionRecord>(
-            """
-            SELECT * FROM prompt_versions WHERE prompt_key = @promptKey
-            ORDER BY active DESC, created_at DESC LIMIT 1
-            """, new { promptKey });
+        var query = db.PromptVersions
+            .AsNoTracking()
+            .Where(p => p.PromptKey == promptKey);
+
+        return string.IsNullOrWhiteSpace(version)
+            ? await query
+                .OrderByDescending(p => p.Active)
+                .ThenByDescending(p => p.CreatedAt)
+                .FirstOrDefaultAsync()
+            : await query.FirstOrDefaultAsync(p => p.Version == version);
     }
 
-    public async Task<PromptVersionRecord> AddPromptAsync(string promptKey, string version, string content, bool active)
+    public async Task<PromptVersionRecord> AddPromptAsync(
+        string promptKey, string version, string content, bool active)
     {
-        using var connection = _factory.Create();
-        using var transaction = connection.BeginTransaction();
+        await using var db = await contextFactory.CreateDbContextAsync();
+        await using var transaction = await db.Database.BeginTransactionAsync();
+
         if (active)
-            await connection.ExecuteAsync(
-                "UPDATE prompt_versions SET active = 0 WHERE prompt_key = @promptKey", new { promptKey }, transaction);
+        {
+            await db.PromptVersions
+                .Where(p => p.PromptKey == promptKey)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.Active, 0));
+        }
 
         var record = new PromptVersionRecord
         {
@@ -113,36 +142,34 @@ public sealed class WorkflowRepository : IWorkflowRepository
             Active = active ? 1 : 0,
             CreatedAt = DateTimeOffset.UtcNow.ToString("o")
         };
-        record.Id = await connection.ExecuteScalarAsync<long>(
-            """
-            INSERT INTO prompt_versions (prompt_key, version, content, active, created_at)
-            VALUES (@PromptKey, @Version, @Content, @Active, @CreatedAt);
-            SELECT last_insert_rowid();
-            """, record, transaction);
-        transaction.Commit();
-        _logger.LogInformation("Upserted prompt version {Key}/{Version} active={Active}", promptKey, version, active);
+
+        db.PromptVersions.Add(record);
+        await db.SaveChangesAsync(); // Id 由 SQLite 回填，无需 SELECT last_insert_rowid()
+
+        await transaction.CommitAsync();
+        logger.LogInformation("Upserted prompt version {Key}/{Version} active={Active}", promptKey, version, active);
         return record;
     }
 
     public async Task<bool> ActivatePromptAsync(string promptKey, string version)
     {
-        using var connection = _factory.Create();
-        using var transaction = connection.BeginTransaction();
-        var exists = await connection.ExecuteScalarAsync<int>(
-            "SELECT COUNT(1) FROM prompt_versions WHERE prompt_key = @promptKey AND version = @version",
-            new { promptKey, version }, transaction);
-        if (exists == 0)
-        {
-            transaction.Rollback();
-            return false;
-        }
+        await using var db = await contextFactory.CreateDbContextAsync();
+        await using var transaction = await db.Database.BeginTransactionAsync();
 
-        await connection.ExecuteAsync(
-            "UPDATE prompt_versions SET active = 0 WHERE prompt_key = @promptKey", new { promptKey }, transaction);
-        await connection.ExecuteAsync(
-            "UPDATE prompt_versions SET active = 1 WHERE prompt_key = @promptKey AND version = @version",
-            new { promptKey, version }, transaction);
-        transaction.Commit();
+        var exists = await db.PromptVersions
+            .AnyAsync(p => p.PromptKey == promptKey && p.Version == version);
+        if (!exists)
+            return false; // 事务未提交即释放，等价于原来的 Rollback
+
+        await db.PromptVersions
+            .Where(p => p.PromptKey == promptKey)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.Active, 0));
+
+        await db.PromptVersions
+            .Where(p => p.PromptKey == promptKey && p.Version == version)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.Active, 1));
+
+        await transaction.CommitAsync();
         return true;
     }
 
@@ -150,110 +177,133 @@ public sealed class WorkflowRepository : IWorkflowRepository
 
     public async Task<WorkflowRunRecord> CreateRunAsync(WorkflowRunRecord run)
     {
-        using var connection = _factory.Create();
+        await using var db = await contextFactory.CreateDbContextAsync();
+
         run.CreatedAt = DateTimeOffset.UtcNow.ToString("o");
-        run.Id = await connection.ExecuteScalarAsync<long>(
-            """
-            INSERT INTO workflow_runs (workflow_key, document_id, prompt_version, status, error, latency_ms, created_at, finished_at)
-            VALUES (@WorkflowKey, @DocumentId, @PromptVersion, @Status, @Error, @LatencyMs, @CreatedAt, @FinishedAt);
-            SELECT last_insert_rowid();
-            """, run);
+        db.WorkflowRuns.Add(run);
+        await db.SaveChangesAsync(); // 自增 Id 回填到 run.Id
+
         return run;
     }
 
     public async Task<WorkflowRunRecord?> GetRunAsync(long id)
     {
-        using var connection = _factory.Create();
-        return await connection.QuerySingleOrDefaultAsync<WorkflowRunRecord>(
-            "SELECT * FROM workflow_runs WHERE id = @id", new { id });
+        await using var db = await contextFactory.CreateDbContextAsync();
+        return await db.WorkflowRuns
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == id);
     }
 
     public async Task<IReadOnlyList<WorkflowRunRecord>> ListRunsAsync(string? documentId)
     {
-        using var connection = _factory.Create();
-        var rows = string.IsNullOrWhiteSpace(documentId)
-            ? await connection.QueryAsync<WorkflowRunRecord>("SELECT * FROM workflow_runs ORDER BY id DESC")
-            : await connection.QueryAsync<WorkflowRunRecord>(
-                "SELECT * FROM workflow_runs WHERE document_id = @documentId ORDER BY id DESC", new { documentId });
-        return rows.AsList();
+        await using var db = await contextFactory.CreateDbContextAsync();
+
+        var query = db.WorkflowRuns.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(documentId))
+            query = query.Where(r => r.DocumentId == documentId);
+
+        return await query.OrderByDescending(r => r.Id).ToListAsync();
     }
 
+    /// <remarks>只更新变化的那 4 列，不加载实体——与原来手工指定 SET 列一致。</remarks>
     public async Task UpdateRunAsync(WorkflowRunRecord run)
     {
-        using var connection = _factory.Create();
-        await connection.ExecuteAsync(
-            """
-            UPDATE workflow_runs
-            SET status = @Status, error = @Error, latency_ms = @LatencyMs, finished_at = @FinishedAt
-            WHERE id = @Id
-            """, run);
+        await using var db = await contextFactory.CreateDbContextAsync();
+
+        await db.WorkflowRuns
+            .Where(r => r.Id == run.Id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(r => r.Status, run.Status)
+                .SetProperty(r => r.Error, run.Error)
+                .SetProperty(r => r.LatencyMs, run.LatencyMs)
+                .SetProperty(r => r.FinishedAt, run.FinishedAt));
     }
 
     public async Task<bool> DeleteRunAsync(long id)
     {
-        using var connection = _factory.Create();
-        return await connection.ExecuteAsync("DELETE FROM workflow_runs WHERE id = @id", new { id }) > 0;
+        await using var db = await contextFactory.CreateDbContextAsync();
+
+        var affected = await db.WorkflowRuns
+            .Where(r => r.Id == id)
+            .ExecuteDeleteAsync();
+
+        return affected > 0;
     }
 
     // ---------------- steps ----------------
 
     public async Task CreateStepsAsync(long runId, IReadOnlyList<WorkflowStepRecord> steps)
     {
-        using var connection = _factory.Create();
-        await connection.ExecuteAsync(
-            """
-            INSERT INTO workflow_steps (run_id, step_key, step_type, order_index, status, attempts)
-            VALUES (@RunId, @StepKey, @StepType, @OrderIndex, @Status, @Attempts)
-            """, steps.Select(s => new
-            {
-                RunId = runId,
-                s.StepKey,
-                s.StepType,
-                s.OrderIndex,
-                s.Status,
-                s.Attempts
-            }));
+        await using var db = await contextFactory.CreateDbContextAsync();
+
+        var records = steps.Select(s => new WorkflowStepRecord
+        {
+            RunId = runId,
+            StepKey = s.StepKey,
+            StepType = s.StepType,
+            OrderIndex = s.OrderIndex,
+            Status = s.Status,
+            Attempts = s.Attempts
+        });
+
+        db.WorkflowSteps.AddRange(records);
+        await db.SaveChangesAsync();
     }
 
     public async Task<IReadOnlyList<WorkflowStepRecord>> GetStepsAsync(long runId)
     {
-        using var connection = _factory.Create();
-        var rows = await connection.QueryAsync<WorkflowStepRecord>(
-            "SELECT * FROM workflow_steps WHERE run_id = @runId ORDER BY order_index", new { runId });
-        return rows.AsList();
+        await using var db = await contextFactory.CreateDbContextAsync();
+        return await db.WorkflowSteps
+            .AsNoTracking()
+            .Where(s => s.RunId == runId)
+            .OrderBy(s => s.OrderIndex)
+            .ToListAsync();
     }
 
     public async Task UpdateStepAsync(WorkflowStepRecord step)
     {
-        using var connection = _factory.Create();
-        await connection.ExecuteAsync(
-            """
-            UPDATE workflow_steps
-            SET status = @Status, attempts = @Attempts, input = @Input, output = @Output,
-                error = @Error, started_at = @StartedAt, finished_at = @FinishedAt
-            WHERE id = @Id
-            """, step);
+        await using var db = await contextFactory.CreateDbContextAsync();
+
+        await db.WorkflowSteps
+            .Where(s => s.Id == step.Id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.Status, step.Status)
+                .SetProperty(x => x.Attempts, step.Attempts)
+                .SetProperty(x => x.Input, step.Input)
+                .SetProperty(x => x.Output, step.Output)
+                .SetProperty(x => x.Error, step.Error)
+                .SetProperty(x => x.StartedAt, step.StartedAt)
+                .SetProperty(x => x.FinishedAt, step.FinishedAt));
     }
 
     public async Task ResetStepAsync(long stepId)
     {
-        using var connection = _factory.Create();
-        await connection.ExecuteAsync(
-            """
-            UPDATE workflow_steps
-            SET status = 'pending', attempts = 0, output = NULL, error = NULL, started_at = NULL, finished_at = NULL
-            WHERE id = @stepId
-            """, new { stepId });
+        await using var db = await contextFactory.CreateDbContextAsync();
+
+        await db.WorkflowSteps
+            .Where(s => s.Id == stepId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.Status, WorkflowStepStatuses.Pending)
+                .SetProperty(x => x.Attempts, 0)
+                .SetProperty(x => x.Output, (string?)null)
+                .SetProperty(x => x.Error, (string?)null)
+                .SetProperty(x => x.StartedAt, (string?)null)
+                .SetProperty(x => x.FinishedAt, (string?)null));
     }
 
     public async Task MarkDownstreamStaleAsync(long runId, int orderIndex)
     {
-        using var connection = _factory.Create();
-        await connection.ExecuteAsync(
-            """
-            UPDATE workflow_steps
-            SET status = 'stale', output = NULL, error = NULL, started_at = NULL, finished_at = NULL
-            WHERE run_id = @runId AND order_index > @orderIndex AND status <> 'stale'
-            """, new { runId, orderIndex });
+        await using var db = await contextFactory.CreateDbContextAsync();
+
+        await db.WorkflowSteps
+            .Where(s => s.RunId == runId
+                        && s.OrderIndex > orderIndex
+                        && s.Status != WorkflowStepStatuses.Stale)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.Status, WorkflowStepStatuses.Stale)
+                .SetProperty(x => x.Output, (string?)null)
+                .SetProperty(x => x.Error, (string?)null)
+                .SetProperty(x => x.StartedAt, (string?)null)
+                .SetProperty(x => x.FinishedAt, (string?)null));
     }
 }

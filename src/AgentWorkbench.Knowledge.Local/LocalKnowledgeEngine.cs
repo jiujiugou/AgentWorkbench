@@ -55,10 +55,10 @@ public sealed class LocalKnowledgeEngine : IKnowledgeEngine
             IndexedChunkCount: indexed);
     }
 
-    public Task IndexDocumentAsync(string documentId, CancellationToken cancellationToken)
+    public Task<IndexResult> IndexDocumentAsync(string documentId, CancellationToken cancellationToken)
         => _indexer.IndexDocumentAsync(documentId, cancellationToken);
 
-    public Task RemoveDocumentAsync(string documentId, CancellationToken cancellationToken)
+    public Task<RemoveResult> RemoveDocumentAsync(string documentId, CancellationToken cancellationToken)
         => _indexer.RemoveDocumentAsync(documentId, cancellationToken);
 
     public Task<IReadOnlyList<RetrievalHit>> RetrieveAsync(

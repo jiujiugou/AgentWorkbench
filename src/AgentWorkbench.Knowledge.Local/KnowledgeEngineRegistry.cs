@@ -37,10 +37,10 @@ public sealed class UnavailableKnowledgeEngine : IKnowledgeEngine
     public Task<KnowledgeStatus> GetStatusAsync(CancellationToken cancellationToken)
         => Task.FromResult(new KnowledgeStatus(Provider, Capabilities, false, "none", string.Empty, 0, 0));
 
-    public Task IndexDocumentAsync(string documentId, CancellationToken cancellationToken)
+    public Task<IndexResult> IndexDocumentAsync(string documentId, CancellationToken cancellationToken)
         => throw new NotImplementedException($"知识引擎 '{Provider}' 尚未接入（仅 local 已实现）。");
 
-    public Task RemoveDocumentAsync(string documentId, CancellationToken cancellationToken)
+    public Task<RemoveResult> RemoveDocumentAsync(string documentId, CancellationToken cancellationToken)
         => throw new NotImplementedException($"知识引擎 '{Provider}' 尚未接入（仅 local 已实现）。");
 
     public Task<IReadOnlyList<RetrievalHit>> RetrieveAsync(

@@ -52,6 +52,8 @@ public sealed class KnowledgeController : ControllerBase
         foreach (var document in documents)
         {
             var chunkCount = await _documents.CountChunksAsync(document.Id);
+            var vectorCount = await _documents.CountVectorsAsync(document.Id);
+            var indexState = IndexStates.Describe(document.Status, chunkCount, vectorCount);
             result.Add(new
             {
                 id = document.Id,
@@ -59,7 +61,9 @@ public sealed class KnowledgeController : ControllerBase
                 status = document.Status,
                 pageCount = document.PageCount,
                 chunkCount,
-                indexed = document.Status == DocumentStatus.Parsed && chunkCount > 0
+                vectorCount,
+                indexState,
+                indexed = indexState == IndexStates.Full
             });
         }
         _logger.LogDebug("List knowledge documents: {Count} in {ElapsedMs}ms", result.Count, sw.ElapsedMilliseconds);
@@ -77,10 +81,36 @@ public sealed class KnowledgeController : ControllerBase
             return NotFound();
         }
 
-        await _engine.RemoveDocumentAsync(id, cancellationToken);
-        await _engine.IndexDocumentAsync(id, cancellationToken);
-        _logger.LogInformation("Reindex completed: {DocumentId} in {ElapsedMs}ms", id, sw.ElapsedMilliseconds);
-        return Accepted(new { id, status = await _engine.GetStatusAsync(cancellationToken) });
+        // 重建前先清旧向量/全文行：chunk id 会随重新分块变化，不清理会留下指向已删 chunk 的孤儿向量。
+        var removal = await _engine.RemoveDocumentAsync(id, cancellationToken);
+        if (!removal.Cleaned)
+        {
+            _logger.LogWarning(
+                "Reindex aborted: {DocumentId} 旧索引未清干净 Fts={Fts} Vectors={Vectors} Code={Code}",
+                id, removal.FtsRemaining, removal.VectorsRemaining, removal.Failure?.Code);
+            return Conflict(new
+            {
+                message = "旧索引未能完全清理，已中止重建以免留下无法检索的孤儿向量。",
+                code = removal.Failure?.Code
+            });
+        }
+
+        var index = await _engine.IndexDocumentAsync(id, cancellationToken);
+        _logger.LogInformation(
+            "Reindex completed: {DocumentId} Chunks={Chunks} Fts={Fts} Vectors={Vectors} Code={Code} in {ElapsedMs}ms",
+            id, index.ChunkCount, index.FtsCount, index.VectorCount, index.Failure?.Code, sw.ElapsedMilliseconds);
+        return Accepted(new
+        {
+            id,
+            chunkCount = index.ChunkCount,
+            vectorCount = index.VectorCount,
+            indexState = index.Failure is null && index.ChunkCount > 0 && index.VectorCount >= index.ChunkCount
+                ? IndexStates.Full
+                : index.Failure is null ? IndexStates.TextOnly : IndexStates.Partial,
+            failure = index.Failure?.Code,
+            failureMessage = index.Failure?.Message,
+            status = await _engine.GetStatusAsync(cancellationToken)
+        });
     }
 
     [HttpPost("retrieve")]

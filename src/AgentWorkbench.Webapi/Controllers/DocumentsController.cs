@@ -47,10 +47,12 @@ public sealed class DocumentsController : ControllerBase
             _logger.LogWarning("Upload failed: empty file");
             return BadRequest(new { message = "文件为空" });
         }
-        if (!file.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+        string[] supported = [".pdf", ".txt", ".md", ".json"];
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (!supported.Contains(ext))
         {
-            _logger.LogWarning("Upload failed: not a PDF - {FileName}", file.FileName);
-            return BadRequest(new { message = "仅支持 PDF（P0 文本层）" });
+            _logger.LogWarning("Upload failed: unsupported type - {FileName}", file.FileName);
+            return BadRequest(new { message = "仅支持 PDF / TXT / MD / JSON（P0 文本层，JSON 约定 content 或 text 字段为正文）" });
         }
         if (file.Length > _options.MaxFileBytes)
         {
@@ -72,7 +74,10 @@ public sealed class DocumentsController : ControllerBase
         var documents = await _repository.ListAsync();
         var result = new List<object>(documents.Count);
         foreach (var document in documents)
-            result.Add(ToDto(document, await _repository.CountChunksAsync(document.Id)));
+            result.Add(ToDto(
+                document,
+                await _repository.CountChunksAsync(document.Id),
+                await _repository.CountVectorsAsync(document.Id)));
         _logger.LogDebug("List documents: {Count} in {ElapsedMs}ms", result.Count, sw.ElapsedMilliseconds);
         return Ok(result);
     }
@@ -88,7 +93,7 @@ public sealed class DocumentsController : ControllerBase
             return NotFound();
         }
         _logger.LogDebug("Get document: {DocumentId} in {ElapsedMs}ms", id, sw.ElapsedMilliseconds);
-        return Ok(ToDto(document, await _repository.CountChunksAsync(id)));
+        return Ok(ToDto(document, await _repository.CountChunksAsync(id), await _repository.CountVectorsAsync(id)));
     }
 
     [HttpGet("{id}/pages")]
@@ -150,10 +155,37 @@ public sealed class DocumentsController : ControllerBase
             return NotFound();
         }
 
-        await _knowledge.RemoveDocumentAsync(id, cancellationToken);
+        // 先清索引，确认真的没有残留再删记录。
+        // 反过来（先删记录）的风险更高：fts / 向量表都没有外键，删不掉时不会报错，
+        // 只会留下"列表里看不见、检索却能命中"的幽灵，且用户没有任何入口再清一次。
+        var removal = await _knowledge.RemoveDocumentAsync(id, cancellationToken);
+        if (!removal.Cleaned)
+        {
+            _logger.LogError(
+                "删除中止：{DocumentId} 索引未清干净 Fts={Fts} Vectors={Vectors} Code={Code} Message={Message}",
+                id, removal.FtsRemaining, removal.VectorsRemaining, removal.Failure?.Code, removal.Failure?.Message);
+            return Conflict(new
+            {
+                message = "索引未能完全清理，已保留记录以免检索命中已删内容，请稍后重试。",
+                code = removal.Failure?.Code,
+                ftsRemaining = removal.FtsRemaining,
+                vectorsRemaining = removal.VectorsRemaining
+            });
+        }
+
         await _repository.DeleteAsync(id);
-        if (System.IO.File.Exists(document.StoredPath))
-            System.IO.File.Delete(document.StoredPath);
+
+        // 文件删不掉不影响一致性：记录与索引都已清空，残留文件只是磁盘垃圾。
+        try
+        {
+            if (System.IO.File.Exists(document.StoredPath))
+                System.IO.File.Delete(document.StoredPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "删除文件失败（记录与索引已清理）：{Path}", document.StoredPath);
+        }
+
         _logger.LogInformation("Delete document: {DocumentId} in {ElapsedMs}ms", id, sw.ElapsedMilliseconds);
         return NoContent();
     }
@@ -172,7 +204,7 @@ public sealed class DocumentsController : ControllerBase
         return PhysicalFile(document.StoredPath, "application/pdf", document.FileName);
     }
 
-    private static object ToDto(DocumentRecord document, int? chunkCount = null) => new
+    private static object ToDto(DocumentRecord document, int? chunkCount = null, int vectorCount = 0) => new
     {
         id = document.Id,
         fileName = document.FileName,
@@ -183,6 +215,8 @@ public sealed class DocumentsController : ControllerBase
         error = document.Error,
         createdAt = document.CreatedAt,
         parsedAt = document.ParsedAt,
-        chunkCount
+        chunkCount,
+        vectorCount,
+        indexState = IndexStates.Describe(document.Status, chunkCount ?? 0, vectorCount)
     };
 }

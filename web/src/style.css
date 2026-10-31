@@ -1,5 +1,95 @@
+/* ============================================================
+   AgentWorkbench · 设计系统
+   现代浅色主题：靛蓝主色 / 柔和分层阴影 / 大圆角 / 200ms 动效
+   Element Plus 组件通过 --el-* 变量继承同一套 token
+   ============================================================ */
+
 :root {
   color-scheme: light;
+
+  /* ---- 品牌与语义色 ---- */
+  --aw-primary: #4f46e5;
+  --aw-primary-hover: #6366f1;
+  --aw-primary-active: #4338ca;
+  --aw-success: #10b981;
+  --aw-warning: #f59e0b;
+  --aw-danger: #ef4444;
+  --aw-info: #64748b;
+
+  /* ---- 中性色 ---- */
+  --aw-bg: #f5f6fa;
+  --aw-surface: #ffffff;
+  --aw-surface-2: #f8fafc;
+  --aw-surface-3: #f1f3f9;
+  --aw-border: #e6e8f0;
+  --aw-border-strong: #d3d8e6;
+  --aw-text: #191d2e;
+  --aw-text-2: #5a6178;
+  --aw-text-3: #98a0b5;
+
+  /* ---- 形状 ---- */
+  --aw-radius-s: 8px;
+  --aw-radius-m: 12px;
+  --aw-radius-l: 18px;
+  --aw-radius-full: 999px;
+
+  /* ---- 阴影（柔和分层） ---- */
+  --aw-shadow-1: 0 1px 2px rgb(25 29 46 / 0.04), 0 1px 3px rgb(25 29 46 / 0.06);
+  --aw-shadow-2: 0 4px 14px rgb(25 29 46 / 0.07), 0 1px 3px rgb(25 29 46 / 0.05);
+  --aw-shadow-3: 0 14px 44px rgb(25 29 46 / 0.14), 0 2px 8px rgb(25 29 46 / 0.06);
+
+  /* ---- 动效 ---- */
+  --aw-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --aw-dur: 180ms;
+
+  /* ---- Element Plus 主题覆盖 ---- */
+  --el-color-primary: var(--aw-primary);
+  --el-color-primary-light-3: #6366f1;
+  --el-color-primary-light-5: #818cf8;
+  --el-color-primary-light-7: #c7d2fe;
+  --el-color-primary-light-8: #e3e7fd;
+  --el-color-primary-light-9: #eef1fe;
+  --el-color-primary-dark-2: #4338ca;
+  --el-color-success: #10b981;
+  --el-color-success-light-3: #34d399;
+  --el-color-success-light-5: #6ee7b7;
+  --el-color-success-light-8: #d9f5e9;
+  --el-color-success-light-9: #ecfaf3;
+  --el-color-success-dark-2: #059669;
+  --el-color-warning: #f59e0b;
+  --el-color-warning-light-3: #fbbf24;
+  --el-color-warning-light-5: #fcd34d;
+  --el-color-warning-light-8: #fdeed2;
+  --el-color-warning-light-9: #fef6e7;
+  --el-color-warning-dark-2: #d97706;
+  --el-color-danger: #ef4444;
+  --el-color-danger-light-3: #f87171;
+  --el-color-danger-light-5: #fca5a5;
+  --el-color-danger-light-8: #fde3e3;
+  --el-color-danger-light-9: #fdeeee;
+  --el-color-danger-dark-2: #dc2626;
+  --el-color-info: #64748b;
+  --el-color-info-light-3: #94a3b8;
+  --el-color-info-light-5: #b6c2d2;
+  --el-color-info-light-8: #e8ecf3;
+  --el-color-info-light-9: #f3f5f9;
+  --el-color-info-dark-2: #475569;
+  --el-border-radius-base: var(--aw-radius-m);
+  --el-border-radius-small: var(--aw-radius-s);
+  --el-border-color: var(--aw-border);
+  --el-border-color-light: var(--aw-border);
+  --el-border-color-lighter: var(--aw-border);
+  --el-text-color-primary: var(--aw-text);
+  --el-text-color-regular: var(--aw-text-2);
+  --el-text-color-secondary: var(--aw-text-3);
+  --el-bg-color: var(--aw-surface);
+  --el-bg-color-overlay: var(--aw-surface);
+  --el-bg-color-page: transparent;
+  --el-fill-color-blank: var(--aw-surface);
+  --el-fill-color-light: var(--aw-surface-3);
+  --el-fill-color-lighter: var(--aw-surface-2);
+  --el-box-shadow-light: var(--aw-shadow-1);
+  --el-font-family: "Inter", "Segoe UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
 }
 
 * {
@@ -14,7 +104,168 @@ body,
 }
 
 body {
-  font-family: "Segoe UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
-  color: #1f2328;
-  background: #f5f6f8;
+  font-family: var(--el-font-family);
+  color: var(--aw-text);
+  /* 极淡的渐变光斑，避免纯色大底的呆板 */
+  background:
+    radial-gradient(1100px 520px at 88% -12%, #e8ebfd 0%, transparent 62%),
+    radial-gradient(880px 480px at -8% 108%, #eeeafd 0%, transparent 58%),
+    var(--aw-bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: #dcdffb;
+  color: var(--aw-text);
+}
+
+/* 细滚动条 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c9cede;
+  border: 3px solid transparent;
+  border-radius: var(--aw-radius-full);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #aeb6cc;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 统一焦点环 */
+:focus-visible {
+  outline: 2px solid var(--aw-primary);
+  outline-offset: 2px;
+  border-radius: var(--aw-radius-s);
+}
+
+/* ============================================================
+   Element Plus 细节修正（贴近现代观感）
+   ============================================================ */
+.el-button {
+  font-weight: 500;
+  transition: transform var(--aw-dur) var(--aw-ease), box-shadow var(--aw-dur) var(--aw-ease),
+    background-color var(--aw-dur) var(--aw-ease), border-color var(--aw-dur) var(--aw-ease),
+    color var(--aw-dur) var(--aw-ease);
+}
+
+.el-button:not(.is-disabled):active {
+  transform: scale(0.97);
+}
+
+.el-button--primary {
+  --el-button-bg-color: var(--aw-primary);
+  --el-button-border-color: var(--aw-primary);
+  --el-button-hover-bg-color: var(--aw-primary-hover);
+  --el-button-hover-border-color: var(--aw-primary-hover);
+  --el-button-active-bg-color: var(--aw-primary-active);
+  --el-button-active-border-color: var(--aw-primary-active);
+}
+
+.el-card {
+  border-radius: var(--aw-radius-l);
+  border: 1px solid var(--aw-border);
+  box-shadow: var(--aw-shadow-1);
+}
+
+.el-input__wrapper,
+.el-textarea__inner {
+  border-radius: var(--aw-radius-m);
+  box-shadow: 0 0 0 1px var(--aw-border) inset;
+  transition: box-shadow var(--aw-dur) var(--aw-ease);
+}
+
+.el-input__wrapper:hover,
+.el-textarea__inner:hover {
+  box-shadow: 0 0 0 1px var(--aw-border-strong) inset;
+}
+
+.el-input__wrapper.is-focus,
+.el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px var(--aw-primary) inset, 0 0 0 3px rgb(79 70 229 / 0.12);
+}
+
+.el-dialog {
+  border-radius: var(--aw-radius-l);
+  box-shadow: var(--aw-shadow-3);
+}
+
+.el-message {
+  border-radius: var(--aw-radius-m);
+  box-shadow: var(--aw-shadow-2);
+}
+
+.el-table {
+  --el-table-border-color: var(--aw-border);
+  --el-table-header-bg-color: var(--aw-surface-2);
+  --el-table-row-hover-bg-color: var(--aw-surface-3);
+}
+
+.el-table th.el-table__cell {
+  font-weight: 600;
+  color: var(--aw-text-2);
+}
+
+.el-switch.is-checked .el-switch__core {
+  background-color: var(--aw-primary);
+  border-color: var(--aw-primary);
+}
+
+.el-tag {
+  border-radius: var(--aw-radius-s);
+  font-weight: 500;
+}
+
+.el-drawer {
+  border-radius: var(--aw-radius-l) 0 0 var(--aw-radius-l);
+}
+
+/* 消息入场动画 */
+@keyframes aw-msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes aw-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes aw-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================================
+   资料页主题（模板：深墨绿侧栏 + 陶土橙强调 + 浅灰面板）
+   ============================================================ */
+:root {
+  --aw-doc-ink: #2f3a36;      /* 侧边栏深墨绿 */
+  --aw-doc-ink-2: #3a4743;    /* 深色按钮 */
+  --aw-doc-accent: #cf7b53;   /* 当前项陶土橙 */
+  --aw-doc-page: #e9ebea;     /* 页面底色 */
+  --aw-doc-panel: #f3f4f2;    /* 右侧上传面板 */
+  --aw-doc-dash: #c6ccc9;     /* 虚线框 */
 }

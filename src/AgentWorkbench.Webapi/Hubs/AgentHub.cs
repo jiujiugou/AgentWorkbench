@@ -7,8 +7,10 @@ using AgentWorkbench.Knowledge.Abstractions.Retrieval;
 using AgentWorkbench.Knowledge.Local;
 using AgentWorkbench.Knowledge.Local.Tools;
 using AgentWorkbench.Persistence;
+using AgentWorkbench.Shared;
 using AgentWorkbench.Shared.Options;
 using AgentWorkbench.ToolExecution;
+using AgentWorkbench.Webapi.Auth;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 
@@ -63,10 +65,26 @@ public sealed class AgentHub : Hub
     {
         var messageId = Guid.NewGuid().ToString("N");
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(Context.ConnectionAborted);
-        Generations[Context.ConnectionId] = linked;
+
+        // 连接也必须有身份：多租户下「谁在说话」不能靠客户端自报。
+        if (Context.User.Identity?.IsAuthenticated != true)
+        {
+            await SendErrorAsync("未登录：请刷新页面重新登录。");
+            return;
+        }
+        var (tenantId, userId) = Context.User.Owner();
+
+        // 放开并行调用后 Stop 才能插队进来，代价是同连接可以同时发起两次 Send；
+        // 这里用 TryAdd 挡掉第二条，否则后到的会覆盖前一条的 CTS，导致前一条再也停不掉。
+        if (!Generations.TryAdd(Context.ConnectionId, linked))
+        {
+            await SendErrorAsync("已有生成在进行中，请先停止或等待完成。");
+            return;
+        }
 
         var answer = new StringBuilder();
         ConversationRecord? conversation = null;
+        HarnessRunResult? run = null;
 
         try
         {
@@ -78,7 +96,9 @@ public sealed class AgentHub : Hub
                 return;
             }
 
-            conversation = await _conversations.GetOrCreateAsync(request.ConversationId);
+            // 客户端给的 conversationId 只是「我想接着哪个」，是否属于我由仓储判定：
+            // 别人的 id 会新建一个新会话，既不越权也不泄露存在性。
+            conversation = await _conversations.GetOrCreateAsync(request.ConversationId, tenantId, userId);
             await Clients.Caller.SendAsync("ReceiveConversation", new { conversationId = conversation.Id }, linked.Token);
             await _conversations.AddMessageAsync(conversation.Id, "user", request.Text);
 
@@ -97,6 +117,21 @@ public sealed class AgentHub : Hub
                         break;
 
                     case HarnessStreamEventKind.ToolCompleted:
+                        // 执行过程要看得见：每次工具调用完成就推一条，前端按序拼成时间线。
+                        // 只推预览（截断），完整结果留在轨迹表里——这是给演示/排障看的，不是数据通道。
+                        if (evt.Tool is { } tool)
+                        {
+                            await Clients.Caller.SendAsync("ReceiveTool", new
+                            {
+                                messageId,
+                                iteration = tool.Iteration,
+                                name = tool.Name,
+                                arguments = Clip(tool.Arguments),
+                                resultPreview = Clip(tool.Result),
+                                error = tool.Error
+                            }, linked.Token);
+                        }
+
                         var sources = TryReadKnowledgeSources(evt.Tool);
                         if (sources is not null)
                             await Clients.Caller.SendAsync("ReceiveSources", new { messageId, sources }, linked.Token);
@@ -104,20 +139,43 @@ public sealed class AgentHub : Hub
 
                     case HarnessStreamEventKind.Failed:
                         // 失败已由 harness 落轨迹（含失败分类码），这里只负责让用户看见。
+                        // 同时把终态发下去：没有它，「用户取消」和「服务出错」在界面上长得一样。
+                        await NotifyStoppedAsync(messageId, evt.Status, evt.Error);
                         await SendErrorAsync(evt.Error ?? "生成失败。");
                         break;
 
                     case HarnessStreamEventKind.Completed:
-                        // 终态由下面统一收尾（保存答复 + ReceiveDone），此处不重复动作。
+                        // 终态由下面统一收尾（保存答复 + ReceiveDone），此处只接住结果。
+                        run = evt.Result;
                         break;
                 }
             }
 
             await SaveAnswerAsync(conversation.Id, answer);
-            await Clients.Caller.SendAsync("ReceiveDone", new { messageId, conversationId = conversation.Id }, linked.Token);
+            await Clients.Caller.SendAsync("ReceiveDone", new
+            {
+                messageId,
+                conversationId = conversation.Id,
+                // run 摘要：iterations / latencyMs / status / code 是「执行控制真的在生效」的唯一可视证据，
+                // 没有它，界面上「答完了」和「跑满迭代被强制收口」长得一模一样。
+                run = run is null ? null : new
+                {
+                    runId = run.RunId,
+                    iterations = run.Iterations,
+                    model = run.Model,
+                    latencyMs = run.LatencyMs,
+                    status = run.Status,
+                    code = run.Code,
+                    steps = run.Steps.Count,
+                    tools = run.Steps.Count(s => string.Equals(s.Kind, "tool", StringComparison.Ordinal))
+                }
+            }, linked.Token);
         }
         catch (OperationCanceledException)
         {
+            // 取消时 harness 的 Failed 事件常常送不进来（读端 token 已取消，await foreach 直接抛），
+            // 所以终态要在这里补发一次，否则界面上的轨迹条永远停在「运行中」。
+            await NotifyStoppedAsync(messageId, AgentRunStatus.Cancelled, "已停止生成。");
             await SaveAnswerAsync(conversation?.Id, answer);
             await SendErrorAsync("已停止生成。");
         }
@@ -185,6 +243,24 @@ public sealed class AgentHub : Hub
 
     private Task SendErrorAsync(string message)
         => Clients.Caller.SendAsync("Error", new { message });
+
+    /// <summary>工具参数/结果截断到可传输长度：完整内容在轨迹表里，界面上只需要够判断的量。</summary>
+    private static string? Clip(string? text, int max = 600)
+        => text is null || text.Length <= max ? text : text[..max] + "…";
+
+    /// <summary>发终态通知；连接已断时静默失败（这里的目的只是让还活着的客户端知道发生了中止）。</summary>
+    private async Task NotifyStoppedAsync(string messageId, string? status, string? error)
+    {
+        if (status is null) return;
+        try
+        {
+            await Clients.Caller.SendAsync("ReceiveStopped", new { messageId, status, error });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "发送终态通知失败（连接可能已断开）");
+        }
+    }
 
     private static object ToSource(RetrievalHit hit) => new
     {

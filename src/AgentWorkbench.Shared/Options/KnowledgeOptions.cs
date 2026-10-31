@@ -37,6 +37,18 @@ public sealed class EmbeddingOptions
     public string ApiKey { get; set; } = string.Empty;
 
     public int Dimensions { get; set; } = 1024;
+
+    /// <summary>
+    /// 一轮批量向量化的总预算（含全部重试与退避）。超时按暂时性失败处理。
+    /// </summary>
+    /// <remarks>
+    /// 是"总寿命"而不是"单次超时"：单次超时由装饰器从总预算内派生（约 80% / (重试次数+1)）。
+    /// 若把总预算当单次超时用，重试加退避必然超出它，RetryCount 会形同虚设。
+    /// </remarks>
+    public int TimeoutSeconds { get; set; } = 20;
+
+    /// <summary>暂时性失败的重试次数；0 = 不重试。永久性失败（401/404/维度不符）一律不重试。</summary>
+    public int MaxRetryAttempts { get; set; } = 2;
 }
 
 /// <summary>重排配置（P1 默认关闭）。</summary>

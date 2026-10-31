@@ -1,5 +1,4 @@
-using Dapper;
-using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
 
 namespace AgentWorkbench.Persistence;
 
@@ -16,28 +15,24 @@ public interface IAgentRunRepository
 }
 
 /// <inheritdoc />
-public sealed class AgentRunRepository : IAgentRunRepository
+/// <remarks>
+/// EF Core 实现。<c>Id</c> 不再需要 <c>SELECT last_insert_rowid()</c>：
+/// <c>SaveChangesAsync</c> 之后自增主键会回填到实体上。
+/// </remarks>
+public sealed class AgentRunRepository(
+    IDbContextFactory<AppDbContext> contextFactory,
+    ILogger<AgentRunRepository> logger) : IAgentRunRepository
 {
-    private readonly IDbConnectionFactory _factory;
-    private readonly ILogger<AgentRunRepository> _logger;
-
-    public AgentRunRepository(IDbConnectionFactory factory, ILogger<AgentRunRepository> logger)
-    {
-        _factory = factory;
-        _logger = logger;
-    }
-
     public async Task<long> InsertRunAsync(AgentRunRecord run)
     {
-        using var connection = _factory.Create();
-        var id = await connection.ExecuteScalarAsync<long>(
-            """
-            INSERT INTO agent_runs (session_id, status, iterations, model, latency_ms, error, error_code, created_at, finished_at)
-            VALUES (@SessionId, @Status, @Iterations, @Model, @LatencyMs, @Error, @ErrorCode, @CreatedAt, @FinishedAt);
-            SELECT last_insert_rowid();
-            """, run);
-        _logger.LogInformation("Inserted agent run {RunId} session={SessionId} iterations={Iterations}", id, run.SessionId, run.Iterations);
-        return id;
+        await using var db = await contextFactory.CreateDbContextAsync();
+        db.AgentRuns.Add(run);
+        await db.SaveChangesAsync();
+
+        logger.LogInformation(
+            "Inserted agent run {RunId} session={SessionId} iterations={Iterations}",
+            run.Id, run.SessionId, run.Iterations);
+        return run.Id;
     }
 
     public async Task InsertStepsAsync(long runId, IReadOnlyList<AgentStepRecord> steps)
@@ -45,50 +40,42 @@ public sealed class AgentRunRepository : IAgentRunRepository
         if (steps.Count == 0)
             return;
 
-        using var connection = _factory.Create();
-        await connection.ExecuteAsync(
-            """
-            INSERT INTO agent_steps (run_id, iteration, kind, tool, arguments, result, error, created_at)
-            VALUES (@RunId, @Iteration, @Kind, @Tool, @Arguments, @Result, @Error, @CreatedAt)
-            """, steps.Select(s => new
-            {
-                RunId = runId,
-                s.Iteration,
-                s.Kind,
-                s.Tool,
-                s.Arguments,
-                s.Result,
-                s.Error,
-                s.CreatedAt
-            }));
+        await using var db = await contextFactory.CreateDbContextAsync();
+        foreach (var step in steps)
+            step.RunId = runId;
+
+        db.AgentSteps.AddRange(steps);
+        await db.SaveChangesAsync();
     }
 
     public async Task<AgentRunRecord?> GetRunAsync(long id)
     {
-        using var connection = _factory.Create();
-        return await connection.QuerySingleOrDefaultAsync<AgentRunRecord>(
-            "SELECT * FROM agent_runs WHERE id = @id", new { id });
+        await using var db = await contextFactory.CreateDbContextAsync();
+        return await db.AgentRuns.AsNoTracking().FirstOrDefaultAsync(r => r.Id == id);
     }
 
     public async Task<IReadOnlyList<AgentStepRecord>> GetStepsAsync(long runId)
     {
-        using var connection = _factory.Create();
-        var rows = await connection.QueryAsync<AgentStepRecord>(
-            "SELECT * FROM agent_steps WHERE run_id = @runId ORDER BY iteration, id", new { runId });
-        return rows.AsList();
+        await using var db = await contextFactory.CreateDbContextAsync();
+        return await db.AgentSteps
+            .AsNoTracking()
+            .Where(s => s.RunId == runId)
+            .OrderBy(s => s.Iteration).ThenBy(s => s.Id)
+            .ToListAsync();
     }
 
     public async Task<IReadOnlyList<AgentRunRecord>> QueryRunsAsync(string? sessionId, string? status, int limit)
     {
-        using var connection = _factory.Create();
-        var rows = await connection.QueryAsync<AgentRunRecord>(
-            """
-            SELECT * FROM agent_runs
-            WHERE (@sessionId IS NULL OR session_id = @sessionId)
-              AND (@status IS NULL OR status = @status)
-            ORDER BY id DESC
-            LIMIT @limit
-            """, new { sessionId, status, limit });
-        return rows.AsList();
+        await using var db = await contextFactory.CreateDbContextAsync();
+
+        // 两个条件都是「传 null 表示不过滤」，与原来的 (@x IS NULL OR col = @x) 等价。
+        // 注意是判 null 不是判空串：空串在原 SQL 里是「过滤出 session_id = ''」，不是「不过滤」。
+        var query = db.AgentRuns.AsNoTracking();
+        if (sessionId is not null)
+            query = query.Where(r => r.SessionId == sessionId);
+        if (status is not null)
+            query = query.Where(r => r.Status == status);
+
+        return await query.OrderByDescending(r => r.Id).Take(limit).ToListAsync();
     }
 }

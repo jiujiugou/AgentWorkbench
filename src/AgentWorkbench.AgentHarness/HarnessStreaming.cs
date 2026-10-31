@@ -28,9 +28,14 @@ public enum HarnessStreamEventKind
 /// <param name="Tool">工具调用轨迹（结果未截断）；仅 <see cref="HarnessStreamEventKind.ToolCompleted"/> 非空。</param>
 /// <param name="Result">最终结果；仅 <see cref="HarnessStreamEventKind.Completed"/> 非空。</param>
 /// <param name="Error">面向用户的错误描述；仅 <see cref="HarnessStreamEventKind.Failed"/> 非空。</param>
+/// <param name="Status">
+/// 失败/终止时已落库的终态（取值见 <c>AgentRunStatus</c>：cancelled / timeout / failed）。
+/// 只给一句错误文本时，界面无法区分「用户取消」与「服务出错」——这两个对观众的含义完全不同。
+/// </param>
 public sealed record HarnessStreamEvent(
     HarnessStreamEventKind Kind,
     string? Text = null,
     ToolCallTrace? Tool = null,
     HarnessRunResult? Result = null,
-    string? Error = null);
+    string? Error = null,
+    string? Status = null);

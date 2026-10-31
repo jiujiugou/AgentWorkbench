@@ -46,7 +46,11 @@ public sealed class DocumentIngestionService
             sha256 = Convert.ToHexString(await SHA256.HashDataAsync(read, cancellationToken)).ToLowerInvariant();
         }
 
-        var storedPath = Path.Combine(_paths.UploadsDir, sha256 + ".pdf");
+        // 按原始扩展名落盘（pdf/txt/md/json），解析 Worker 据此选择抽取器；sha256 去重逻辑不变
+        var extension = Path.GetExtension(fileName);
+        if (string.IsNullOrEmpty(extension))
+            extension = ".txt";
+        var storedPath = Path.Combine(_paths.UploadsDir, sha256 + extension.ToLowerInvariant());
         if (File.Exists(storedPath))
             File.Delete(tempPath);
         else

@@ -27,3 +27,9 @@ logs/
 
 # Cleanup trash (safe to discard after review)
 .cleanup-trash/
+
+# τ² 桥接的隔离库与上传产物（不入库）
+tests/benchmark/rag/tau2-kb/
+
+# 测试运行产物（TRX 每次重新生成，不入库）
+tests/TestResults/
