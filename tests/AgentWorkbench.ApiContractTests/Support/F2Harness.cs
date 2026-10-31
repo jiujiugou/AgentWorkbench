@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AgentWorkbench.Documents;
 using AgentWorkbench.Domain;
 using AgentWorkbench.Knowledge.Abstractions;
@@ -28,6 +29,7 @@ public sealed class F2Harness : IDisposable
 {
     public string Root { get; }
     public StorageOptions Options { get; }
+    public StoragePaths Paths { get; }
     public IDocumentRepository Repository { get; }
     public FakeParseQueue Queue { get; } = new();
     public Mock<IKnowledgeEngine> Knowledge { get; } = new();
@@ -48,17 +50,17 @@ public sealed class F2Harness : IDisposable
             MaxPages = 200,
         };
 
-        var paths = new StoragePaths(new FakeHostEnvironment(Root), Microsoft.Extensions.Options.Options.Create(Options));
-        MigrateUp(paths);
+        Paths = new StoragePaths(new FakeHostEnvironment(Root), Microsoft.Extensions.Options.Options.Create(Options));
+        MigrateUp(Paths);
 
         var factory = new HarnessContextFactory(new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlite(paths.ConnectionString)
+            .UseSqlite(Paths.ConnectionString)
             .UseSnakeCaseNamingConvention()
             .Options);
         Repository = new DocumentRepository(factory, NullLogger<DocumentRepository>.Instance);
 
         var ingestion = new DocumentIngestionService(
-            Repository, Queue, paths,
+            Repository, Queue, Paths,
             Microsoft.Extensions.Options.Options.Create(Options),
             NullLogger<DocumentIngestionService>.Instance);
 
@@ -93,7 +95,33 @@ public sealed class F2Harness : IDisposable
     public static IFormFile FormFile(string fileName, byte[] content) =>
         new FormFile(new MemoryStream(content), 0, content.Length, "file", fileName);
 
+    public Task<IActionResult> ListAsync() => Controller.List(CancellationToken.None);
+
     // ── 观察 ──────────────────────────────────────────────
+
+    /// <summary>把 Controller 的匿名响应体转成可查询的 JSON。</summary>
+    public static JsonElement JsonOf(IActionResult result) => result switch
+    {
+        OkObjectResult { Value: { } value } => JsonSerializer.SerializeToElement(value),
+        ObjectResult { Value: { } value } => JsonSerializer.SerializeToElement(value),
+        _ => throw new InvalidOperationException($"响应体不是对象：{result.GetType().Name}"),
+    };
+
+    public static string? StringOf(IActionResult result, string property)
+    {
+        var body = JsonOf(result);
+        return body.ValueKind == JsonValueKind.Object
+            && body.TryGetProperty(property, out var value)
+            && value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : null;
+    }
+
+    /// <summary>上传目录里的真实文件（全路径）。</summary>
+    public string[] StoredFiles() =>
+        Directory.Exists(UploadsDir)
+            ? Directory.GetFiles(UploadsDir, "*", SearchOption.AllDirectories)
+            : [];
 
     /// <summary>盘上文件数 / 库里记录数 / 队列条数——判断「什么都没发生」用这三项。</summary>
     public async Task<(int Files, int Docs, int Queued)> SnapshotAsync()
