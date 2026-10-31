@@ -42,22 +42,40 @@ public sealed class DocumentsController : ControllerBase
     public async Task<IActionResult> Upload(IFormFile file, CancellationToken cancellationToken)
     {
         var sw = Stopwatch.StartNew();
-        if (file is null || file.Length == 0)
+
+        // 四种拒收必须能分辨：前端要按 code 给不同提示，靠 message 匹配字串会在改文案时断掉。
+        // 顺序也是契约的一部分——先判「有没有文件」，再判内容，最后判大小：
+        // 空文件同时满足「格式不支持」时，用户该看到的是「文件为空」。
+        if (file is null)
         {
-            _logger.LogWarning("Upload failed: empty file");
-            return BadRequest(new { message = "文件为空" });
+            _logger.LogWarning("Upload failed: no file field");
+            return BadRequest(new { code = DocumentErrorCodes.NoFile, message = "请求里没有 file 字段" });
         }
+        if (file.Length == 0)
+        {
+            _logger.LogWarning("Upload failed: empty file - {FileName}", file.FileName);
+            return BadRequest(new { code = DocumentErrorCodes.FileEmpty, message = "文件为空" });
+        }
+
         string[] supported = [".pdf", ".txt", ".md", ".json"];
         var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
         if (!supported.Contains(ext))
         {
             _logger.LogWarning("Upload failed: unsupported type - {FileName}", file.FileName);
-            return BadRequest(new { message = "仅支持 PDF / TXT / MD / JSON（P0 文本层，JSON 约定 content 或 text 字段为正文）" });
+            return BadRequest(new
+            {
+                code = DocumentErrorCodes.FileTypeUnsupported,
+                message = "仅支持 PDF / TXT / MD / JSON（P0 文本层，JSON 约定 content 或 text 字段为正文）"
+            });
         }
         if (file.Length > _options.MaxFileBytes)
         {
             _logger.LogWarning("Upload failed: file too large - {FileName} {SizeBytes} bytes", file.FileName, file.Length);
-            return BadRequest(new { message = $"文件超过 {_options.MaxFileBytes / 1024 / 1024} MB" });
+            return BadRequest(new
+            {
+                code = DocumentErrorCodes.FileTooLarge,
+                message = $"文件超过 {_options.MaxFileBytes / 1024 / 1024} MB"
+            });
         }
 
         _logger.LogInformation("Upload started: {FileName} {SizeBytes} bytes", file.FileName, file.Length);
