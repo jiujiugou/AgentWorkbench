@@ -33,3 +33,10 @@ tests/benchmark/rag/tau2-kb/
 
 # 测试运行产物（TRX 每次重新生成，不入库）
 tests/TestResults/
+
+# Python 评测脚本的编译缓存（2026-11-08 M0：两个 .pyc 曾被误暂存）
+__pycache__/
+*.pyc
+
+# 本地备份文件（迁移脚本留下的临时快照）
+*.bak-*

@@ -24,7 +24,7 @@ set -u
 
 PORT="${PORT:-8080}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROJ="src/AgentWorkbench.Webapi/AgentWorkbench.Webapi.csproj"
+PROJ="src/Host/AgentWorkbench.Webapi/AgentWorkbench.Webapi.csproj"
 
 echo "==> [1/2] releasing port ${PORT}"
 pids="$(netstat -ano 2>/dev/null | tr -d '\r' | grep LISTENING | grep ":${PORT} " | awk '{print $5}' | sort -u)"

@@ -18,7 +18,7 @@ set -u
 PORT="${PORT:-8080}"
 WEB_PORT="${WEB_PORT:-5173}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-API_PROJ="$ROOT/src/AgentWorkbench.Webapi/AgentWorkbench.Webapi.csproj"
+API_PROJ="$ROOT/src/Host/AgentWorkbench.Webapi/AgentWorkbench.Webapi.csproj"
 WEB_DIR="$ROOT/web"
 
 api_pid=""

@@ -21,7 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DBS = [
-    ROOT / "src/AgentWorkbench.Webapi/data/agentworkbench.db",
+    ROOT / "src/Host/AgentWorkbench.Webapi/data/agentworkbench.db",
     ROOT / "data/agentworkbench.db",
 ]
 DEFAULT_OUT = ROOT / "docs/数据库/表结构.md"

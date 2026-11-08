@@ -12,7 +12,7 @@ RUN npm run build
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY src/ src/
-RUN dotnet publish src/AgentWorkbench.Webapi/AgentWorkbench.Webapi.csproj \
+RUN dotnet publish src/Host/AgentWorkbench.Webapi/AgentWorkbench.Webapi.csproj \
     -c Release -o /app/publish /p:UseAppHost=false
 
 # ---------- Stage 3: runtime ----------
