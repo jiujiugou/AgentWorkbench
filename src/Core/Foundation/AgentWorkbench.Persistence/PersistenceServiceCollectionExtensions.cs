@@ -37,7 +37,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<IProviderRepository, ProviderRepository>();
         services.AddSingleton<IAgentRunRepository, AgentRunRepository>();
         services.AddSingleton<IConversationRepository, ConversationRepository>();
-        services.AddSingleton<IIdentityRepository, IdentityRepository>();
+        services.AddSingleton<ITenantRepository, TenantRepository>();
         services.AddSingleton<IWorkflowRepository, WorkflowRepository>();
         services.AddSingleton<IWorkflowIdempotencyStore, WorkflowIdempotencyStore>();
 

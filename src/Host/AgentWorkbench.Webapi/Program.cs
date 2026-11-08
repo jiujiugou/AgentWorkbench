@@ -13,10 +13,12 @@ using AgentWorkbench.Runtime.Model;
 using AgentWorkbench.Runtime.Tools;
 using AgentWorkbench.Tools.Builtin;
 using AgentWorkbench.Workflow;
+using AgentWorkbench.Webapi.Actions;
 using AgentWorkbench.Webapi.Auth;
 using AgentWorkbench.Webapi.Hubs;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Http.Features;
 using Serilog;
 
@@ -49,6 +51,8 @@ builder.Services.AddNitroObservability();
 builder.Services.AddNitroAgentLoop(builder.Configuration);
 builder.Services.AddNitroAgentHarness(builder.Configuration);
 builder.Services.AddNitroWorkflow(builder.Configuration);
+// M1 受控动作链：四道校验 → 挂起审批 → 执行 → 审计。换域只改 Actions:ActionSet。
+builder.Services.AddNitroActions(builder.Configuration);
 // 用 SignalR 覆盖 Workflow 模块的默认空进度通知
 builder.Services.AddSingleton<IWorkflowProgressNotifier, SignalRWorkflowProgressNotifier>();
 
@@ -64,10 +68,30 @@ builder.Services.AddSwaggerGen();
 // Cookie 而非 Bearer：前端与后端同源（vite 代理 /api 与 /hubs），cookie 天然随请求走，SignalR 握手也带得上。
 // FallbackPolicy = 默认拒：所有端点未显式 [AllowAnonymous] 的一律要求登录。
 // 默认放行是「漏一个控制器就裸奔」，默认拒绝是「漏一个就 401」——后者坏了当场看得见。
-builder.Services.Configure<IdentityOptions>(builder.Configuration.GetSection(IdentityOptions.SectionName));
+builder.Services.Configure<DemoIdentityOptions>(builder.Configuration.GetSection(DemoIdentityOptions.SectionName));
+
+// ── ASP.NET Core Identity：用户、密码哈希、锁定、角色全部交给框架 ──
+// 存储走 EF Core（IdentityDbContext<AppUser>），建表仍由 FluentMigrator M029 负责。
+builder.Services.AddHttpContextAccessor();
 builder.Services
-    .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-    .AddCookie(options =>
+    .AddIdentityCore<AppUser>(options =>
+    {
+        options.Password.RequiredLength = 8;
+        options.Password.RequireNonAlphanumeric = false;
+        options.User.RequireUniqueEmail = false;
+        options.Lockout.MaxFailedAccessAttempts = 5;
+        options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+        options.SignIn.RequireConfirmedAccount = false;
+    })
+    .AddRoles<IdentityRole>()
+    .AddSignInManager()
+    .AddClaimsPrincipalFactory<AppUserClaimsPrincipalFactory>()
+    .AddDefaultTokenProviders()
+    .AddEntityFrameworkStores<AppDbContext>();
+
+builder.Services
+    .AddAuthentication(IdentityConstants.ApplicationScheme)
+    .AddCookie(IdentityConstants.ApplicationScheme, options =>
     {
         options.Cookie.Name = "aw.auth";
         options.Cookie.HttpOnly = true;
