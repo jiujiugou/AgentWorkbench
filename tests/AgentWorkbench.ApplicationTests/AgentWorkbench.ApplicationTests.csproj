@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Core\Foundation\AgentWorkbench.Shared\AgentWorkbench.Shared.csproj" />
+    <ProjectReference Include="..\..\src\Core\Ports\AgentWorkbench.Ports.csproj" />
     <ProjectReference Include="..\..\src\Core\Foundation\AgentWorkbench.Domain\AgentWorkbench.Domain.csproj" />
     <ProjectReference Include="..\..\src\Core\Foundation\AgentWorkbench.Persistence\AgentWorkbench.Persistence.csproj" />
     <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Loop\AgentWorkbench.Runtime.Loop.csproj" />

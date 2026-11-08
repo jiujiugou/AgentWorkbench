@@ -49,6 +49,43 @@ internal static class ContractProbe
         throw new DirectoryNotFoundException("未找到 AgentWorkbench.slnx，无法定位仓库根。");
     }
 
+    /// <summary>
+    /// 把输出目录下所有 AgentWorkbench.*.dll 加载进当前 AppDomain。
+    /// 只加载已被编译输出的程序集，不按名字凭空构造类型；加载失败一律跳过，
+    /// 因此「契约不存在」时不会凭空造出类型名，扫描器仍保持区分度。
+    /// </summary>
+    private static int _assembliesEnsured;
+
+    private static void EnsureAgentWorkbenchAssembliesLoaded()
+    {
+        if (Interlocked.Exchange(ref _assembliesEnsured, 1) != 0)
+            return;
+
+        var loaded = AppDomain.CurrentDomain.GetAssemblies()
+            .Select(a => a.GetName().Name)
+            .Where(n => n is not null)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var dll in Directory.EnumerateFiles(AppContext.BaseDirectory, "AgentWorkbench.*.dll"))
+        {
+            var simpleName = Path.GetFileNameWithoutExtension(dll);
+            if (loaded.Contains(simpleName))
+                continue;
+            try
+            {
+                Assembly.LoadFrom(dll);
+            }
+            catch (BadImageFormatException)
+            {
+                // 原生 dll 或资源程序集，跳过
+            }
+            catch (FileLoadException)
+            {
+                // 已加载或版本冲突，跳过
+            }
+        }
+    }
+
     /// <summary>列出某相对目录下（含子目录）的全部 .cs 文件；目录不存在时返回空集合而非抛异常。</summary>
     public static IReadOnlyList<string> EnumerateCsFiles(string root, string relativeDir)
     {
@@ -58,11 +95,34 @@ internal static class ContractProbe
         return Directory.GetFiles(dir, "*.cs", SearchOption.AllDirectories);
     }
 
-    /// <summary>把若干相对目录下的全部 .cs 文本拼成一份大文本，供标记扫描。</summary>
+    /// <summary>
+    /// 把若干相对目录下的全部 .cs 文本拼成一份大文本，供标记扫描。
+    ///
+    /// 2026-11-08 修正假绿：默认剥掉纯注释行。契约的 XML 文档会反复提到
+    /// SideEffecting / 挂起 / 恢复 / 审计等词，若把它们当作「能力存在」的证据，
+    /// 删掉真实参数后测试照样绿 —— 这是负控实证抓到的假绿。
+    /// 与 AC-02「注释不算违规」对称：注释也不算能力证据，标记必须由真实代码承载。
+    /// </summary>
     public static string ReadAllCs(string root, params string[] relativeDirs)
         => string.Join("\n", relativeDirs
             .SelectMany(d => EnumerateCsFiles(root, d))
-            .Select(File.ReadAllText));
+            .Select(f => StripComments(File.ReadAllText(f))));
+
+    /// <summary>去掉纯注释行（//、///、/*、* 开头的行），只留代码行。</summary>
+    private static string StripComments(string source)
+    {
+        var code = new List<string>();
+        foreach (var line in source.Split('\n'))
+        {
+            var t = line.TrimStart();
+            if (t.StartsWith("//", StringComparison.Ordinal) ||
+                t.StartsWith("/*", StringComparison.Ordinal) ||
+                t.StartsWith("*", StringComparison.Ordinal))
+                continue;
+            code.Add(line);
+        }
+        return string.Join("\n", code);
+    }
 
     /// <summary>大小写不敏感的子串命中判定。</summary>
     public static bool Found(string text, string token)
@@ -78,9 +138,16 @@ internal static class ContractProbe
     /// 反射：枚举 AppDomain 已加载程序集的类型名。
     /// agentWorkbenchOnly=true 时只看简单名以 "AgentWorkbench" 开头的程序集。
     /// 显式处理 ReflectionTypeLoadException（取回能加载的部分类型），其余加载异常跳过该程序集。
+    ///
+    /// 2026-11-08 修正装置盲区：Core.Ports 是纯契约工程，没有任何运行时代码引用它的类型，
+    /// CLR 不会主动加载，「只扫已加载程序集」会让真实存在的契约查不到（F5.1 假红）。
+    /// 因此扫描前先把输出目录下的 AgentWorkbench.*.dll 全部加载进来。
+    /// 这修的是扫描前提，不是断言：删掉任一契约类型，F5.1 仍会红。
     /// </summary>
     public static IReadOnlyList<string> LoadedTypeNames(bool agentWorkbenchOnly = false)
     {
+        EnsureAgentWorkbenchAssembliesLoaded();
+
         var names = new List<string>();
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
         {

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!--
+    依赖倒置的唯一边界：本工程是底座定义端口的地方，也是 Domains/* 唯一允许 import 的工程。
+    铁律（M1 设计 §7 门禁 3/4）：
+      - ProjectReference 数量恒为 0；
+      - 不引用 Shared、不引用任何 NuGet 包，只用 net10.0 框架自带的类型；
+      - 类型名 / 字段名 / 方法名不得出现 AC-02 业务词（词表见 ADR 0017 §六）。
+    若将来需要共享常量，正确做法是往本工程加类型，不是让 Ports 去引用别人。
+  -->
+</Project>

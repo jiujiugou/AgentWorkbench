@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/src/Core/Ports/">
+    <Project Path="src/Core/Ports/AgentWorkbench.Ports.csproj" />
+  </Folder>
   <Folder Name="/src/Core/Foundation/">
     <Project Path="src/Core/Foundation/AgentWorkbench.Shared/AgentWorkbench.Shared.csproj" />
     <Project Path="src/Core/Foundation/AgentWorkbench.Domain/AgentWorkbench.Domain.csproj" />
