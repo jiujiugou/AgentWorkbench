@@ -15,12 +15,13 @@ AgentWorkbench：**面向企业私有化部署的受控动作执行底座**。�
 | 正本 | `docs/需求/产品目标与范围.md` v3.0 · **已确认**（11-08 由待确认转正，M0 退出条件） |
 | M0 阶段报告 | `docs/需求/M0-阶段报告.md`（构建/测试/提交/遗留的实测证据） |
 | M1 设计 | `docs/设计/M1-受控动作执行流程设计.md` v0.1-draft，**仍未转正、不进事实源表**；§9 七步已按文档落地，执行状态见该文 §12 落地台账 |
+| M2 设计 | `docs/设计/M2-真实ERPNext只读接入设计.md` v0.1-draft，**未转正、不进事实源表**；前置（可连的 ERPNext 实例）尚未达成，第 1 步是采集不是编码 |
 | ADR 0013–0017 + 能力矩阵 | **不在本仓**，在 `D:\Code\AgentWorkbench.Py\docs\adr\` 与 `docs\架构\` |
 | 本仓 `docs/adr/` | 只有 0001–0007（全 F2）；编号 10-29 后重排，准入标准见其 README |
 | 已冻结（v1 知识工作台，不作当前判据） | `docs/REMADE.md`、`docs/需求/功能需求.md`（6 域 33 条 REQ）、`docs/需求/阶段1功能需求.md`、`docs/设计/阶段1/`、`docs/验证与现状/`（v3 §8） |
 | **不存在，别引用** | 根 `README.md`、`docs/设计/README.md`、`docs/接口/接口.md`、`docs/测试标准/`、`docs/架构调整/`、`docs/底座建设清单.md`、`docs/设计步骤/`、`docs/验收标准/`。旧 21 份文档 10-29 被清空且未提交 git，不可恢复 |
 | 模块 README | 内容滞后（仍用 Providers / AgentLoop / Safety 等旧名），只当轮廓，不当事实源 |
-| 本仓 docs | 共 18 份 md |
+| 本仓 docs | 共 19 份 md |
 
 ## 技术栈
 .NET 10 / ASP.NET Core / Microsoft Agent Framework / Microsoft.Extensions.AI / SignalR
