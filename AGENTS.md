@@ -24,8 +24,10 @@ AgentWorkbench：**面向企业私有化部署的受控动作执行底座**。�
 
 ## 技术栈
 .NET 10 / ASP.NET Core / Microsoft Agent Framework / Microsoft.Extensions.AI / SignalR
-SQLite + FTS5 + sqlite-vec（仓储层 10-31 起试点 EF Core，迁移现状见 `Persistence/Migrations` M001–M026）
+SQLite + FTS5 + sqlite-vec（仓储层 10-31 起试点 EF Core，迁移现状见 `Persistence/Migrations` M001–M029）
 Vue 3 + Vite + TypeScript + Element Plus
+
+**身份与鉴权**：ASP.NET Core Identity 全套——`AddIdentityCore<AppUser>` + `IdentityDbContext` + EF store，表名 `aspnet_*`（M029）。密码哈希、登录、失败锁定、角色全部由框架负责，**仓内没有自写哈希、没有自建用户表**。业务扩展只有 `AppUser.TenantId` / `DisplayName` / `IsActive`，由 `AppUserClaimsPrincipalFactory` 补成 `tenant_id` / `GivenName` Claims。演示账号 `wang`（owner）/ `zhao`（member）/ `li`（owner），统一密码 `Demo1234`。
 
 ## 构建与测试
 ```
@@ -83,7 +85,7 @@ ActionGateway                        → Ports（底座侧，不得引用 Domain
 Erp / FakeActionSet                  → Ports（且只能这一条）
 Domain                            → Shared
 Runtime.Context                   → Shared
-Persistence                       → Domain, Shared
+Persistence                       → Domain, Shared（+ FrameworkReference ASP.NET Core、Identity EF store）
 Runtime.Model                     → Shared, Domain, Persistence
 Observability                     → Domain, Persistence, Shared
 Runtime.Loop / Runtime.Session    → Shared
@@ -121,7 +123,7 @@ Webapi                            → 几乎所有模块（组合根）
 ## 验收
 - 当前判据 = v3 §4.1 六句 + AC-01 / AC-02；**v1 的 33 条 REQ、113 条验证编号随 v1 冻结，不作当前判据**。
 - 当前唯一在跑的测试工程是 `ApplicationTests`（M1 落地后 92 条：82 绿 / 10 红；10 红全是 M0 既有预期红 F2.8/2.9/2.10、F3.5、F4.7）。F5 / X 组契约存在性、M1 四道校验、六句成功判据、AC-01 换域与 §7 四条门禁都在其中；边界门禁见 `ActionGateway/DomainSwapAc01Tests.cs`。另 4 个测试工程已清空，见「构建与测试」。
-- 本地跑法（11-01 实录）：`SKIP_BUILD=1 bash scripts/dev.sh`；Hub 要 cookie（种子账号 `wang` / `demo1234`，cookie `aw.auth`）；**HTTP 问答端点已删，只能 SignalR `Ask`**；`curl` 打 localhost 加 `--noproxy '*'`。
+- 本地跑法（11-01 实录）：`SKIP_BUILD=1 bash scripts/dev.sh`；Hub 要 cookie（种子账号 `wang` / `Demo1234`，cookie `aw.auth`）；**HTTP 问答端点已删，只能 SignalR `Ask`**；M1 动作链走 `/api/actions`（提交 / 待办 / 审批 / 审计反查）；`curl` 打 localhost 加 `--noproxy '*'`。
 - 全过退出码 0。
 
 ## 参考
