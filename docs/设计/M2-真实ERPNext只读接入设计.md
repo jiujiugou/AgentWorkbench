@@ -335,17 +335,41 @@ M1 的教训照抄：**只断言「不为空 / 不抛异常」的不算测试**�
 `scripts/erp_live_probe.py`（Python，不用 PowerShell：本机只有 5.1，UTF-8 无 BOM 的中文脚本会解析失败）：
 
 ```
-python scripts/erp_live_probe.py --record   # 采集 + 生成夹具
-python scripts/erp_live_probe.py --verify   # 只跑 live，退出码即结论
+python scripts/erp_live_probe.py --verify   # 只验证，不写文件；退出码即结论（默认模式）
+python scripts/erp_live_probe.py --record   # 采集 + 生成夹具 + 证据文件
+python scripts/erp_live_probe.py --record --probe-bad-auth   # 额外采集 401 形态（只发一次）
+python scripts/erp_live_probe.py --record --redact-host      # 证据里隐去主机名
+python scripts/erp_live_probe.py --verify --insecure         # 自签名证书（仅本地实例）
 ```
 
-产出 `docs/验证与现状/erpnext-live-YYYYMMDD.json`：`base_url`（脱敏，去掉凭据）、`site_version`、`time_zone`、三个用例（存在 / 不存在 / 无权限）的状态码与关键字段、`captured_at`。
+`--verify` 的检查项（每项都能变红，见下表）：
+
+| 项 | 内容 | 失败意味着 |
+|---|---|---|
+| V1 | 身份可达（`frappe.auth.get_logged_user`） | 地址/凭据/网络不通 |
+| V2 | 真实单据可读且 `name` / `docstatus` / `modified` 齐全 | 字段漂移或权限不足，§7 的必填项假设错了 |
+| V3 | 不存在的单号被明确拒绝（404/403） | 返回 200 说明「查不到」得靠 body 判，§6 映射表要改 |
+| V4 | `filters` 真生效（返回行 `docstatus` 与请求一致） | filters 编码写错时 Frappe 常照样返回 200，只过滤没生效 |
+| V5 | 无权限与不存在可区分（需 `ERPNEXT_FORBIDDEN_API_KEY/SECRET`） | 两者混淆会让「枚举单据」变得可行 |
+
+产出 `docs/验证与现状/erpnext-live-YYYYMMDD.json`：`base_url`（脱敏，去掉凭据）、`site_version`、`time_zone`、各用例状态码与关键字段、`captured_at`；另有同批的 `erpnext-采集-YYYYMMDD.md`（人读，含字段表、时间原始串、失败形态、`filters` 生效性、待人工判读 4 条）。
 
 三条规矩：
 
 1. **live 未跑 = M2 未完成**，夹具不能替代。
-2. 夹具必须由 `--record` 从真实实例生成，文件头写 `captured_at` / `site_version`，禁止手写。
-3. 凭据只从环境变量读（`ERPNEXT_API_KEY` / `ERPNEXT_API_SECRET`），脚本不打印、不写文件。
+2. 夹具必须由 `--record` 从真实实例生成，每份带 `__meta__`（`captured_at` / `site_version` / `time_zone` / `kind` / `document_name`），禁止手写。
+3. 凭据只从环境变量读（`ERPNEXT_API_KEY` / `ERPNEXT_API_SECRET`），脚本不打印、不落文件；落盘前对所有内容再做一次字符串擦除。
+
+**脚本自身的可红性已实证（2026-11-08）**：本机无 Docker、无实例，用一个临时假 Frappe 服务跑通 4/4；再用两个**故意做坏**的假服务证明检查项会红：
+
+| 场景 | 结果 |
+|---|---|
+| 正常假服务 | V1–V4 全 PASS，退出码 0 |
+| 忽略 `filters` + 缺失单号返 200 | **V3、V4 变红**，退出码 1，并打印「返回 200，失败语义要改」 |
+| 错误凭据 | **V1 变红**（HTTP 401 + `exc_type=AuthenticationError`），退出码 1 |
+| 端口不通 | **V1 变红**（`URLError: 目标计算机积极拒绝`），退出码 1 |
+
+这次自检**只验证脚本，不产生任何夹具**：临时产物（7 个夹具 + 2 份证据）已全部删除，`git status` 只剩脚本本身。**不要把自检当成接入证据**——假服务的数据和真 ERPNext 无关。
 
 ---
 
@@ -353,7 +377,7 @@ python scripts/erp_live_probe.py --verify   # 只跑 live，退出码即结论
 
 | 步 | 内容 | 前置 | 完成标志 |
 |---|---|---|---|
-| 1 | 起实例 + 采集 + 生成夹具 | 无（**需要用户提供实例**） | §2.2 产出物齐 |
+| 1 | 起实例 + 采集 + 生成夹具 | 无（**需要用户提供实例**） | §2.2 产出物齐；`--verify` 退出码 0 |
 | 2 | `IErpTransport` + `RecordedErpTransport` + 解析器 | 1 | T1–T3 绿 |
 | 3 | 失败语义 + 读重试 | 2 | T4–T8 绿 |
 | 4 | 权限四维策略 | 2 | T9–T12 绿 |
@@ -400,7 +424,7 @@ python scripts/erp_live_probe.py --verify   # 只跑 live，退出码即结论
 
 | 步 | 状态 | 证据路径 | 提交 | 日期 |
 |---|---|---|---|---|
-| 1 采集 | 未开始 | — | — | — |
+| 1 采集 | 采集器就绪 / 实例未就位 | `scripts/erp_live_probe.py`（自检 4/4 + 3 个反向变红，见 §9.4）；真实产物待跑 | — | — |
 | 2 传输 + 解析 | 未开始 | — | — | — |
 | 3 失败语义 | 未开始 | — | — | — |
 | 4 权限四维 | 未开始 | — | — | — |

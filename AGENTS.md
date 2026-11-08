@@ -40,7 +40,8 @@ cd web; npm run build
 - `AgentWorkbench.slnx` 按 Core / Domains / Host 分组收 **23 个 src 项目 + 1 个测试项目（24 条路径）**；`Runtime.Harness` 下重复的 `AgentWorkbench.AgentHarness.csproj` 已删。
 - 旧一级目录 `src/AgentWorkbench.*`（17 个）已于 11-08 全部清除，无残留。
 - 另 4 个测试项目（ApiContract / Architecture / DataIntegration / EndToEnd）在 11-07 22:18 被清空并按删除态提交；**架构门禁现由 `ApplicationTests/ActionGateway/DomainSwapAc01Tests.cs` 承担**，是否重建独立 `ArchitectureTests` 待用户决定（M0 报告 L2）。
-- `scripts/` 现有 5 个文件（dev.sh / demo.sh / probe-hub.mjs / schema_dump.py / contract_matrix.py）；历史文档引用的 `acceptance-*.ps1` / `eval-*.ps1` **均未实现**，端到端验收脚本仍未落地。
+- `scripts/` 现有 6 个文件（dev.sh / demo.sh / probe-hub.mjs / schema_dump.py / contract_matrix.py / **erp_live_probe.py**）；历史文档引用的 `acceptance-*.ps1` / `eval-*.ps1` **均未实现**。
+- ERPNext 采集/验证：`python scripts/erp_live_probe.py --verify`（只读、退出码即结论）/ `--record`（采集并生成夹具与证据）。需要 `ERPNEXT_BASE_URL` / `ERPNEXT_API_KEY` / `ERPNEXT_API_SECRET`；**无实例时不要手写夹具**（M2 设计 §9.4）。
 - 旧文档里的 `tests/AgentWorkbench.UnitTests`、`tests/AgentWorkbench.MockLlm` 已不存在。
 
 ## 目录布局（2026-11-07 分层重组）
