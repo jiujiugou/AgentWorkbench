@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!--
+    M1 设计 §4 / §2.4 / §6 的底座侧实现：四道校验网关、run 状态与幂等存储、审计通道、六步链。
+    铁律：只依赖 Core.Ports；不得引用 Domains；不得出现任何业务词（AC-02）。
+    换域时本工程一行不改（AC-01）。
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Ports\AgentWorkbench.Ports.csproj" />
+  </ItemGroup>
+</Project>

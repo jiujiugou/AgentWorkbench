@@ -59,6 +59,8 @@ public static class ActionStatuses
     public const string Succeeded = "succeeded";
     public const string Failed = "failed";
     public const string Rejected = "rejected";
+    // Validated 是四道校验的通过态，非终态：表示「允许进入后续审批 / 执行」，不代表动作已成功。
+    public const string Validated = "validated";
     public const string InProgress = "in_progress";
     public const string Pending = "pending";
     public const string Timeout = "timeout";

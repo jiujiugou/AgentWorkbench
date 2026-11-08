@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!--
+    第二套假动作集（M1 设计 §5.3，AC-01「换域后底座 diff 为空」演练载体）。
+    命名空间用 AgentWorkbench.LabBooking，业务词与第一动作域完全不同。
+    铁律：只允许引用 Core.Ports；不得被 Core 下任何项目引用；零 NuGet 包。
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\Ports\AgentWorkbench.Ports.csproj" />
+  </ItemGroup>
+</Project>

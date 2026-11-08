@@ -10,6 +10,8 @@
 | `ActionContracts.cs` | `ActionSpec` / `ActionRequest` / `ActionResult` 三类型；`ActionPrimitives` 四原语；`ActionStatuses` 终态字符串 |
 | `PortInterfaces.cs` | 四道校验接口（Schema / Permission / BusinessRule / Audit）、`IActionGateway` / `IActionExecutor` / `IActionSpecRegistry`、各类判定 record、`EvidenceRef` |
 | `TraceEvent.cs` | `TraceEvent`（审计五字段 + Stage + Outcome + 时间）、`ErrorEnvelope` 类型名占位 |
+| `ActionRunContracts.cs` | run 状态常量、`RunCheckpoint`、`Suspend`/`Resume`、审批闸、幂等存储、`IAuditQuery` 反查、`IActionSet` 组合契约 |
+| `ActionRejectionCodes.cs` | 拒绝 / 成功 Code（RR-1：每个终态归因到唯一 Code） |
 | `GlobalUsings.cs` | 仅 `System.Text.Json`（框架自带） |
 
 ## 三条不能破的约束
@@ -22,8 +24,7 @@
 
 F5/X 组 11 条契约存在性验收靠 `src/Core/Ports/` + `src/Domains/Erp/` 的**源码标记扫描 + 反射类型名**判定，名字同时是判据与扫描词。改名会让预期红不转绿；确需改名必须同步改测试并写进 ADR。清单见 M1 设计 §3.4。
 
-本块交付后应当转绿的只有「契约存在」类用例：**F5.1 / F5.2 / F5.3 / F5.5 / F5.6 / F5.7**。
-F5.4（挂起恢复）、F5.8（假 ERP）、X1（换域假动作集）、X2（无模型仍拒绝）、X3（审计反查）**仍应红** —— 它们属于 §9 第 3/4/6/7 步，红是正确信号，不要靠往契约里塞标记词让它变绿。
+本块交付时转绿的是 F5.1 / F5.2 / F5.3 / F5.5 / F5.6 / F5.7。随后 M1 设计 §9 第 2–7 步落地，F5.4（run 状态机契约）、F5.8（假 ERP）、X1（第二动作域 + 换域用例）、X2（无模型仍拒绝用例）、X3（AuditTrail 反查）也按各自实现转绿 —— **不是靠往契约里塞标记词**：`ActionRunContracts.cs` 提供了真实接口，`Domains/Erp` 与 `Domains/FakeActionSet` 提供了真实实现，测试项目提供了真实用例。逐条状态见 M1 设计 §12 落地台账。
 
 ## 待裁决（不自行决定）
 

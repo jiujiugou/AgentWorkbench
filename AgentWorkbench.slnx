@@ -21,6 +21,7 @@
   <Folder Name="/src/Core/Tools/">
     <Project Path="src/Core/Tools/AgentWorkbench.Tools.Abstractions/AgentWorkbench.Tools.Abstractions.csproj" />
     <Project Path="src/Core/Tools/AgentWorkbench.Tools.Builtin/AgentWorkbench.Tools.Builtin.csproj" />
+    <Project Path="src/Core/Tools/AgentWorkbench.ActionGateway/AgentWorkbench.ActionGateway.csproj" />
   </Folder>
   <Folder Name="/src/Core/Knowledge/">
     <Project Path="src/Core/Knowledge/AgentWorkbench.Knowledge.Abstractions/AgentWorkbench.Knowledge.Abstractions.csproj" />
@@ -35,6 +36,10 @@
   <Folder Name="/src/Core/" />
   <Folder Name="/src/Core/Engineering/">
     <Project Path="src/Core/Engineering/AgentWorkbench.Observability/AgentWorkbench.Observability.csproj" />
+  </Folder>
+  <Folder Name="/src/Domains/">
+    <Project Path="src/Domains/Erp/AgentWorkbench.Erp.csproj" />
+    <Project Path="src/Domains/FakeActionSet/AgentWorkbench.FakeActionSet.csproj" />
   </Folder>
   <Folder Name="/src/Host/">
     <Project Path="src/Host/AgentWorkbench.Webapi/AgentWorkbench.Webapi.csproj" />

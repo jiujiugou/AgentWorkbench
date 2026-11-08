@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!--
+    第一动作域（假实现，M1 设计 §5）。业务语义全部在这里。
+    铁律：只允许引用 Core.Ports；不得被 Core 下任何项目引用。
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\Ports\AgentWorkbench.Ports.csproj" />
+  </ItemGroup>
+</Project>
