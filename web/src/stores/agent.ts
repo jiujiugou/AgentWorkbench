@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref, shallowRef } from 'vue'
 import * as signalR from '@microsoft/signalr'
 import { ElMessage } from 'element-plus'
-import type { RetrievalSource, RunSummary, ToolStepEvent } from '@/types'
+import type { CitationReport, RefusalInfo, RetrievalSource, RunSummary, ToolStepEvent } from '@/types'
 import { conversationsApi, type Conversation, type ConversationMessage } from '@/api/conversations'
 import { settingsApi, type Provider } from '@/api/settings'
 
@@ -32,6 +32,10 @@ export const useAgentStore = defineStore('agent', () => {
   const conversationId = ref<string | null>(null)
   const conversations = ref<Conversation[]>([])
   const sources = ref<Record<string, RetrievalSource[]>>({})
+  /** 拒答：文案与归类码由服务端给，前端只负责把它渲染成"系统的结论"而不是模型的话。 */
+  const refusals = ref<Record<string, RefusalInfo>>({})
+  /** 每条助手消息的引用体检报告（角标 / 底纹 / cleanedAnswer 的唯一来源），Done 前后到都行。 */
+  const citations = ref<Record<string, CitationReport>>({})
   /** 每条助手消息的工具调用时间线（执行中逐步追加）。 */
   const toolSteps = ref<Record<string, ToolStepEvent[]>>({})
   /** 每条助手消息的 run 摘要（迭代数/耗时/结束原因），Done 时才到。 */
@@ -84,6 +88,8 @@ export const useAgentStore = defineStore('agent', () => {
         content: m.content,
       }))
       sources.value = {}
+      refusals.value = {}
+      citations.value = {}
       toolSteps.value = {}
       runs.value = {}
       stops.value = {}
@@ -105,6 +111,8 @@ export const useAgentStore = defineStore('agent', () => {
     conversationId.value = null
     messages.value = []
     sources.value = {}
+    refusals.value = {}
+    citations.value = {}
     toolSteps.value = {}
     runs.value = {}
     stops.value = {}
@@ -133,6 +141,8 @@ export const useAgentStore = defineStore('agent', () => {
       conversationId.value = null
       messages.value = []
       sources.value = {}
+      refusals.value = {}
+      citations.value = {}
       toolSteps.value = {}
       runs.value = {}
       stops.value = {}
@@ -263,6 +273,34 @@ export const useAgentStore = defineStore('agent', () => {
       sources.value[p.messageId] = p.sources
     })
 
+    // 引用体检：句级统计 + 逐条校验结论 + 剥掉越界标注后的正文。
+    // 比正文流晚到（run 结束才算）——角标会在答案渲染完之后补挂，闪一下属预期。
+    conn.on('ReceiveCitations', (p: { messageId: string } & CitationReport) => {
+      findOrCreate(p.messageId)
+      citations.value[p.messageId] = {
+        sentenceCount: p.sentenceCount,
+        citedSentenceCount: p.citedSentenceCount,
+        uncitedSentenceCount: p.uncitedSentenceCount,
+        outOfRangeCount: p.outOfRangeCount,
+        unsupportedCount: p.unsupportedCount,
+        uncitedRatio: p.uncitedRatio,
+        supportVerdict: p.supportVerdict,
+        cleanedAnswer: p.cleanedAnswer,
+        citations: p.citations,
+      }
+    })
+
+    // 拒答：服务端在工具返回后判定"资料不足"，直接终止生成并给出固定文案。
+    // 这里要把正文替换掉——模型可能先吐过一两句（比如"我先查一下"），拒答之后那些话不该留在界面上；
+    // 同时清空来源：判定不足时那五块仍是"检索命中的内容"，但用它当出处等于给假担保。
+    conn.on('ReceiveRefusal', (p: { messageId: string; text: string; code?: string | null }) => {
+      const message = findOrCreate(p.messageId)
+      message.content = p.text
+      refusals.value[p.messageId] = { text: p.text, code: p.code ?? null }
+      delete sources.value[p.messageId]
+      delete citations.value[p.messageId]
+    })
+
     // 执行过程：每次工具调用完成推一条，按到达顺序拼成时间线（不依赖 Done，执行中就能看见）。
     conn.on('ReceiveTool', (p: { messageId: string } & ToolStepEvent) => {
       findOrCreate(p.messageId)
@@ -383,6 +421,8 @@ export const useAgentStore = defineStore('agent', () => {
     messages,
     generating,
     sources,
+    refusals,
+    citations,
     toolSteps,
     runs,
     stops,

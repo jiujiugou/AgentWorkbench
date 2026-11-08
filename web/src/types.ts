@@ -35,3 +35,43 @@ export interface RunSummary {
   steps: number
   tools: number
 }
+
+/** 一条引用标注的校验结论（来自 SignalR ReceiveCitations，与后端 Citation 对齐）。 */
+export interface CitationItem {
+  /** 所属句子序号（从 0 起，切句规则见后端 CitationParser）。 */
+  sentenceIndex: number
+  /** 模型写的编号（从 1 起，对应检索结果的 no）。 */
+  evidenceNo: number
+  fileName: string
+  seq: number
+  chunkId: number
+  /** ok = 对得上；outOfRange = 指向不存在的编号；unsupported = 号码存在但内容对不上。 */
+  check: 'ok' | 'outOfRange' | 'unsupported'
+  /** 该句与所指块的字符覆盖率；越界时为 null。 */
+  coverage?: number | null
+}
+
+/** 一次拒答（来自 SignalR ReceiveRefusal）：文案由服务端写死，不是模型的输出。 */
+export interface RefusalInfo {
+  text: string
+  code?: string | null
+}
+
+/** 一次作答的引用体检报告（来自 SignalR ReceiveCitations，与后端 CitationReport 对齐）。 */
+export interface CitationReport {
+  sentenceCount: number
+  citedSentenceCount: number
+  uncitedSentenceCount: number
+  outOfRangeCount: number
+  unsupportedCount: number
+  /** 无出处句占全部句子的比例（0 到 1），由服务端算好，前端不再自己除。 */
+  uncitedRatio: number
+  /**
+   * 整段答案有没有资料支撑：supported / unsupported / undetermined（判定线未配置）。
+   * 与 unsupportedCount 不是一回事——后者数的是"几条引用指向错块"，这个是"整段有没有撑住"。
+   */
+  supportVerdict: string
+  /** 剥掉越界标注后的正文。 */
+  cleanedAnswer: string
+  citations: CitationItem[]
+}

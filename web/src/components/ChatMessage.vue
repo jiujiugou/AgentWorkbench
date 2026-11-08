@@ -2,14 +2,16 @@
 import { computed, ref } from 'vue'
 import { ArrowRight, CopyDocument, MagicStick, Connection } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { renderMarkdown } from '@/utils/markdown'
-import type { RetrievalSource, RunSummary, ToolStepEvent } from '@/types'
+import { renderAnnotated } from '@/utils/citations'
+import type { CitationReport, RefusalInfo, RetrievalSource, RunSummary, ToolStepEvent } from '@/types'
 import type { ChatMessage } from '@/stores/agent'
 import RunTrace from '@/components/RunTrace.vue'
 
 const props = defineProps<{
   message: ChatMessage
   sources?: RetrievalSource[]
+  citations?: CitationReport
+  refusal?: RefusalInfo
   tools?: ToolStepEvent[]
   run?: RunSummary
   stopStatus?: string
@@ -17,9 +19,43 @@ const props = defineProps<{
 
 const sourcesOpen = ref(false)
 const sourceList = computed(() => props.sources ?? [])
-const html = computed(() =>
-  props.message.role === 'assistant' ? renderMarkdown(props.message.content) : '',
+
+// 有体检报告时用 cleanedAnswer：越界编号（指向不存在之物）已由服务端剥掉，正文不再保留假担保。
+const bodyText = computed(
+  () => props.refusal?.text || props.citations?.cleanedAnswer || props.message.content,
 )
+
+const html = computed(() =>
+  props.message.role === 'assistant'
+    ? renderAnnotated(bodyText.value, props.citations, props.sources)
+    : '',
+)
+
+/** 引用体检的一行摘要：句数 / 有出处 / 无出处 / 错块。全零指标不占位。 */
+const citeSummary = computed(() => {
+  // 拒答时不显示句级统计：那份报告针对的是被丢弃的草稿，挂在拒答卡片下面只会让人以为"它答了但没出处"。
+  if (props.refusal) return null
+  const r = props.citations
+  if (!r) return null
+  const parts: string[] = [`${r.sentenceCount} 句`]
+  if (r.citedSentenceCount) parts.push(`${r.citedSentenceCount} 句有出处`)
+  if (r.uncitedSentenceCount) parts.push(`${r.uncitedSentenceCount} 句无出处`)
+  if (r.unsupportedCount) parts.push(`${r.unsupportedCount} 条指向错块`)
+  return parts.join(' · ')
+})
+
+/**
+ * 第二层「承认」：整段没有资料支撑时，在正文上方先给一句结论。
+ *
+ * 这一档不拒答——同主题但资料里没写，拒了会误伤真实问题。但读者必须在开始读之前就知道：
+ * 下面这些话没有出处可核。判定由服务端算好（supportVerdict），这里只负责显示，不自己数。
+ */
+const supportNote = computed(() => {
+  if (props.refusal) return null
+  const r = props.citations
+  if (!r || r.supportVerdict !== 'unsupported') return null
+  return `${r.sentenceCount} 句里有 ${r.uncitedSentenceCount} 句没有标出处，建议对照原文核对`
+})
 
 async function copyText(text: string, tip = '已复制'): Promise<void> {
   if (!text) return
@@ -71,7 +107,20 @@ function pageLabel(s: RetrievalSource): string {
       <div class="msg-name">{{ message.role === 'assistant' ? 'Agent' : '我' }}</div>
 
       <div class="msg-bubble" :class="message.role">
-        <div v-if="message.role === 'assistant'" class="markdown" v-html="html" @click="onMarkdownClick" />
+        <div v-if="refusal" class="refusal-card">
+          <div class="refusal-head">
+            <span class="refusal-tag">依据不足</span>
+            <span class="refusal-code">{{ refusal.code }}</span>
+          </div>
+          <p class="refusal-text">{{ refusal.text }}</p>
+        </div>
+        <template v-else-if="message.role === 'assistant'">
+          <div v-if="supportNote" class="support-note">
+            <span class="support-tag">无资料支撑</span>
+            <span class="support-text">{{ supportNote }}</span>
+          </div>
+          <div class="markdown" v-html="html" @click="onMarkdownClick" />
+        </template>
         <template v-else>{{ message.content }}</template>
 
         <span v-if="message.pending && !message.content" class="typing">
@@ -79,19 +128,23 @@ function pageLabel(s: RetrievalSource): string {
         </span>
 
         <button
-          v-if="message.content && !message.pending"
+          v-if="bodyText && !message.pending"
           class="msg-copy"
           :class="message.role"
           title="复制全文"
-          @click="copyText(message.content)"
+          @click="copyText(bodyText)"
         >
           <el-icon><CopyDocument /></el-icon>
         </button>
       </div>
 
+      <div v-if="citeSummary" class="cite-summary" title="引用体检：句级统计来自服务端的两级校验">
+        <span class="cite-summary-dot" />{{ citeSummary }}
+      </div>
+
       <RunTrace v-if="message.role === 'assistant'" :tools="tools" :run="run" :stop-status="stopStatus" />
 
-      <div v-if="message.role === 'assistant' && sourceList.length" class="sources">
+      <div v-if="message.role === 'assistant' && !refusal && sourceList.length" class="sources">
         <button class="sources-toggle" @click="sourcesOpen = !sourcesOpen">
           <el-icon><Connection /></el-icon>
           <span>引用来源 · {{ sourceList.length }}</span>
@@ -409,6 +462,99 @@ function pageLabel(s: RetrievalSource): string {
   }
 }
 
+/* ---------- 引用角标与无出处底纹 ---------- */
+/* 角标本体：内联在正文里，不点开就看得出"这句有出处"。 */
+.markdown :deep(.cite) {
+  position: relative;
+  cursor: default;
+  margin: 0 1px;
+}
+
+.markdown :deep(.cite-mark) {
+  color: var(--aw-primary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  vertical-align: super;
+}
+
+/* 指向错块：号码存在、内容对不上。黄色表示"存疑"，不是"删除"。 */
+.markdown :deep(.cite-bad .cite-mark) {
+  color: #b45309;
+  background: #fef3c7;
+  border-radius: 4px;
+  padding: 1px 3px;
+}
+
+.markdown :deep(.cite-card) {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  width: 320px;
+  padding: 10px 12px;
+  border-radius: var(--aw-radius-m);
+  border: 1px solid var(--aw-border);
+  background: var(--aw-surface);
+  box-shadow: var(--aw-shadow-2, 0 8px 24px rgb(15 23 42 / 0.14));
+  text-align: left;
+  font-size: 12px;
+  line-height: 1.6;
+  font-weight: 400;
+  color: var(--aw-text-2);
+  white-space: normal;
+}
+
+/* 贴近视口边缘的角标卡片会被裁剪，光标移入正文气泡时仍要能看全——允许气泡溢出显示。 */
+.markdown :deep(.cite:hover .cite-card),
+.markdown :deep(.cite:focus .cite-card) {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.markdown :deep(.cite-card-head) {
+  font-weight: 600;
+  color: var(--aw-text);
+}
+
+.markdown :deep(.cite-card-body) {
+  color: var(--aw-text-2);
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.markdown :deep(.cite-card-warn) {
+  color: #b45309;
+  font-weight: 500;
+}
+
+/* 没有出处的句子：不点开就看得出"这句没依据"。虚线底纹比高亮轻，提示而不警告。 */
+.markdown :deep(.sent-uncited) {
+  border-bottom: 1px dashed color-mix(in srgb, var(--aw-text-3) 55%, transparent);
+  padding-bottom: 1px;
+}
+
+/* ---------- 引用体检摘要 ---------- */
+.cite-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--aw-text-3);
+}
+
+.cite-summary-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--aw-primary);
+  opacity: 0.55;
+}
+
 /* ---------- 引用来源 ---------- */
 .sources {
   margin-top: 8px;
@@ -505,5 +651,68 @@ function pageLabel(s: RetrievalSource): string {
   white-space: pre-wrap;
   max-height: 132px;
   overflow-y: auto;
+}
+
+/* ---------- 拒答 ---------- */
+/* 拒答是系统的结论，不是模型说的话：用边框与标签把它和普通答复区分开，
+   否则用户会把固定文案当成模型自己承认"不知道"。 */
+.refusal-card {
+  border: 1px solid var(--aw-border);
+  border-left: 3px solid #d97706;
+  background: var(--aw-surface-3);
+  border-radius: var(--aw-radius-l);
+  padding: 10px 12px;
+}
+
+.refusal-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.refusal-tag {
+  font-size: 12px;
+  font-weight: 600;
+  color: #b45309;
+}
+
+.refusal-code {
+  font-size: 11px;
+  color: var(--aw-text-3);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.refusal-text {
+  margin: 0;
+  color: var(--aw-text);
+  line-height: 1.7;
+}
+
+/* ---------- 无资料支撑 ---------- */
+/* 与拒答卡片刻意区别：拒答是系统不给答案（橙色粗边框、独立卡片）；
+   这一层答案照给，只是先告诉读者"下面没有出处可核"，所以是正文上方的一条窄提示，不遮内容。 */
+.support-note {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  border-radius: var(--aw-radius-l);
+  border-left: 3px solid #d97706;
+  background: var(--aw-surface-3);
+}
+
+.support-tag {
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: #b45309;
+}
+
+.support-text {
+  font-size: 12px;
+  color: var(--aw-text-3);
+  line-height: 1.5;
 }
 </style>
