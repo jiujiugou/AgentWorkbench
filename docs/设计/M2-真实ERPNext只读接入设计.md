@@ -432,6 +432,29 @@ python scripts/erp_live_probe.py --verify --insecure         # 自签名证书�
 | 6 组合根 | 未开始 | — | — | — |
 | 7 验收 + 台账 | 未开始 | — | — | — |
 
+### 12.1 方案第 2/3 步落地（2026-11-08）
+
+> **编号澄清**：这里的「第 2/3 步」指用户提供的《AI-ERP 安全执行层开发流程》11 步材料，
+> **不是**上表 M2 七步的第 2/3 步。两套编号不通用，勿混。
+
+| 项 | 内容 |
+|---|---|
+| 第 1 步（调查） | ✅ 已完成，但对象换成 **gitea.com 公开实例**（`29.0.0+dev`），不是 ERPNext。证据：`docs/验证与现状/gitea-真实行为-20261108.md` |
+| 第 2 步（Connector） | ✅ `src/Domains/Gitea/`：`IGiteaTransport` / `HttpGiteaTransport` / `GiteaAdapter`，只引用 `Core.Ports` |
+| 第 3 步（能力目录） | ✅ `ActionSpec` 补 6 个 `required init` 字段；`IActionSpecRegistry.ListAsync`；三个域全部补齐；Gitea 域按**业务对象**命名（`repo.query` / `issue.create`） |
+| 测试 | 19 条（C1–C6 / G1–G12），16 个变异负控自证，见 `.workbuddy/memory/` 报告 |
+| AC-01 | 契约收敛完成后新建 Gitea 域，`src/Core` 未因接域而改动；C5 断言 csproj 只引用 Ports |
+
+**为什么换成 Gitea**：本机 7.8GB 内存、无 Docker，实测部署 ERPNext 不可行；Frappe Cloud 需绑定国际信用卡。
+Gitea 公开实例满足「契约由别人定义 / 真实权限模型 / 真实状态机 / 真实失败模式」四条考官属性，
+且零部署成本。**这不改变判据强度，但改变 §4.1 第 1 句的措辞**（ERPNext → 真实外部系统），属范围决定，待用户裁决。
+
+**三条实测坑已固化为断言**：PATCH 返 201、DELETE 204 空 body、时间 RFC3339+Z 与 Frappe naive 串完全相反。
+另：403 body 会泄露完整 token scope 清单（反面教材），我们的拒绝理由不得照抄这种做法。
+
+**如实未做**：Gitea 未接组合根 / appsettings；`AllowWrites` 默认 false，写能力只在目录可见、执行拒绝且零 HTTP；
+审计与 run 状态仍内存存储（M2 第 5 步）；§11 的 7 项待确认原样挂着。
+
 ---
 
 ## 13 一句话
