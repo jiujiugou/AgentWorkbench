@@ -49,7 +49,7 @@ public sealed class ActionRunService
             return ActionResults.Reject(request.RequestId, ActionRejectionCodes.SpecNotFound);
 
         string? approver = null;
-        if (spec.SideEffecting)
+        if (spec.RequiresApproval)
         {
             await _store.SuspendAsync(
                 request.RequestId,
@@ -72,8 +72,9 @@ public sealed class ActionRunService
     }
 
     /// <summary>
-    /// 两阶段提交：先做四道校验，SideEffecting 动作挂起等人工，返回 Pending；
-    /// 非副作用动作直接执行并返回终态。挂起后必须由 Approve / Reject 收口。
+    /// 两阶段提交：先做四道校验，RequiresApproval 动作挂起等人工，返回 Pending；
+    /// 其余动作直接执行并返回终态。挂起后必须由 Approve / Reject 收口。
+    /// 审批与副作用解耦：草稿可以「有副作用但免审批」，见 ActionSpec.RequiresApproval。
     /// </summary>
     public async ValueTask<ActionResult> SubmitDeferredAsync(ActionRequest request, CancellationToken ct)
     {
@@ -85,7 +86,7 @@ public sealed class ActionRunService
         if (spec is null)
             return ActionResults.Reject(request.RequestId, ActionRejectionCodes.SpecNotFound);
 
-        if (!spec.SideEffecting)
+        if (!spec.RequiresApproval)
             return await ExecuteAsync(spec, request, null, ct);
 
         await _store.SuspendAsync(

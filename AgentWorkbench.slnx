@@ -40,6 +40,7 @@
   <Folder Name="/src/Domains/">
     <Project Path="src/Domains/Erp/AgentWorkbench.Erp.csproj" />
     <Project Path="src/Domains/FakeActionSet/AgentWorkbench.FakeActionSet.csproj" />
+    <Project Path="src/Domains/Gitea/AgentWorkbench.Gitea.csproj" />
   </Folder>
   <Folder Name="/src/Host/">
     <Project Path="src/Host/AgentWorkbench.Webapi/AgentWorkbench.Webapi.csproj" />

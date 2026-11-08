@@ -66,6 +66,9 @@ public sealed class StubSpecRegistry : IActionSpecRegistry
 
     public ValueTask<ActionSpec?> FindAsync(string actionKey, CancellationToken ct)
         => ValueTask.FromResult(Spec);
+
+    public ValueTask<IReadOnlyList<ActionSpec>> ListAsync(CancellationToken ct)
+        => ValueTask.FromResult<IReadOnlyList<ActionSpec>>(Spec is null ? [] : [Spec]);
 }
 
 public sealed class CountingExecutor : IActionExecutor
@@ -109,8 +112,25 @@ public sealed class TestActionSet : IActionSet
     public StubApprovalGate Approval { get; } = new();
     public CountingExecutor ExecutorStub { get; } = new();
 
-    public ActionSpec Spec { get; } = new("test.submit", "test.schema", true, ActionPrimitives.Submit);
-    public ActionSpec QuerySpec { get; } = new("test.query", "test.schema", false, ActionPrimitives.Query);
+    public ActionSpec Spec { get; } = new("test.submit", "test.schema", true, ActionPrimitives.Submit)
+    {
+        DisplayName = "测试提交动作",
+        Description = "测试用动作规格，仅用于验证网关行为，不代表任何业务能力。",
+        RiskLevel = RiskLevels.High,
+        RequiresApproval = true,
+        Version = "1",
+        InputSchemaJson = "{}",
+    };
+
+    public ActionSpec QuerySpec { get; } = new("test.query", "test.schema", false, ActionPrimitives.Query)
+    {
+        DisplayName = "测试查询动作",
+        Description = "测试用只读规格，超时查证时作为 Query 原语的目标。",
+        RiskLevel = RiskLevels.Low,
+        RequiresApproval = false,
+        Version = "1",
+        InputSchemaJson = "{}",
+    };
 
     public string Name => "TestActionSet";
     public IActionSpecRegistry Specs => Registry;

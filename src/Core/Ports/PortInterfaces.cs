@@ -73,8 +73,14 @@ public interface IActionExecutor
     ValueTask<ActionResult> ExecuteAsync(ActionSpec spec, ActionRequest request, CancellationToken ct);
 }
 
-/// <summary>动作类型注册表：底座按 ActionKey 取规格，实例由动作域注入。</summary>
+/// <summary>
+/// 动作类型注册表：底座按 ActionKey 取规格，实例由动作域注入。
+/// <see cref="ListAsync"/> 供工具面把当前域的全部能力枚举出来（方案第 4 步的前提）；
+/// 只有 FindAsync 而列不出全部，就永远没法把目录暴露给模型。
+/// </summary>
 public interface IActionSpecRegistry
 {
     ValueTask<ActionSpec?> FindAsync(string actionKey, CancellationToken ct);
+
+    ValueTask<IReadOnlyList<ActionSpec>> ListAsync(CancellationToken ct);
 }

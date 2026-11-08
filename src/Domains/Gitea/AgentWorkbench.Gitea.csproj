@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!--
+    第三动作域：Gitea 真实外部系统（方案第 1/2/3 步的第一个真实样板）。
+    铁律：只允许引用 Core.Ports；不得被 Core 下任何项目引用。
+    加入本工程时 src/Core 的 diff 必须为 0（AC-01）。
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\Ports\AgentWorkbench.Ports.csproj" />
+  </ItemGroup>
+</Project>

@@ -10,7 +10,18 @@ public sealed class AnyActionSpecRegistry : IActionSpecRegistry
 {
     public ValueTask<ActionSpec?> FindAsync(string actionKey, CancellationToken ct)
         => ValueTask.FromResult<ActionSpec?>(
-            new ActionSpec(actionKey, "default", true, ActionPrimitives.Submit));
+            new ActionSpec(actionKey, "default", true, ActionPrimitives.Submit)
+            {
+                DisplayName = "未注册动作",
+                Description = "零配置占位规格。四道校验默认全拒绝，本规格不应被真正执行。",
+                RiskLevel = RiskLevels.Critical,
+                RequiresApproval = true,
+                Version = "0",
+                InputSchemaJson = "{}",
+            });
+
+    public ValueTask<IReadOnlyList<ActionSpec>> ListAsync(CancellationToken ct)
+        => ValueTask.FromResult<IReadOnlyList<ActionSpec>>([]);
 }
 
 public sealed class DenyAllSchemaValidator : ISchemaValidator
