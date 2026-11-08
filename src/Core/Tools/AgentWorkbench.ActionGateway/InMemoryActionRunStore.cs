@@ -23,6 +23,18 @@ public sealed class InMemoryActionRunStore : IActionRunStore
             return ValueTask.FromResult(_checkpoints.TryGetValue(requestId, out var cp) ? cp : null);
     }
 
+    public ValueTask<IReadOnlyList<RunCheckpoint>> ListCheckpointsAsync(string state, CancellationToken ct)
+    {
+        lock (_gate)
+        {
+            IReadOnlyList<RunCheckpoint> list = _checkpoints.Values
+                .Where(cp => string.Equals(cp.State, state, StringComparison.Ordinal))
+                .OrderBy(cp => cp.At)
+                .ToArray();
+            return ValueTask.FromResult(list);
+        }
+    }
+
     public ValueTask<RunCheckpoint> SuspendAsync(string requestId, string state, string progressBlob, CancellationToken ct)
     {
         lock (_gate)

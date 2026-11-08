@@ -44,6 +44,10 @@ public interface IApprovalGate
 public interface IActionRunStore
 {
     ValueTask<RunCheckpoint?> LoadCheckpointAsync(string requestId, CancellationToken ct);
+
+    /// <summary>按状态列待办（宿主审批页用）。只返回 Checkpoint，不含业务单据内容。</summary>
+    ValueTask<IReadOnlyList<RunCheckpoint>> ListCheckpointsAsync(string state, CancellationToken ct);
+
     ValueTask<RunCheckpoint> SuspendAsync(string requestId, string state, string progressBlob, CancellationToken ct);
     ValueTask<RunCheckpoint?> ResumeAsync(string requestId, CancellationToken ct);
     ValueTask<bool> TryClaimIdempotencyAsync(string requestId, string? idempotencyKey, CancellationToken ct);

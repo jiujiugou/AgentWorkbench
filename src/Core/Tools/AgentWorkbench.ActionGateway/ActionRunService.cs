@@ -7,9 +7,12 @@ using AgentWorkbench.Ports;
 /// 输入必须是结构化 ActionRequest —— 模型只负责把自然语言翻成它，本类不依赖模型，
 /// 因此「拿掉模型系统仍能安全拒绝」在结构上成立，而不是靠提示词保证。
 ///
-/// 顺序铁律：四道校验 → 挂起审批（仅 SideEffecting）→ 幂等领取 → 执行 → 收口。
-/// 校验未过 / 审批未通过时，IActionExecutor 一次都不会被调用。
-/// 超时或状态未知时只发起 Query 查证，绝不重放写动作。
+/// 两种审批形态：
+/// - <see cref="RunAsync"/>：同步审批（IApprovalGate 当场给结论），用于测试与无人工场景；
+/// - <see cref="SubmitDeferredAsync"/> + <see cref="ApproveAsync"/> / <see cref="RejectAsync"/>：
+///   两阶段挂起，供宿主「待办 + 同意/拒绝」最小闭环使用。挂起期间零外部调用。
+///
+/// 共同顺序铁律：四道校验 → 审批 → 幂等领取 → 执行 → 超时只查证 → 收口。
 /// </summary>
 public sealed class ActionRunService
 {
@@ -34,24 +37,17 @@ public sealed class ActionRunService
 
     public string ActionSetName => _actionSet.Name;
 
+    /// <summary>同步审批路径：审批由注入口当场给结论。</summary>
     public async ValueTask<ActionResult> RunAsync(ActionRequest request, CancellationToken ct)
     {
-        // 步骤 1：收请求。request_id 由 Host 生成并贯穿全程；同一 request_id 已有终态直接回放。
-        var prior = await _store.LoadResultAsync(request.RequestId, ct);
-        if (prior is not null)
-            return prior with { Code = ActionSuccessCodes.ReplayedFromIdempotency };
-
-        // 步骤 2：意图结构化已是输入前提（模型只做翻译）。此处不接受自由文本。
-        // 步骤 3：四道校验，fail-closed。
-        var gate = await _gateway.SubmitAsync(request, ct);
-        if (gate.Status != ActionStatuses.Validated)
-            return gate;
+        var blocked = await GateAsync(request, ct);
+        if (blocked is not null)
+            return blocked;
 
         var spec = await _actionSet.Specs.FindAsync(request.ActionKey, ct);
         if (spec is null)
             return ActionResults.Reject(request.RequestId, ActionRejectionCodes.SpecNotFound);
 
-        // 步骤 4：仅 SideEffecting 动作挂起审批。Checkpoint 只存执行进度，不存业务状态。
         string? approver = null;
         if (spec.SideEffecting)
         {
@@ -72,14 +68,115 @@ public sealed class ActionRunService
             await WriteAsync(request, "approval", "allow", decision.Reason, approver, null, ct);
         }
 
-        // 幂等领取：同 request_id 只允许一次副作用，去重表在底座侧。
+        return await ExecuteAsync(spec, request, approver, ct);
+    }
+
+    /// <summary>
+    /// 两阶段提交：先做四道校验，SideEffecting 动作挂起等人工，返回 Pending；
+    /// 非副作用动作直接执行并返回终态。挂起后必须由 Approve / Reject 收口。
+    /// </summary>
+    public async ValueTask<ActionResult> SubmitDeferredAsync(ActionRequest request, CancellationToken ct)
+    {
+        var blocked = await GateAsync(request, ct);
+        if (blocked is not null)
+            return blocked;
+
+        var spec = await _actionSet.Specs.FindAsync(request.ActionKey, ct);
+        if (spec is null)
+            return ActionResults.Reject(request.RequestId, ActionRejectionCodes.SpecNotFound);
+
+        if (!spec.SideEffecting)
+            return await ExecuteAsync(spec, request, null, ct);
+
+        await _store.SuspendAsync(
+            request.RequestId,
+            ActionRunStates.PendingApproval,
+            PendingRequestCodec.Encode(request),
+            ct);
+        await WriteAsync(request, "approval", "pending", "waiting for human approval", null, null, ct);
+
+        return new ActionResult(
+            request.RequestId,
+            ActionStatuses.Pending,
+            ActionRejectionCodes.ApprovalRequired,
+            null,
+            null,
+            ActionResults.Empty);
+    }
+
+    /// <summary>人工同意后恢复执行。返回 null 表示没有该 request_id 的待审记录。</summary>
+    public async ValueTask<ActionResult?> ApproveAsync(string requestId, string approver, CancellationToken ct)
+    {
+        var request = await LoadPendingAsync(requestId, ct);
+        if (request is null)
+            return null;
+
+        var spec = await _actionSet.Specs.FindAsync(request.ActionKey, ct);
+        if (spec is null)
+            return ActionResults.Reject(request.RequestId, ActionRejectionCodes.SpecNotFound);
+
+        await _store.ResumeAsync(requestId, ct);
+        await WriteAsync(request, "approval", "allow", "approved by human", approver, null, ct);
+        return await ExecuteAsync(spec, request, approver, ct);
+    }
+
+    /// <summary>人工拒绝：零外部调用直接进终态。</summary>
+    public async ValueTask<ActionResult?> RejectAsync(string requestId, string reason, CancellationToken ct)
+    {
+        var request = await LoadPendingAsync(requestId, ct);
+        if (request is null)
+            return null;
+
+        await WriteAsync(request, "approval", "deny", reason, null, null, ct);
+        var result = ActionResults.Reject(requestId, ActionRejectionCodes.ApprovalDenied);
+        await _store.SaveResultAsync(result, ct);
+        return result;
+    }
+
+    public ValueTask<IReadOnlyList<TraceEvent>> AuditTrailAsync(string requestId, CancellationToken ct)
+        => _audit is null
+            ? ValueTask.FromResult<IReadOnlyList<TraceEvent>>(Array.Empty<TraceEvent>())
+            : _audit.AuditTrailAsync(requestId, ct);
+
+    /// <summary>待办详情：只解码已挂起的输入快照，不解读业务字段含义。</summary>
+    public ValueTask<ActionRequest?> LoadPendingRequestAsync(string requestId, CancellationToken ct)
+        => LoadPendingAsync(requestId, ct);
+
+    private async ValueTask<ActionRequest?> LoadPendingAsync(string requestId, CancellationToken ct)
+    {
+        var checkpoint = await _store.LoadCheckpointAsync(requestId, ct);
+        if (checkpoint is null ||
+            !string.Equals(checkpoint.State, ActionRunStates.PendingApproval, StringComparison.Ordinal))
+            return null;
+
+        // 解码失败按「不可恢复」处理，不猜参数继续执行。
+        return PendingRequestCodec.TryDecode(checkpoint.ProgressBlob);
+    }
+
+    /// <summary>幂等回放 + 四道校验。返回 null 表示可以继续；否则就是终态。</summary>
+    private async ValueTask<ActionResult?> GateAsync(ActionRequest request, CancellationToken ct)
+    {
+        var prior = await _store.LoadResultAsync(request.RequestId, ct);
+        if (prior is not null)
+            return prior with { Code = ActionSuccessCodes.ReplayedFromIdempotency };
+
+        var gate = await _gateway.SubmitAsync(request, ct);
+        return gate.Status == ActionStatuses.Validated ? null : gate;
+    }
+
+    private async ValueTask<ActionResult> ExecuteAsync(
+        ActionSpec spec,
+        ActionRequest request,
+        string? approver,
+        CancellationToken ct)
+    {
+        // 幂等领取：同 request_id 只允许一次副作用。
         if (!await _store.TryClaimIdempotencyAsync(request.RequestId, request.IdempotencyKey, ct))
         {
             var existing = await _store.LoadResultAsync(request.RequestId, ct);
             return existing ?? ActionResults.Reject(request.RequestId, ActionRejectionCodes.DuplicateClaim);
         }
 
-        // 步骤 5：执行四原语之一。
         var result = await _actionSet.Executor.ExecuteAsync(spec, request, ct);
 
         // 超时 / 状态未知 → 只查证，不重放。写动作永远不在这里被调用第二次。
@@ -97,16 +194,10 @@ public sealed class ActionRunService
                 : ActionResults.Fail(request.RequestId, ActionRejectionCodes.Timeout);
         }
 
-        // 步骤 6：收口。审计五字段（Intent / Arguments / Approver / Result / ExternalId）落痕，终态缓存。
         await WriteAsync(request, AuditStages.Execute, result.Status, result.Code, approver, result.ExternalId, ct);
         await _store.SaveResultAsync(result, ct);
         return result;
     }
-
-    public ValueTask<IReadOnlyList<TraceEvent>> AuditTrailAsync(string requestId, CancellationToken ct)
-        => _audit is null
-            ? ValueTask.FromResult<IReadOnlyList<TraceEvent>>(Array.Empty<TraceEvent>())
-            : _audit.AuditTrailAsync(requestId, ct);
 
     private async ValueTask WriteAsync(
         ActionRequest request,

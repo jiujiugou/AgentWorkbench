@@ -30,5 +30,10 @@
     <ProjectReference Include="..\..\Core\Memory\AgentWorkbench.Memory.Persistence\AgentWorkbench.Memory.Persistence.csproj" />
     <ProjectReference Include="..\..\Core\Engineering\AgentWorkbench.Observability\AgentWorkbench.Observability.csproj" />
     <ProjectReference Include="..\..\Core\Runtime\AgentWorkbench.Runtime.Loop\AgentWorkbench.Runtime.Loop.csproj" />
+    <!-- M1：组合根唯一允许同时引用底座端口与动作域的地方（M1 设计 §7）。 -->
+    <ProjectReference Include="..\..\Core\Ports\AgentWorkbench.Ports.csproj" />
+    <ProjectReference Include="..\..\Core\Tools\AgentWorkbench.ActionGateway\AgentWorkbench.ActionGateway.csproj" />
+    <ProjectReference Include="..\..\Domains\Erp\AgentWorkbench.Erp.csproj" />
+    <ProjectReference Include="..\..\Domains\FakeActionSet\AgentWorkbench.FakeActionSet.csproj" />
   </ItemGroup>
 </Project>
