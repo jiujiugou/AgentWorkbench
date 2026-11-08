@@ -23,6 +23,9 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Core\Foundation\AgentWorkbench.Shared\AgentWorkbench.Shared.csproj" />
     <ProjectReference Include="..\..\src\Core\Ports\AgentWorkbench.Ports.csproj" />
+    <ProjectReference Include="..\..\src\Core\Tools\AgentWorkbench.ActionGateway\AgentWorkbench.ActionGateway.csproj" />
+    <ProjectReference Include="..\..\src\Domains\Erp\AgentWorkbench.Erp.csproj" />
+    <ProjectReference Include="..\..\src\Domains\FakeActionSet\AgentWorkbench.FakeActionSet.csproj" />
     <ProjectReference Include="..\..\src\Core\Foundation\AgentWorkbench.Domain\AgentWorkbench.Domain.csproj" />
     <ProjectReference Include="..\..\src\Core\Foundation\AgentWorkbench.Persistence\AgentWorkbench.Persistence.csproj" />
     <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Loop\AgentWorkbench.Runtime.Loop.csproj" />
