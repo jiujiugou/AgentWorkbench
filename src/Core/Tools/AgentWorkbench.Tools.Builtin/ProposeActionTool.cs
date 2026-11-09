@@ -32,15 +32,22 @@ public sealed class ProposeActionTool : IAgentToolProvider
     private readonly IActionSet _actionSet;
     private readonly IActionSubjectProvider _subjects;
     private readonly ActionRunService _runService;
+    private readonly IActionOriginProvider? _origin;
 
+    /// <param name="origin">
+    /// 调用来源（会话 + 本次输入的客户端消息标识）。缺失时请求号退化为一次性 ID，
+    /// 行为与引入去重之前一致；绝不因此放行多个请求共用一个号。
+    /// </param>
     public ProposeActionTool(
         IActionSet actionSet,
         IActionSubjectProvider subjects,
-        ActionRunService runService)
+        ActionRunService runService,
+        IActionOriginProvider? origin = null)
     {
         _actionSet = actionSet;
         _subjects = subjects;
         _runService = runService;
+        _origin = origin;
     }
 
     public IReadOnlyList<AITool> GetTools()
@@ -82,8 +89,12 @@ public sealed class ProposeActionTool : IAgentToolProvider
             return Reply("rejected", string.Empty, InvalidArgumentsJson);
         }
 
-        // requestId 由系统生成，idempotencyKey 同源；模型既不能指定也不能复用别人的请求号。
-        var requestId = Guid.NewGuid().ToString("N");
+        // requestId 由「哪一次输入 + 哪个能力 + 什么参数」派生，<b>刻意不随机生成</b>：
+        // 去重表按 requestId 判重，随机的号让同一件事的每次触发都成为新请求，
+        // 「同一 request_id 只出一张单」在模型原样重试面前直接失效。
+        // 来源只读宿主作用域（IActionOriginProvider），工具参数里出现同名字段也读不到。
+        var requestId = ActionRequestId.Derive(
+            _origin?.ConversationId, _origin?.ClientMessageId, actionKey, arguments);
         var request = new ActionRequest(requestId, subject, actionKey, arguments, requestId);
         var result = await _runService.SubmitDeferredAsync(request, CancellationToken.None);
 

@@ -19,7 +19,19 @@ using Microsoft.Extensions.Options;
 namespace AgentWorkbench.Webapi.Hubs;
 
 /// <summary>客户端发起的对话请求。</summary>
-public sealed record ChatRequest(string? ConversationId, string Text, List<ChatTurn>? History);
+/// <param name="ConversationId">想接着哪个会话；不属于自己时由仓储另建新会话。</param>
+/// <param name="Text">用户输入的自然语言。</param>
+/// <param name="History">历史轮次（保留字段，当前由 ChatHistoryProvider 从会话存储恢复）。</param>
+/// <param name="ClientMessageId">
+/// 本次输入的客户端标识，由前端在点击发送时生成、在一次输入内保持不变。
+/// 它是派生动作请求号的输入之一：同一次输入被触发两次（模型原样重试、客户端重放到网关）
+/// 会收敛到同一个 requestId，从而被去重表挡住。缺省时请求号退化为一次性 ID。
+/// </param>
+public sealed record ChatRequest(
+    string? ConversationId,
+    string Text,
+    List<ChatTurn>? History,
+    string? ClientMessageId = null);
 
 /// <summary>
 /// Agent 实时通道：接收用户消息，流式推送 token，并汇报工具调用事件。
@@ -90,10 +102,6 @@ public sealed class AgentHub : Hub
             return;
         }
 
-        // 翻译工具在 harness 的工具环里执行，此刻的 HttpContext 不保证还在（长连接）。
-        // 整段生成期间显式建立身份作用域，值随异步流进入工具调用；工具取不到身份会拒绝。
-        using var subjectScope = _subjectScope.Begin(Context.User?.Identity?.Name);
-
         var answer = new StringBuilder();
         ConversationRecord? conversation = null;
         HarnessRunResult? run = null;
@@ -119,7 +127,14 @@ public sealed class AgentHub : Hub
             await Clients.Caller.SendAsync("ReceiveConversation", new { conversationId = conversation.Id }, linked.Token);
             await _conversations.AddMessageAsync(conversation.Id, "user", request.Text);
 
-            // conversationId 同时就是 harness 的 sessionId：一个会话一份跨 run 记忆。
+            // 翻译工具在 harness 的工具环里执行，此刻的 HttpContext 不保证还在（长连接）。
+        // 整段生成期间显式建立作用域，值随异步流进入工具调用；工具取不到身份会拒绝。
+        // 作用域在会话确定之后建立：conversationId 是派生请求号的输入，必须用真实会话 id，
+        // 不能用客户端传来的那个（新会话时它为 null）。
+        using var subjectScope = _subjectScope.Begin(
+            Context.User?.Identity?.Name, conversation.Id, request.ClientMessageId);
+
+        // conversationId 同时就是 harness 的 sessionId：一个会话一份跨 run 记忆。
             // 消息正文另存对话表，专供界面恢复（会话快照是模型记忆，两者职责不同，不重复读）。
             var runRequest = new HarnessRunRequest(
                 conversation.Id, request.Text, ResolveInstructions(knowledgeMode));

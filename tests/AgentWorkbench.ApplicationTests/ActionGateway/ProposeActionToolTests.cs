@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AgentWorkbench.ActionGateway;
 using AgentWorkbench.Erp;
+using AgentWorkbench.Gitea;
 using AgentWorkbench.LabBooking;
 using AgentWorkbench.Ports;
 using AgentWorkbench.Tools.Builtin;
@@ -22,18 +23,28 @@ public sealed class ProposeActionToolTests
         public string? CurrentSubject => Subject;
     }
 
+    /// <summary>模拟宿主作用域里的调用来源；ClientMessageId 可改，用于模拟「另一次输入」。</summary>
+    private sealed class StubOrigin(string? conversationId, string? clientMessageId) : IActionOriginProvider
+    {
+        public string? ConversationId { get; set; } = conversationId;
+        public string? ClientMessageId { get; set; } = clientMessageId;
+    }
+
     private static (
         ProposeActionTool Tool,
         TestActionSet Set,
         InMemoryTraceStore Trace,
         InMemoryActionRunStore Store,
-        StubSubjects Subjects) Create(string? subject = "wang", bool strict = true)
+        StubSubjects Subjects) Create(
+        string? subject = "wang",
+        bool strict = true,
+        IActionOriginProvider? origin = null)
     {
         var set = new TestActionSet();
         set.Registry.MatchKey = strict;
         var (service, trace, store) = TestHarness.Create(set);
         var subjects = new StubSubjects(subject);
-        return (new ProposeActionTool(set, subjects, service), set, trace, store, subjects);
+        return (new ProposeActionTool(set, subjects, service, origin), set, trace, store, subjects);
     }
 
     private static JsonElement Body(string reply)
@@ -161,6 +172,26 @@ public sealed class ProposeActionToolTests
     }
 
     [Fact]
+    public void P10_第三域接入后清单变为业务对象粒度且不依赖连接参数()
+    {
+        // 「不配 token 也能让模型看到能力清单」：Unconfigured 下动作全部 fail-closed 且零 HTTP，
+        // 但 Specs.ListAsync 照常返回。这正是 AC-01 要证明的「换域只换装配，底座不改」。
+        var giteaSet = new GiteaActionSet(GiteaOptions.Unconfigured);
+        var (service, _, _) = TestHarness.Create(giteaSet);
+
+        var description = new ProposeActionTool(giteaSet, new StubSubjects("wang"), service)
+            .GetTools()[0].Description;
+
+        // 业务对象粒度：issue.create / issue.close 而不是 erp.submit 这类原语名。
+        Assert.Contains(GiteaActionSpecs.IssueCreateKey, description);
+        Assert.Contains(GiteaActionSpecs.IssueCloseKey, description);
+        Assert.DoesNotContain(ErpActionSpecs.SubmitKey, description);
+        Assert.DoesNotContain("erp.", description);
+        // 写能力必须标出需审批，否则模型会把 pending 当失败去重试。
+        Assert.Contains("需人工审批：True", description);
+    }
+
+    [Fact]
     public void P9_工具委托与公开方法指向同一条路径()
     {
         // 防止「测试调 A、工具调 B」的假绿：GetTools 返回的必须是一个可调用的 AIFunction。
@@ -170,5 +201,122 @@ public sealed class ProposeActionToolTests
         Assert.NotNull(function.JsonSchema);
         Assert.Contains("actionKey", function.JsonSchema.ToString());
         Assert.Contains("argumentsJson", function.JsonSchema.ToString());
+    }
+
+    // ---------------- 去重键：请求号由「哪一次输入 + 哪个能力 + 什么参数」派生 ----------------
+    //
+    // 这一组守的是一件事：requestId 不能随机。随机的号会让「同一件事被触发两次」永远
+    // 命中不了去重表，于是第⑥步之后所有的幂等承诺在模型重试面前全部失效。
+
+    [Fact]
+    public async Task P11_同一次输入的重复触发收敛到同一请求号且第二次走幂等回放()
+    {
+        var origin = new StubOrigin("conv-1", "msg-1");
+        var (tool, set, _, _, _) = Create(origin: origin);
+        // 换成免审批的只读规格：两次调用都真的走到执行体，才能验「只执行了一次」。
+        set.Registry.Spec = set.QuerySpec;
+
+        var first = Body(await tool.ProposeAsync("test.query", """{"document_id":"PO-1"}"""));
+        var second = Body(await tool.ProposeAsync("test.query", """{"document_id":"PO-1"}"""));
+
+        Assert.Equal(
+            first.GetProperty("requestId").GetString(),
+            second.GetProperty("requestId").GetString());
+        Assert.Equal("completed", first.GetProperty("code").GetString());
+        // 第二次不是重新执行，是回放既有结果——这是「同一件事只做一次」的可证伪断言。
+        Assert.Equal(
+            ActionSuccessCodes.ReplayedFromIdempotency,
+            second.GetProperty("code").GetString());
+        Assert.Equal(1, set.ExecutorStub.QueryCallCount);
+    }
+
+    [Fact]
+    public async Task P12_换一次输入得到新请求号并各执行一次()
+    {
+        var origin = new StubOrigin("conv-1", "msg-1");
+        var (tool, set, _, _, _) = Create(origin: origin);
+        set.Registry.Spec = set.QuerySpec;
+
+        var first = Body(await tool.ProposeAsync("test.query", """{"document_id":"PO-1"}"""));
+        origin.ClientMessageId = "msg-2";   // 用户又说了同一句话：这是新输入，该办第二次
+        var second = Body(await tool.ProposeAsync("test.query", """{"document_id":"PO-1"}"""));
+
+        Assert.NotEqual(
+            first.GetProperty("requestId").GetString(),
+            second.GetProperty("requestId").GetString());
+        Assert.Equal("completed", second.GetProperty("code").GetString());
+        Assert.Equal(2, set.ExecutorStub.QueryCallCount);
+    }
+
+    [Fact]
+    public async Task P13_同一次输入但参数变了就是新请求()
+    {
+        // 模型超时后改参数重试，是新的意图，必须放行；否则会把「修正」当成「重复」吞掉。
+        var origin = new StubOrigin("conv-1", "msg-1");
+        var (tool, set, _, _, _) = Create(origin: origin);
+        set.Registry.Spec = set.QuerySpec;
+
+        var first = Body(await tool.ProposeAsync("test.query", """{"document_id":"PO-1"}"""));
+        var second = Body(await tool.ProposeAsync("test.query", """{"document_id":"PO-2"}"""));
+
+        Assert.NotEqual(
+            first.GetProperty("requestId").GetString(),
+            second.GetProperty("requestId").GetString());
+        Assert.Equal(2, set.ExecutorStub.QueryCallCount);
+    }
+
+    [Fact]
+    public async Task P14_没有来源标识时退化为一次性请求号()
+    {
+        // 兼容分支：HTTP 手工递单与旧客户端不带 clientMessageId。
+        // 必须退化为「每次新号」，绝不能退化成「所有请求共用一个号」——那会把不重复执行变成不执行。
+        var (tool, set, _, _, _) = Create(origin: null);
+        set.Registry.Spec = set.QuerySpec;
+
+        var first = Body(await tool.ProposeAsync("test.query", """{"document_id":"PO-1"}"""));
+        var second = Body(await tool.ProposeAsync("test.query", """{"document_id":"PO-1"}"""));
+
+        Assert.NotEqual(
+            first.GetProperty("requestId").GetString(),
+            second.GetProperty("requestId").GetString());
+        Assert.Equal(2, set.ExecutorStub.QueryCallCount);
+    }
+
+    [Fact]
+    public async Task P15_参数键序不同仍算同一次请求()
+    {
+        // 模型每次序列化的键序/空格可能不同。若原文直接参与算号，
+        // 「原样重试」会因为格式差异被当成新请求，去重当场失效。
+        var origin = new StubOrigin("conv-1", "msg-1");
+        var (tool, set, _, _, _) = Create(origin: origin);
+        set.Registry.Spec = set.QuerySpec;
+
+        var first = Body(await tool.ProposeAsync("test.query", """{"document_id":"PO-1","amount":100}"""));
+        var second = Body(await tool.ProposeAsync("test.query", """{ "amount":100 , "document_id":"PO-1" }"""));
+
+        Assert.Equal(
+            first.GetProperty("requestId").GetString(),
+            second.GetProperty("requestId").GetString());
+        Assert.Equal(
+            ActionSuccessCodes.ReplayedFromIdempotency,
+            second.GetProperty("code").GetString());
+        Assert.Equal(1, set.ExecutorStub.QueryCallCount);
+    }
+
+    [Fact]
+    public void P16_派生规则对语义相同写法给出相同号语义不同给出不同号()
+    {
+        using var docA = JsonDocument.Parse("""{"b":1,"a":"中文"}""");
+        using var docB = JsonDocument.Parse("""{"a":"\u4e2d\u6587","b":1}""");
+        using var docC = JsonDocument.Parse("""{"a":"中文","b":2}""");
+
+        var a = ActionRequestId.Derive("c", "m", "k", docA.RootElement.Clone());
+        var b = ActionRequestId.Derive("c", "m", "k", docB.RootElement.Clone());
+        var c = ActionRequestId.Derive("c", "m", "k", docC.RootElement.Clone());
+
+        Assert.Equal(a, b);
+        Assert.NotEqual(a, c);
+        Assert.Equal(ActionRequestId.Length, a.Length);
+        Assert.Equal(a.ToLowerInvariant(), a);
     }
 }

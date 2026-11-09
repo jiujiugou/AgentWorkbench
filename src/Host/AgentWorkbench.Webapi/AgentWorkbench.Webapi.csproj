@@ -35,5 +35,7 @@
     <ProjectReference Include="..\..\Core\Tools\AgentWorkbench.ActionGateway\AgentWorkbench.ActionGateway.csproj" />
     <ProjectReference Include="..\..\Domains\Erp\AgentWorkbench.Erp.csproj" />
     <ProjectReference Include="..\..\Domains\FakeActionSet\AgentWorkbench.FakeActionSet.csproj" />
+    <!-- 第三动作域：真实外部系统（Gitea）。加入它不改 src/Core 一行，AC-01 的异构域实证。 -->
+    <ProjectReference Include="..\..\Domains\Gitea\AgentWorkbench.Gitea.csproj" />
   </ItemGroup>
 </Project>
