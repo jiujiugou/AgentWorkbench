@@ -1,6 +1,12 @@
 # AGENTS.md
 
-> 最后校准 2026-11-08。定位与范围以 `docs/需求/产品目标与范围.md`（**v3.0 · 已确认**）为**唯一正本**；本文只写工作规则与已核实的代码事实，不重新定义需求。M0 已收口，见 `docs/需求/M0-阶段报告.md`。
+> 最后校准 2026-11-09。定位与范围以 `docs/需求/产品目标与范围.md`（**v3.0 · 已确认**）为**唯一正本**；本文只写工作规则与已核实的代码事实，不重新定义需求。文档入口、分线维护与变更台账见 `docs/README.md`；**写文档前先读它的 §6（全仓唯一一处写法定义）**。
+
+## 写文档前（三条硬规矩）
+
+1. 先读 `docs/README.md`：分线、三类寿命、状态位三要素。
+2. 模块文档只照它的 §6 写法；**任何局部文档不再重复定义这套规矩**（含 `core/*.md`）。
+3. 改完文档跑一次测试：`DocsHygieneTests` 校验状态位、相对链接、以及「局部文档重定义写法」，缺状态位直接红。
 
 ## 项目
 AgentWorkbench：**面向企业私有化部署的受控动作执行底座**。对外交付「底座 + 一个动作域」的完整系统；第一动作域是制造业 ERP（ERPNext 自托管），不是产品本身。
@@ -9,23 +15,24 @@ AgentWorkbench：**面向企业私有化部署的受控动作执行底座**。�
 
 底座五层（Runtime/Harness、编排、知识、记忆与状态、工程保障）+ 工具层「管辖」半边**完全不认识业务**；业务语义全部集中在动作域。C# 主服务是唯一对外入口、唯一状态持有者、唯一 PDP；Python 侧为无状态能力进程（ADR 0013，见 Py 仓）。
 
-## 事实源状态（2026-11-08 核实，勿引用不存在的路径）
+## 事实源状态（2026-11-09 校准）
 | 类别 | 状态 |
 |---|---|
-| 正本 | `docs/需求/产品目标与范围.md` v3.0 · **已确认**（11-08 由待确认转正，M0 退出条件） |
-| M0 阶段报告 | `docs/需求/M0-阶段报告.md`（构建/测试/提交/遗留的实测证据） |
-| M1 设计 | `docs/设计/M1-受控动作执行流程设计.md` v0.1-draft，**仍未转正、不进事实源表**；§9 七步已按文档落地，执行状态见该文 §12 落地台账 |
-| M2 设计 | `docs/设计/M2-真实ERPNext只读接入设计.md` v0.1-draft，**未转正、不进事实源表**；第 2/3 步（Connector + 能力目录）已按方案落地，**考官改用 gitea.com 公开实例**（用户本机无法部署 ERPNext），见 `docs/验证与现状/gitea-真实行为-20261108.md` |
-| ADR 0013–0017 + 能力矩阵 | **不在本仓**，在 `D:\Code\AgentWorkbench.Py\docs\adr\` 与 `docs\架构\` |
-| 本仓 `docs/adr/` | 只有 0001–0007（全 F2）；编号 10-29 后重排，准入标准见其 README |
-| 已冻结（v1 知识工作台，不作当前判据） | `docs/REMADE.md`、`docs/需求/功能需求.md`（6 域 33 条 REQ）、`docs/需求/阶段1功能需求.md`、`docs/设计/阶段1/`；`docs/验证与现状/` 下 **v1 时期的旧文档**冻结，但 2026-11-08 起新增的 `gitea-真实行为-*.md` / `erpnext-live-*.json` 是 M2 活证据（v3 §8） |
-| **不存在，别引用** | 根 `README.md`、`docs/设计/README.md`、`docs/接口/接口.md`、`docs/测试标准/`、`docs/架构调整/`、`docs/底座建设清单.md`、`docs/设计步骤/`、`docs/验收标准/`。旧 21 份文档 10-29 被清空且未提交 git，不可恢复 |
+| **文档入口** | `docs/README.md` —— 阅读顺序、**底座 / 应用分线维护**、三类寿命、执行计划模板 |
+| 正本 | `docs/需求/产品目标与范围.md` v3.0 · **已确认**；**当前工作区是删除态**，仓库 `HEAD` 仍是全文（`git show "HEAD:docs/需求/产品目标与范围.md"` 可取）；11-08 的精简版从未提交 |
+| 不变量 | **无独立文件**；三条方向判据与四条边界在正本 §1–§3（`constitution.md` 11-08 已移除，未重建） |
+| 现状 | `docs/core/runtime.md`（v1 知识问答链）/ `docs/core/tools.md`（v3 受控动作链）；`底座.md` / `应用.md` 已移除，未重建 |
+| 过程 | `docs/变更台账.md`（只追加）/ `docs/plans/`（每轮一份，做完归档，不删不改） |
+| ADR 0013–0018 + 能力矩阵 | **不在本仓**，在 `D://Code//AgentWorkbench.Py//docs//adr//` 与 `docs\架构\` |
+| 本仓 `docs/adr/` | 只有 0001–0007（全 F2，v1）；编号 10-29 后重排 |
+| 冻结 / 不作判据 | `docs/REMADE.md`（v1 导航）、v1 功能需求与 33 条 REQ、阶段1 设计、113 条验证编号 |
+| **已移除的引用一律作废** | 本文下方凡出现 `docs/需求/M0-阶段报告.md`、`docs/设计/*`、`docs/验证与现状/*`、`M1/M2 设计 §x`、`（M0 报告 L2）` 等字样，指向的文档 11-08 已从工作区删除、**保持删除不恢复**，原件在 git `8911c88`；不再作依据 |
+| 不存在，别引用 | 根 `README.md`、`docs/接口/`、`docs/测试标准/`、`docs/架构调整/`、`docs/底座建设清单.md` 等；旧 21 份文档 10-29 被清空且未提交 git，不可恢复 |
 | 模块 README | 内容滞后（仍用 Providers / AgentLoop / Safety 等旧名），只当轮廓，不当事实源 |
-| 本仓 docs | 共 20 份 md |
 
 ## 技术栈
 .NET 10 / ASP.NET Core / Microsoft Agent Framework / Microsoft.Extensions.AI / SignalR
-SQLite + FTS5 + sqlite-vec（仓储层 10-31 起试点 EF Core，迁移现状见 `Persistence/Migrations` M001–M029）
+SQLite + FTS5 + sqlite-vec（仓储层 10-31 起试点 EF Core，迁移现状见 `Persistence/Migrations` M001–M030）
 Vue 3 + Vite + TypeScript + Element Plus
 
 **身份与鉴权**：ASP.NET Core Identity 全套——`AddIdentityCore<AppUser>` + `IdentityDbContext` + EF store，表名 `aspnet_*`（M029）。密码哈希、登录、失败锁定、角色全部由框架负责，**仓内没有自写哈希、没有自建用户表**。业务扩展只有 `AppUser.TenantId` / `DisplayName` / `IsActive`，由 `AppUserClaimsPrincipalFactory` 补成 `tenant_id` / `GivenName` Claims。演示账号 `wang`（owner）/ `zhao`（member）/ `li`（owner），统一密码 `Demo1234`。
@@ -36,12 +43,12 @@ dotnet build AgentWorkbench.slnx --no-restore --nologo
 dotnet test tests/AgentWorkbench.ApplicationTests/AgentWorkbench.ApplicationTests.csproj --no-restore --no-build --nologo
 cd web; npm run build
 ```
-- **本会话 shell 的 restore 仍坏**（`NuGet.targets(780)` 的 `path1` 为空，补齐环境变量无效），只能走 `--no-restore`；不带该参数的构建需用户终端复核。新建的零依赖工程（Ports / ActionGateway / Erp / FakeActionSet / Gitea）的 `obj/project.assets.json` 由零依赖模版复制改写生成，方法记在 M1 设计 §12。
-- `AgentWorkbench.slnx` 按 Core / Domains / Host 分组收 **24 个 src 项目 + 1 个测试项目（25 条路径）**；`Runtime.Harness` 下重复的 `AgentWorkbench.AgentHarness.csproj` 已删。
+- **本会话 shell 的 restore 仍坏**（`NuGet.targets(780)` 的 `path1` 为空，补齐环境变量无效），只能走 `--no-restore`；不带该参数的构建需用户终端复核。新建的零依赖工程（Ports / ActionGateway / Erp / FakeActionSet / Gitea）的 `obj/project.assets.json` 由零依赖模版复制改写生成，该文档 11-08 已移除，原件在 git `8911c88`。
+- `AgentWorkbench.slnx` 按 Core / Domains / Host 分组；项目数以 `AgentWorkbench.slnx` 实测为准，不在此写死；`Runtime.Harness` 下重复的 `AgentWorkbench.AgentHarness.csproj` 已删。
 - 旧一级目录 `src/AgentWorkbench.*`（17 个）已于 11-08 全部清除，无残留。
 - 另 4 个测试项目（ApiContract / Architecture / DataIntegration / EndToEnd）在 11-07 22:18 被清空并按删除态提交；**架构门禁现由 `ApplicationTests/ActionGateway/DomainSwapAc01Tests.cs` 承担**，是否重建独立 `ArchitectureTests` 待用户决定（M0 报告 L2）。
 - `scripts/` 现有 6 个文件（dev.sh / demo.sh / probe-hub.mjs / schema_dump.py / contract_matrix.py / **erp_live_probe.py**）；历史文档引用的 `acceptance-*.ps1` / `eval-*.ps1` **均未实现**。
-- ERPNext 采集/验证：`python scripts/erp_live_probe.py --verify`（只读、退出码即结论）/ `--record`（采集并生成夹具与证据）。需要 `ERPNEXT_BASE_URL` / `ERPNEXT_API_KEY` / `ERPNEXT_API_SECRET`；**无实例时不要手写夹具**（M2 设计 §9.4）。
+- ERPNext 采集/验证：`python scripts/erp_live_probe.py --verify`（只读、退出码即结论）/ `--record`（采集并生成夹具与证据）。需要 `ERPNEXT_BASE_URL` / `ERPNEXT_API_KEY` / `ERPNEXT_API_SECRET`；**无实例时不要手写夹具**（依据文档 11-08 已移除，原件在 git `8911c88`）。
 - 旧文档里的 `tests/AgentWorkbench.UnitTests`、`tests/AgentWorkbench.MockLlm` 已不存在。
 
 ## 目录布局（2026-11-07 分层重组）
@@ -126,11 +133,12 @@ Webapi                            → 几乎所有模块（组合根）
 
 ## 验收
 - 当前判据 = v3 §4.1 六句 + AC-01 / AC-02；**v1 的 33 条 REQ、113 条验证编号随 v1 冻结，不作当前判据**。
-- 当前唯一在跑的测试工程是 `ApplicationTests`（M1 落地后 92 条：82 绿 / 10 红；10 红全是 M0 既有预期红 F2.8/2.9/2.10、F3.5、F4.7）。F5 / X 组契约存在性、M1 四道校验、六句成功判据、AC-01 换域与 §7 四条门禁都在其中；边界门禁见 `ActionGateway/DomainSwapAc01Tests.cs`。另 4 个测试工程已清空，见「构建与测试」。
+- 当前唯一在跑的测试工程是 `ApplicationTests`（条数与红绿以 `dotnet test` 实测为准，不在此写死；红的是功能未实现的预期红，不是失败）。F5 / X 组契约存在性、M1 四道校验、六句成功判据、AC-01 换域与 §7 四条门禁都在其中；边界门禁见 `ActionGateway/DomainSwapAc01Tests.cs`。其他测试工程内容已清空，现状以 `tests/` 目录实测为准。
 - 本地跑法（11-01 实录）：`SKIP_BUILD=1 bash scripts/dev.sh`；Hub 要 cookie（种子账号 `wang` / `Demo1234`，cookie `aw.auth`）；**HTTP 问答端点已删，只能 SignalR `Ask`**；M1 动作链走 `/api/actions`（提交 / 待办 / 审批 / 审计反查）；`curl` 打 localhost 加 `--noproxy '*'`。
 - 全过退出码 0。
 
 ## 参考
+- **文档入口**：`docs/README.md`（分线维护规矩、变更台账、当前理解）
 - 正本：`docs/需求/产品目标与范围.md`
 - ADR：`D:\Code\AgentWorkbench.Py\docs\adr\`（0013–0017）、本仓 `docs/adr/README.md`（0001–0007）
 - 历史与决策过程：`.workbuddy/memory/`（本地笔记，不提交）
