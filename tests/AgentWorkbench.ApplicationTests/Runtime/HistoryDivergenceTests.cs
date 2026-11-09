@@ -22,8 +22,8 @@ namespace AgentWorkbench.ApplicationTests.Runtime;
 /// X1/X4 属于职责不同的必然结果；X2/X3 对应 `docs/core/runtime.md` §7.3 第 1 条
 /// 那两个尚未定义的边界条件（失败轮、删除/TTL），改之前先定边界。
 ///
-/// 写路径刻意照抄 `AgentHub`：user 消息在 run <b>之前</b>写（Hub:133），
-/// assistant 只在收尾时写（Hub:214 → `SaveAnswerAsync`，空答复不写）。
+/// 写路径刻意照抄 `AgentHub`：`RunAsync` 里 user 消息在 run <b>之前</b>写，
+/// assistant 只在收尾的 `SaveAnswerAsync` 里写（空答复不写）。
 /// </summary>
 public sealed class HistoryDivergenceTests
 {

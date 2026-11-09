@@ -95,7 +95,7 @@ cd web; npm run build
 - **模型上下文**：回答「下一轮模型该看到什么」（用户消息、模型回复、工具调用与结果、指令与注入内容）。
 - **界面投影**：回答「人回头看时该显示什么」（聊天正文、工具完成提示、token 用量、任务开始/结束）。
 
-它们唯一的共同点是都描述同一段对话。**所以「两边不一致」不是缺陷，是两件事本来就不该对得上**；X1/X4 实测到的差异属于正常结果，不是待修的 bug。10-13 起它们就是有意的分离（`AgentHub.cs:143` 那行注释「专供界面恢复」是当时的决定），11-09 只是把模型那一侧从整份快照换成逐条追加。
+它们唯一的共同点是都描述同一段对话。**所以「两边不一致」不是缺陷，是两件事本来就不该对得上**；X1/X4 实测到的差异属于正常结果，不是待修的 bug。10-13 起它们就是有意的分离（`AgentHub.RunAsync` 里「消息正文另存对话表，专供界面恢复」那行注释是当时的决定；其中「会话快照是模型记忆」在 11-09 之后已过时，别照它读现状），11-09 只是把模型那一侧从整份快照换成逐条追加。
 
 **三段归属**（「界面」和「审计」常被混成一个词，但不是一回事）：
 
@@ -103,7 +103,7 @@ cd web; npm run build
 | --- | --- | --- | --- | --- | --- |
 | 模型上下文 | `Core/Runtime.Session`（契约）、`Core/Memory.Persistence`（实现）、`Core/Runtime.Context`（装配点） | `chat_messages` | 不改 | 成立 | **不能**（每轮失忆，回到案例一） |
 | 审计轨迹 | `Core/Engineering/AgentWorkbench.Observability` | `agent_runs` / `agent_steps` | 不改 | 成立 | **不能**（§4.1 五字段答不上） |
-| 界面恢复 | **`Host/AgentWorkbench.Webapi`**（`AgentHub:133/360` 决定写、`ConversationsController` 读） | `messages`（`conversations` 子表） | 不改 | **不成立**（没有界面） | **能**，只是刷新看不到 |
+| 界面恢复 | **`Host/AgentWorkbench.Webapi`**（`AgentHub.RunAsync` / `SaveAnswerAsync` 决定写、`ConversationsController` 读） | `messages`（`conversations` 子表） | 不改 | **不成立**（没有界面） | **能**，只是刷新看不到 |
 
 两条容易被绕进去的地方：
 
@@ -210,8 +210,9 @@ X1/X4 是职责不同的正常结果，X2/X3 对应 §7.3 第 1 条那两个待�
 （这是相对数据库租约的唯一优势）；但同一台机器上跑两个进程、或跨机部署时，L1 一律不成立。
 
 **L1 同时保护 `agent_sessions`（2026-11-09 更正）**：`SqliteSessionStore.SaveAsync` 仍是整份
-`Upsert`、无 version，但它**全仓只有一个调用点**——`AgentHarnessService.cs:576` 的 finally；
-`await using var gate`（`:119` / `:190`）包住整个方法体，所以单进程内不可能有两个 run 并发写
+`Upsert`、无 version，但全仓只有 `AgentHarnessService.SaveSessionQuietlyAsync` 一处调它；
+`RunAsync` / `StreamAsync` 都在各自 finally 里走这个方法，而各自开头的 `await using var gate`
+包住整个方法体（含 finally），所以单进程内不可能有两个 run 并发写
 同一 `sessionId`。**加新 provider 往 StateBag 放实质状态不会触发 lost update**，那只是放大后果、
 不是触发条件。原先 §7.3 有一条把它写成「立刻复发」，与本节及 §7.2 自相矛盾，已删除。
 

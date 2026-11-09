@@ -14,14 +14,15 @@
 | `Controllers/ConversationsController.cs` | 会话列表 / 新建 / 消息 / 删除 |
 | `Controllers/HarnessController.cs` | Agent Harness：健康 / 运行 / 运行详情 |
 | `Controllers/WorkflowController.cs` | 工作流：定义 / 运行 / 步骤 / 单步重跑 / 取消 / 恢复 / 提示词版本 |
-| `Hubs/AgentHub.cs` | SignalR 对话：`Send`（普通对话）、`Ask`（RAG 问答）、`Stop`（停止生成）；事件 `ReceiveSources/ReceiveDelta/ReceiveDone/Error` |
+| `Hubs/AgentHub.cs` | SignalR 对话：`Send`（普通对话）、`Ask`（RAG 问答）、`Stop`（停止生成）；事件 `ReceiveConversation/ReceiveDelta/ReceiveTool/ReceiveSources/ReceiveRefusal/ReceiveDone/ReceiveCitations/ReceiveStopped/Error` |
 | `Hubs/WorkflowHub.cs` | 工作流步骤级进度推送（`/hubs/workflow`） |
 
 ## 界面投影（本模块独有的职责）
 
 `messages`（`conversations` 子表）是**宿主投影，不是底座能力，也不是模型记忆**。
 它只回答「浏览器刷新后该显示什么」：由 `Hubs/AgentHub.cs` 决定写什么、何时写
-（`:133` run 前写 user、`:360` 收尾写 assistant），`ConversationsController` 读，`web/` 消费。
+（`RunAsync` 里 run 前写 user、`SaveAnswerAsync` 收尾写 assistant 且空答复不写），
+`ConversationsController` 读，`web/` 消费。
 
 - **性质**：可裁剪的展示层职责。换 CLI / 定时任务 / 无聊天窗的嵌入调用，它就不存在；
   拿掉它底座照常跑，只是刷新看不到历史。所以**归 Host，不归 Core**。
