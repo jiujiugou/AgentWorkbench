@@ -103,7 +103,18 @@ cd web; npm run build
 
 ### 7.3 连锁问题（改造带来的，不是遗留的）
 
-1. **两个历史源，且会不一致。** `conversations` 有文本没有工具调用，`chat_messages` 两者都有。结果是：界面上看不到「模型调过 `propose_action`」这件事，而模型记得。**没定谁是真相。** 下一步必须二选一：合并成一张表（加 audience 列），或明确规定「界面读 `conversations`、模型读 `chat_messages`，两者不做一致性承诺」。不决定的话，这就是下一轮的「两个真相源打架」。
+1. **两个历史源，且会不一致。** 2026-11-09 实测（`HistoryDivergenceTests` X1–X4），四种形态，都不需要巧合：
+
+   | 形态 | 界面（`messages`） | 模型（`chat_messages`） |
+   | --- | --- | --- |
+   | 正常一轮带工具 | 2 条：user + assistant 文本 | 4 条：含 `functionCall` / `functionResult` |
+   | 失败的一轮 | 1 条孤立提问（无答复） | **0 条**——provider 的 Store 一次都没被调用 |
+   | 删除会话 | 随外键级联删掉 | 无外键，**原样留着** |
+   | system 指令与注入片段 | 不存 | **也不存**（注入发生在 provider 下游） |
+
+   后果按严重度：① 界面看不到模型调过 `propose_action`、工具返回了什么，而模型记得；② 失败轮在界面上留下「我问了没答」，在模型那里连「问过」都没有；③ 用户删了会话，模型下一轮还记着（同第 9 条）；④ **光看 `chat_messages` 复原不出「模型当时看到了什么」**——审计判据里那半句目前没有数据支撑。
+
+   **没定谁是真相。** 二选一：合并成一张表（加 `audience` 列，并把指令/片段也记进去），或明确规定「界面读 `conversations`、模型读 `chat_messages`，两者不做一致性承诺，审计只认 `action_trace`」。不决定的话，这就是下一轮的「两个真相源打架」。
 2. **`agent_sessions` 的覆盖机制还在。** 现在它只存一个 `aw.session_id`，丢了也无所谓。但一旦有新的 provider 往 StateBag 里放实质状态（压缩摘要、用户偏好），`lost update` 立刻复发，而且不会有人记得这件事。**加新 provider 前先读这一条。**
 3. **动作重复执行一点没解决。** 这次只保证「历史不重复」，不保证「同一句话只办一次」。`clientMessageId` 缺失仍退化成随机 `requestId`，判重表认不出是同一件事，结果是两张单。见 [core/tools.md](tools.md) §3。
 4. **审批后不重跑四道闸门。** `ActionRunService.ApproveAsync` 拿到 pending 就直接执行，挂起期间权限被收回也照跑。
@@ -122,11 +133,13 @@ cd web; npm run build
 ```
 dotnet test tests/AgentWorkbench.ApplicationTests/AgentWorkbench.ApplicationTests.csproj --no-restore --filter "FullyQualifiedName~ChatHistoryPersistenceTests"
 dotnet test tests/AgentWorkbench.ApplicationTests/AgentWorkbench.ApplicationTests.csproj --no-restore --filter "FullyQualifiedName~HistoryProviderProbeTests"
+dotnet test tests/AgentWorkbench.ApplicationTests/AgentWorkbench.ApplicationTests.csproj --no-restore --filter "FullyQualifiedName~HistoryDivergenceTests"
 dotnet test tests/AgentWorkbench.ApplicationTests/AgentWorkbench.ApplicationTests.csproj --no-restore --filter "FullyQualifiedName~SessionRunGateTests"
 ```
 
-前两组 5 + 2 条（C1–C5 / H1–H2）：C1 是「历史不会被覆盖」的直接证据，H1 是「不用开
-`RequirePerServiceCallChatHistoryPersistence`」的直接证据。第三组 5 条（G1–G5）见 §7.6。
+前三组 5 + 2 + 4 条（C1–C5 / H1–H2 / X1–X4）：C1 是「历史不会被覆盖」的直接证据，H1 是「不用开
+`RequirePerServiceCallChatHistoryPersistence`」的直接证据，X1–X4 是 §7.3 第 1 条那四种分歧形状的直接证据
+（负控：provider 不落库 → X1/X3 红）。第四组 5 条（G1–G5）见 §7.6。
 
 ### 7.6 会话互斥（L1，进程内）
 

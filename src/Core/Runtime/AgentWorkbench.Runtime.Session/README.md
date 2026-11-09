@@ -197,6 +197,9 @@ Context 不查库、不引 `Memory`；历史只有一个策略点（Memory 存�
   无 sessionId 不落库、空批次 no-op。C1 的负控：把追加改回「删后插」，C1/C2 必红。
 - provider 与 MAF 的契约：`Runtime/HistoryProviderProbeTests.cs` H1–H2——一次 run 的历史含完整工具往返；
   单条消息序列化不丢 `functionCall`。
+- 两个历史源的分歧形状：`Runtime/HistoryDivergenceTests.cs` X1–X4——带工具的一轮条数不同、
+  失败轮界面有孤问而模型零条、删除会话后模型历史仍在、注入的 system 指令不进历史。
+  这四条是**事实锁定**，不是功能验收；改它们之前先决定 `docs/core/runtime.md` §7.3 第 1 条「谁是真相」。
 - 会话互斥：`Runtime/SessionRunGateTests.cs` G1–G5——同会话第二个拿不到、不同会话可并行、
   重复释放不影响后来者、两个入口都回 `session_busy`。负控：去掉 `_released` 保护 → G3 红。
 - 预期红（规格未实现，不是失败）：`Runtime/SessionContractTests.cs` F4.7——工具注册默认值。
