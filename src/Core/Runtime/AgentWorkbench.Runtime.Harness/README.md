@@ -4,7 +4,12 @@
 一次 run 走一遍，并把这次 run 的结局归类**。
 
 它**自身不实现任何一项能力**：迭代循环本体由 MAF 承担，超时与预算在 `AgentLoop`，工具在 `ToolExecution`，
-上下文在 `Context`，会话在 `Memory`，痕迹在 `Observability`。
+上下文在 `Context`，会话在 `Runtime.Session`，痕迹在 `Observability`。
+
+**本模块也不拥有三段历史中的任何一段**：它只在 `PrepareRunAsync` 把 `aw.session_id` 写进 `StateBag`、
+在收尾调 `IExecutionTraceStore.SaveAsync`、在入口抢 `ISessionRunGate`。写什么 / 存哪 / 给谁看，
+分别由 `Runtime.Session` / `Memory.Persistence`、`Observability`、`Host` 决定。
+三段归属见 `docs/core/runtime.md` §7.1；失败轮与删除语义两个待定边界见 §7.3 第 1 条。
 
 ---
 

@@ -4,6 +4,12 @@
 
 它**不读数据库、不调检索、不认识业务**。历史从哪来（会话存储）、片段从哪来（检索 / 前置步骤），都由调用方决定。
 
+**本模块不拥有模型上下文。** `CreateChatHistoryProvider()` 只是把 DI 注入的 provider **转交**给
+`ChatClientAgent`；历史从哪来、怎么存，由 `Runtime.Session` 的契约和 `Memory.Persistence` 的实现决定。
+本模块负责的只有「注入形态与预算」——历史截断、片段预算、指令合成。指令经
+`ContextInjectingChatClient` 在 provider **下游**注入，因此**不进历史**。三段归属见
+`docs/core/runtime.md` §7.1。
+
 ---
 
 ## 一、为什么收拢到一个模块

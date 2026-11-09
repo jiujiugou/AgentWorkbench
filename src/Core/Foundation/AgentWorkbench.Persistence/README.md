@@ -43,6 +43,12 @@
 `IDocumentRepository` / `IProviderRepository` / `IAgentRunRepository` / `IConversationRepository` /
 `IWorkflowRepository`，都在 `AddNitroPersistence` 里注册。仓储只做数据访问，不放业务判断。
 
+**这些表在本模块，不代表职责在本模块。** `conversations` / `messages`（界面投影）、
+`chat_messages`（模型上下文）、`agent_runs` / `agent_steps`（审计轨迹）的建表与仓储都在这里，
+但「写什么、何时写、给谁看」分别由 `Host`、`Runtime.Session` / `Memory.Persistence`、
+`Engineering/Observability` 决定。本模块只保证「说写就写进去了，重启也还在」。
+三段归属见 `docs/core/runtime.md` §7.1。
+
 ---
 
 ## 二、还没处理的问题（接下来要干的活）

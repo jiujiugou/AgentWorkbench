@@ -112,6 +112,17 @@ cd web; npm run build
 
 `Core` 里这两块已经各有其位，**不需要新增模块，也不需要找一个统一负责人**——本来就不是同一个需求。
 
+各格的**性质与边界**已分别落进各自的 README，别只在本文件找：
+
+| 那一格 | 去读 |
+| --- | --- |
+| 模型上下文（契约 / 实现 / 装配） | `src/Core/Runtime/AgentWorkbench.Runtime.Session/README.md`、`src/Core/Memory/AgentWorkbench.Memory.Persistence/README.md`、`src/Core/Runtime/AgentWorkbench.Runtime.Context/README.md` |
+| 审计轨迹 | `src/Core/Engineering/AgentWorkbench.Observability/README.md` |
+| 界面投影 | `src/Host/AgentWorkbench.Webapi/README.md` |
+| 只是通用表读写机制 | `src/Core/Foundation/AgentWorkbench.Persistence/README.md` |
+
+本文件只给跨模块图与判据，`Harness/README.md` 写明它「不拥有任何一段」。
+
 **物理层：三张表各管一件事**
 
 | 表 | 谁写 | 存什么 | 写的方式 |

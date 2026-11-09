@@ -3,9 +3,17 @@
 这个模块是 `Memory` 的**落库后端**：把契约模块里的 `ISessionStore` / `ILongTermMemoryStore` 换成 SQLite 版，
 让会话在进程重启后仍能续上、长期记忆有地方存。它不定义契约、不做历史策略，也不碰 prompt 组装。
 
-**2026-11-09 起它还负责对话历史**：`SqliteChatHistoryProvider` 把每条消息逐条追加进 `chat_messages`，
-取代「整个会话序列化后覆盖 `agent_sessions` 一行」那条路。改动的动机与**连锁问题**
-见 `docs/core/runtime.md` §7——加任何新 provider 之前先读那一节。
+### 这一格是什么（模型上下文的落库实现，不是新功能）
+
+2026-11-09 起 `SqliteChatHistoryProvider` 把每条消息逐条追加进 `chat_messages`，
+取代「整个会话序列化后覆盖 `agent_sessions` 一行」那条路。它是 MAF `ChatHistoryProvider`
+扩展点的实现：每次模型调用前 `ProvideChatHistoryAsync` 读回、结束后 `StoreChatHistoryAsync` 追加。
+**在热路径上，不受任何开关控制，也不能「需要了再引用」。**
+
+- 本模块负责：只追加、按自增 `id` 读回、单条消息序列化不丢 `functionCall`；不覆盖、不裁剪、不删除。
+- 不负责：契约（应在 `Runtime.Session`）、注入形态与预算（`Runtime.Context`）、界面显示、
+  `system` 指令（注入发生在 provider 下游，不落库——见 `docs/core/runtime.md` §7.3 第 10 条）。
+- 改动的动机、三段归属与连锁问题见 `docs/core/runtime.md` §7；**加任何新 provider 之前先读 §7.3 第 2 条**。
 
 ---
 
