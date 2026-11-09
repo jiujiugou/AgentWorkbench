@@ -13,6 +13,7 @@
 | 想知道 | 先读 |
 | --- | --- |
 | 模型怎么看到「能办哪些事」 | `Tools.Builtin/ProposeActionTool.cs` 的 `BuildDescription` |
+| 模型现在看到哪个域的能力 | `Host/Actions/ActionServiceCollectionExtensions.cs` 的 `ResolveActionSet`（默认 Erp；`Actions:ActionSet` 可切 Fake / Gitea） |
 | 四道校验的顺序与失败默认 | `ActionGateway/FailClosedActionGateway.cs` 头注释 |
 | 挂起 / 审批 / 幂等 / 超时只查证 | `ActionGateway/ActionRunService.cs` 头注释 |
 
@@ -45,7 +46,29 @@
 | 身份 | `Host/Actions/ActionSubjectProvider` | `AsyncLocal` 作用域 + HttpContext 回退；Hub 在整段生成期间 `Begin` |
 | 业务 | `src/Domains/*` | 能力清单、描述、参数 Schema、审批标记、权限与规则、适配器 |
 
-## 3. 三条边界（破了等于把执行权交给模型）
+## 3. 请求号从哪来（幂等的父级）
+
+去重表按 `requestId` 判重，**requestId 怎么来，直接决定幂等有没有用**。
+
+```
+requestId = SHA256( conversationId | clientMessageId | actionKey | 规范化参数 )[..32]
+```
+
+- 前三项来自宿主作用域（端口 `Core/Ports/ActionOriginProvider.cs`；Host 实现在 `Actions/ActionSubjectProvider.cs`，`AsyncLocal` 三元组，Hub 在**会话确定之后** `Begin`）。
+- 参数先规范化再参与计算：对象键排序、字符串走序列化器转义。**同一组参数换个键序必须算出同一个号**，否则「原样重试」会因为格式差异被当成新请求。
+- `clientMessageId` 由前端在点击发送时生成（`web/src/stores/agent.ts` 的 `dispatch`）。取不到时退化为一次性 `Guid`——**绝不退化成共用一个号**，那会把「不重复执行」变成「不执行」。
+
+**这把键挡得住什么、挡不住什么**（别夸大）：
+
+| 情形 | 结果 |
+| --- | --- |
+| 模型在同一次输入里**原样**重试同一个动作 | 挡住：同号 → 去重表回放既有结果（`replayed_from_idempotency`） |
+| 模型**改参数**重试 | 放行：参数变 → 新号。这是「修正」，不是「重复」 |
+| 用户手点两次发送 | 放行：前端每次生成新 `clientMessageId`，那是两次真实输入 |
+| 客户端断线补发（将来） | 只要复用同一个 `clientMessageId` 就能挡住；当前前端没有自动重试，这条尚未发生 |
+| HTTP 手工递单 | 不参与派生：由客户端自带 `requestId` / `idempotencyKey` |
+
+## 4. 三条边界（破了等于把执行权交给模型）
 
 1. **模型输出一律不可信**：只判「是不是合法 JSON 对象」，业务含义交给域注入的 Schema 校验。畸形 JSON 直接拒绝，不进网关。
 2. **身份不从参数来**：`subject` 只从 `IActionSubjectProvider` 取；参数里塞 `subject` / `role` 一律忽略；取不到身份直接拒绝。
@@ -53,7 +76,7 @@
 
 > 判据③「拿掉模型，系统还能安全地拒绝」就落在这三条上：同一张手工填的单子递进网关，结论必须一致。
 
-## 4. 坑（只给指针，不复制注释）
+## 5. 坑（只给指针，不复制注释）
 
 | 现象 / 约束 | 为什么 | 去哪核 |
 | --- | --- | --- |
@@ -63,14 +86,17 @@
 | 审计写失败却放行 | 审计是第四道，写不进去必须拒绝 | `SqliteTraceStore.WriteAsync` 的 catch 分支 |
 | 新库缺表 | DDL 有两处消费者，各写一套必分叉 | `ActionStoreSchema.Statements`（唯一事实源）；迁移 `M030_ActionRunStore` |
 | 工具描述里出现业务判断 | 描述来自域注入的数据，底座只拼接 | `ProposeActionTool.BuildDescription`；AC-02 禁词门禁 |
+| 请求号每次都不一样 | 工具里随机生成 requestId，去重表永远命中不了，「同一件事只做一次」当场失效 | `Tools.Builtin/ActionRequestId.cs`；`ProposeActionTool.ProposeAsync` 的派生调用 |
+| 同样的参数算出不同的号 | 参数原文参与计算，键序/转义写法一变就换号 | `ActionRequestId.Canonicalize` |
 
-## 5. 换域改什么（AC-01 在工具层的落点）
+## 6. 换域改什么（AC-01 在工具层的落点）
 
-- 改 `Actions:ActionSet` 并在组合根 `ResolveActionSet` 里加分支；**`src/Core` 的 diff 必须为空**。
+- 只改 `Actions:ActionSet` 的值；组合根 `ResolveActionSet` 已有三个分支（`ErpActionSet` 默认 / `FakeActionSet` / `GiteaActionSet`）。**`src/Core` 的 diff 必须为空**。
+- 第四域接入才需要加分支 + 一个项目引用；仍不改 Core。
 - 能力清单、描述、参数 Schema、`RequiresApproval` 全部来自域注入的 `ActionSpec`，工具描述自动跟着变，不用改翻译代码。
 - 明确不许：在 Core 写 `quantity > 0`、金额分档、状态机这类判断——那是域的 Schema / Rule / Policy。
 
-## 6. 验证（逐字可跑）
+## 7. 验证（逐字可跑）
 
 ```
 dotnet build AgentWorkbench.slnx --no-restore --nologo
@@ -78,12 +104,13 @@ dotnet test tests/AgentWorkbench.ApplicationTests/AgentWorkbench.ApplicationTest
 ```
 
 - 翻译管道的边界：`ActionGateway/ProposeActionToolTests.cs`（清单外、畸形 JSON、仿冒身份、无身份、只回结论码、拔掉模型）。
+- 去重键：同文件的 P11–P16（同输入回放、换输入各执行一次、参数变则新请求、无来源退化、键序无关、纯函数派生）。每组都做过负控变异：改回随机号 / 去掉排序 / 不规范化字符串 / 回退返回固定号，对应用例都会变红。
 - 落库与并发：`ActionGateway/SqliteActionStoreTests.cs`（重启后仍在、并发只领一次、跨重启恢复、审计失败拒绝）。
 - 换域：`ActionGateway/DomainSwapAc01Tests.cs`（`src/Core` 源码哈希前后一致）。
 - 条数与红绿以实测为准，不写死；本会话 shell 的 restore 坏，只能 `--no-restore`（原因见 `AGENTS.md`）。
 
-## 7. 我不知道 / 待核（带日期）
+## 8. 我不知道 / 待核（带日期）
 
-- **2026-11-09**：未做真实 SignalR 工具调用的端到端验证（`Provider:ApiKey` 为空、需登录 cookie），只验到宿主启动 + DI/迁移；工具委托与公开方法在测试里是同一条路径。
+- **2026-11-09**：`POST /api/harness/run`（HTTP 同步入口）已用真实模型跑通端到端：`glm-4.7` 下 `erp.query` 被业务规则拒、`erp.draft` 成功且落库、`erp.submit` 挂起 → 审批 → `succeeded`（外部单号 `PO-2026-0001`），审计七条事件齐全。**SignalR Hub 那条仍未验**；且默认模型 `glm-4-flash-250414` 实测不调工具（直接反问「要查哪个订单」），按仓库默认配置启动时模型不会递单子。
 - **2026-11-09**：并发同 `requestId` 时，领取失败的分支返回已落库的既有结果，**不带 `replayed_from_idempotency` 标记**；响应上是否要区分「真正执行」与「回放」未定。审计里只有一次 execute 事件可查。
-- **2026-11-09**：`ResolveActionSet` 仍只认 `FakeActionSet` / 默认 `ErpActionSet`，Gitea 没挂组合根——「换域只改一个配置」目前只在两个域上被真实验证过。
+- **2026-11-09**：Gitea 已挂组合根（`Actions:ActionSet=GiteaActionSet`），并做了双向对照：Gitea 域下 `issue.create` 返回 `pending/approval_required`、`erp.submit` 返回 `spec_not_found`；Erp 域下正好相反。`src/Core` 零改动。**但没配 token**，动作 fail-closed 且零 HTTP，只验证到「能力清单可读 + 域切换生效」；真实 HTTP 写入（M3）未验证。
