@@ -11,23 +11,29 @@ namespace AgentWorkbench.Webapi.Actions;
 public interface IActionSubjectScope
 {
     /// <param name="subject">当前已认证主体名。</param>
-    /// <param name="conversationId">本次输入所属会话；用于派生请求号。</param>
-    /// <param name="clientMessageId">本次输入的客户端消息标识；用于派生请求号。</param>
-    IDisposable Begin(string? subject, string? conversationId = null, string? clientMessageId = null);
+    /// <param name="conversationId">本次输入所属会话；用于派生请求号。必填。</param>
+    /// <param name="clientMessageId">
+    /// 本次输入的客户端消息标识；用于派生请求号。<b>必填</b>——Host 入口已判空，
+    /// 缺了就不建作用域、不起 run。这样工具环里的 <c>IActionOriginProvider</c> 永远拿得到身份。
+    /// </param>
+    IDisposable Begin(string? subject, string conversationId, string clientMessageId);
 }
 
 /// <summary>
 /// <see cref="IActionSubjectProvider"/> 与 <see cref="IActionOriginProvider"/> 的宿主实现。
 ///
-/// 两条入口共用同一来源：
-/// - HTTP 控制器：身份回退到 <see cref="IHttpContextAccessor"/> 当前请求的认证名；
-///   HTTP 入口本来就自带 requestId / idempotencyKey，不参与派生。
+/// 三条 web 入口共用同一来源：
+/// - `ActionsController`（HTTP 递单）：身份回退到 <see cref="IHttpContextAccessor"/> 当前请求的认证名；
+///   不建作用域，自带输入标识由 <c>InputIdentity.Derive</c> 算号，不经过工具环。
+/// - `HarnessController`（HTTP 直接起 run）：在 <c>RunAsync</c> 期间 <c>Begin</c> 一个短作用域，
+///   把会话 id 与输入标识带进工具环。
 /// - SignalR Hub：长连接的后续调用不保证还有可用的 HttpContext，
 ///   因此由 Hub 在整段生成期间 <c>Begin</c> 一个作用域，值随异步流进入工具调用。
 ///
 /// 用一个 AsyncLocal 记录三元组而不是三个单例字段：并发请求之间不串号，作用域结束自动还原。
 /// 取不到身份时返回 null，由调用方按 fail-closed 拒绝——绝不回退到默认账号。
-/// 取不到会话 / 消息标识时返回 null，请求号退化为一次性 ID——绝不退化成共用一个号。
+/// 作用域建立时会话 / 消息标识必填；未建作用域（HTTP 递单入口）返回 null，
+/// 那条路由不经过工具环，但**仍然参与派生**——由 `InputIdentity.Derive` 用归属 id 算号。
 /// </summary>
 public sealed class ActionSubjectProvider : IActionSubjectProvider, IActionOriginProvider, IActionSubjectScope
 {
@@ -57,18 +63,18 @@ public sealed class ActionSubjectProvider : IActionSubjectProvider, IActionOrigi
     }
 
     /// <summary>
-    /// 作用域里显式放入的会话标识。HTTP 入口不建作用域，因此为 null ——
-    /// 那条路由客户端自带 requestId，不参与派生。
+    /// 作用域里显式放入的会话标识。HTTP 递单入口不建作用域，因此为 null ——
+    /// 那条路由不带会话，由 <c>InputIdentity.Derive</c> 用归属 id 做隔离维度算号。
     /// </summary>
     public string? ConversationId => Scoped.Value?.ConversationId;
 
-    /// <summary>作用域里显式放入的客户端消息标识；为空时工具侧回退为一次性请求号。</summary>
+    /// <summary>作用域里显式放入的客户端消息标识。作用域内必非空。</summary>
     public string? ClientMessageId => Scoped.Value?.ClientMessageId;
 
-    public IDisposable Begin(string? subject, string? conversationId = null, string? clientMessageId = null)
+    public IDisposable Begin(string? subject, string conversationId, string clientMessageId)
         => new SubjectScope(new ScopeState(subject, conversationId, clientMessageId));
 
-    private sealed record ScopeState(string? Subject, string? ConversationId, string? ClientMessageId);
+    private sealed record ScopeState(string? Subject, string ConversationId, string ClientMessageId);
 
     private sealed class SubjectScope : IDisposable
     {

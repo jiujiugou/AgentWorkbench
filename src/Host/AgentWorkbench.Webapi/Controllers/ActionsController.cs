@@ -3,6 +3,7 @@ namespace AgentWorkbench.Webapi.Controllers;
 using System.Text.Json;
 using AgentWorkbench.ActionGateway;
 using AgentWorkbench.Ports;
+using AgentWorkbench.Webapi.Actions;
 using AgentWorkbench.Webapi.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -37,24 +38,28 @@ public sealed class ActionsController : ControllerBase
         if (string.IsNullOrWhiteSpace(body.ActionKey))
             return BadRequest(new { code = "action_key_required" });
 
+        // 输入身份必填。以前允许客户端自报 requestId、为空时服务端随机生成，
+        // 那等于把判重权交给调用方：换个号重放就成了另一件事。现在由 Host 统一算号。
+        if (!InputIdentity.IsPresent(body.ClientMessageId))
+            return BadRequest(new { code = InputIdentity.MissingCode });
+
         // 归属声明必须齐全（中间件已挡一次，这里双保险）。
         var (_, userId) = User.Owner();
-        // Subject 走统一身份端口：HTTP 与 Hub 两条入口不再各写一遍。
+        // Subject 走统一身份端口：HTTP 与 Hub 各入口不再各写一遍。
         // 仍用登录名而不是内部 GUID：动作域的权限判据按人/工号走（PDP 白名单是 "wang" 这类名字），
         // GUID 只承担会话与档案的归属隔离。两者混用会让真实请求在第 2 道被判 permission_denied。
         var subject = _subjects.CurrentSubject ?? userId;
-        var requestId = string.IsNullOrWhiteSpace(body.RequestId) ? Guid.NewGuid().ToString("N") : body.RequestId!;
         var argumentsJson = body.Arguments is { } args && args.ValueKind != JsonValueKind.Undefined
             ? args.GetRawText()
             : "{}";
 
         using var document = JsonDocument.Parse(argumentsJson);
-        var request = new ActionRequest(
-            requestId,
-            subject,
-            body.ActionKey,
-            document.RootElement.Clone(),
-            string.IsNullOrWhiteSpace(body.IdempotencyKey) ? requestId : body.IdempotencyKey);
+        var arguments = document.RootElement.Clone();
+
+        // 无会话入口：用归属 id 当隔离维度（与工具环的 conversationId 同一位置）。
+        // 规则仍是 Core 那套 ActionRequestId.Derive，Host 只补「必须先有输入身份」这一格。
+        var requestId = InputIdentity.Derive(userId, body.ClientMessageId, body.ActionKey, arguments);
+        var request = new ActionRequest(requestId, subject, body.ActionKey, arguments, requestId);
 
         var result = await _service.SubmitDeferredAsync(request, cancellationToken);
 
@@ -145,12 +150,15 @@ public sealed class ActionsController : ControllerBase
         => new(result.RequestId, result.Status, result.Code, result.ExternalId, result.ErrorCode, result.Data);
 }
 
-/// <summary>提交体。Arguments 对底座不透明，这里只做透传。</summary>
+/// <summary>
+/// 提交体。Arguments 对底座不透明，这里只做透传。
+/// <c>ClientMessageId</c> = 「这是哪一次输入」，由调用方在发起时生成、重放时复用；
+/// 请求号由服务端派生，<b>不接受客户端自报 requestId</b>（那会把判重权交出去）。
+/// </summary>
 public sealed record ActionSubmitBody(
     string ActionKey,
     JsonElement? Arguments,
-    string? RequestId,
-    string? IdempotencyKey);
+    string ClientMessageId);
 
 public sealed record ActionRejectBody(string? Reason);
 

@@ -22,6 +22,9 @@ namespace AgentWorkbench.Tools.Builtin;
 ///    算出的号必须相同，否则「原样重试」会因为序列化差异被当成新请求。
 /// 3. 拿不到客户端消息标识时回退为一次性 ID（行为与此前一致），
 ///    绝不退化成「所有请求同一个号」——那是把不重复执行变成不执行。
+    ///    <b>这条在 web 生产路径不可达</b>：Host 的三条入口都要求输入身份必填，缺了直接拒绝，
+    ///    见 `src/Host/AgentWorkbench.Webapi/README.md`「输入身份契约」。
+    ///    绕过 Host 直接调本函数仍会触发回退（现存一处：Workflow 的 `AgentStepExecutor`）。
 /// </summary>
 public static class ActionRequestId
 {
@@ -30,7 +33,8 @@ public static class ActionRequestId
 
     /// <summary>
     /// 按「哪一次输入 + 哪个能力 + 什么参数」派生请求号。
-    /// <paramref name="clientMessageId"/> 为空时返回一次性 ID —— 这是兼容分支，不是正常路径。
+    /// <paramref name="clientMessageId"/> 为空时返回一次性 ID —— 防御性回退，
+    /// 生产入口不会走到（Host 已判空）。不要删掉它，也不要把它当正常路径扩展。
     /// </summary>
     public static string Derive(
         string? conversationId,

@@ -158,7 +158,7 @@ cd web; npm run build
    - **删除 / TTL**：删会话或会话过期时，模型上下文跟不跟着清；不清就明说它是审计资料、永久保留（同第 8 条）。参考：codex 删会话就是删那一个 rollout 文件，两个读者同时消失，不存在中间态。
 
    **方向（不现在做）**：codex 用同一份 append-only 文件里的两种行类型（`response_item` = 模型看到的，`event_msg` = TUI 重放的）区分两个职责；pi 用同一棵 JSONL 树 + `excludeFromContext` / `display` 标记做投影，并把 system 消息也记进去。都是**一份真相 + 两种读法**，所以它们没有「一致性」这个问题。我们做不到直接照搬：① 这是被嵌进 ERP 的 web 底座，多入口、多租户、跨重启，不是单进程 CLI；② MAF 的 `ChatHistoryProvider` 只接受 `IEnumerable<ChatMessage>`，塞不进 `turn_aborted` / `token_count` 这类事件。触发点是客户真要审计回放、且那个口子验通了，属于 M2/M3。
-2. **动作重复执行一点没解决。** 这次只保证「历史不重复」，不保证「同一句话只办一次」。`clientMessageId` 缺失仍退化成随机 `requestId`，判重表认不出是同一件事，结果是两张单。见 [core/tools.md](tools.md) §3。
+2. **动作重复执行 —— 已在 Host 收口（原缺口）。** 以前 `clientMessageId` 缺失会退化成随机 `requestId`，同一句话重放会变成两张单。现在三条 web 入口（Hub / `api/actions` / `api/harness/run`）都要求必填、缺了直接拒绝，HTTP 动作入口也不再接受客户端自报判重键；派生规则仍在 Core，**`src/Core` 行为零改动**。解法只放 Host，是因为超时重试属于 web 传输模型，换 CLI / 定时任务没有这个面。**已知代价（现存，非假设）**：`Core/Orchestration/Workflow/Steps/AgentStepExecutor.cs` 自己调 `IAgentHarness.RunAsync`、不建 `IActionSubjectScope`，模型在那条路上递动作仍会退化成随机号；它属于 Core 编排，本次按「解法只在 Host」的边界未动，要收口须另定。**新增任何动作入口前，先回到 `src/Host/AgentWorkbench.Webapi/README.md`「输入身份契约」**。证据：`tests/.../Host/InputIdentityContractTests.cs` H1–H10（负控见文件头），契约见 [core/tools.md](tools.md) §3。**审批后不重跑闸门仍未解决**（下一条）。
 3. **审批后不重跑四道闸门。** `ActionRunService.ApproveAsync` 拿到 pending 就直接执行，挂起期间权限被收回也照跑。
 4. **历史没有条数上限。** provider 全量读回，裁剪仍归 Context；但 Context 的 trim 只影响「本次发给模型的内容」，不减少 SQLite 的读取量。会话很长时读会变慢，需要时在 store 加 `LIMIT`（注意：加 `LIMIT` 就是在 provider 里做裁剪，会与 §四的边界冲突，先想清楚再动）。
 5. **老数据没迁移。** 升级后，老会话在 `agent_sessions` 里的历史不再被读。症状是「界面记录都在，模型全忘了」。当前接受，因为库里只有测试对话；有真实数据时必须补一次性迁移。

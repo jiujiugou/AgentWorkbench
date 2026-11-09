@@ -30,6 +30,40 @@
 - 它和 `chat_messages`（模型上下文）**没有汇合点，也不做一致性承诺**。由此剩下的两个未定边界
   （失败轮要不要留痕、删会话时模型上下文跟不跟着清）见 `docs/core/runtime.md` §7.3 第 1 条。
 
+## 输入身份契约（web 传输模型带来的必答题）
+
+**问题**：HTTP / SignalR 是「调用」不是「事件」。超时重试会让同一次意图送达两次，而判重表只认
+`requestId`，所以「哪两次算同一次输入」必须由发起方自报，且服务端要在最前面拒绝没自报的调用。
+换 CLI / 定时任务根本没有重放这回事——**这是 web 宿主特有的面，解法只在 Host，不进 `src/Core`**：
+换域 diff = 0，非 web 宿主也不必伪造输入号。这条边界是 2026-11-09 定下的。
+
+**落在哪**：`Actions/InputIdentity.cs` 是唯一守卫，三条 web 入口都调它。
+
+- `Hubs/AgentHub.cs`：`ChatRequest.ClientMessageId` 必填。判空在 `Generations.TryAdd` **之前**——
+  缺了不建会话、不落 user 消息、不探活、不起 run、不建身份作用域。
+- `Controllers/ActionsController.cs`：`ActionSubmitBody.ClientMessageId` 必填，缺了返回 400 +
+  `client_message_id_required`。提交体**不再收 `RequestId` / `IdempotencyKey`**（客户端自报最终判重键
+  等于把判重权交出去）；请求号由 Host 用 `InputIdentity.Derive` 算，无会话入口用归属 id 当隔离维度。
+- `Controllers/HarnessController.cs`：`HarnessRunBody.ClientMessageId` 必填。这条入口**不构造
+  `ActionRequest`，但会起工具环**——漏了它，模型在里面调 `propose_action` 照样退化成随机号。
+  无会话时由 Host 生成 sessionId，并用同一个值 `Begin` 短作用域包住 `RunAsync`。
+- `Actions/ActionSubjectProvider.cs`：`Begin` 的会话与消息标识改为必填，作用域内身份必非空，
+  工具环里的 `IActionOriginProvider` 因而拿得到「这是哪一次输入」。
+
+**没改什么**：`src/Core` 行为零改动。`ActionRequestId.Derive` 的「缺省回退随机号」保留，从三条 web 入口
+都走不到；判重表、结果回放（`replayed_from_idempotency`）、超时只查证一律没动。
+
+**已知代价（现存，不是待办，是取舍）**：`Core/Orchestration/Workflow/Steps/AgentStepExecutor.cs`
+自己调 `IAgentHarness.RunAsync` 且不建 `IActionSubjectScope`，模型在那条路上递动作**仍会退化成随机号**。
+它属于 Core 编排，按「解法只在 Host」的边界本次未动；要收口必须另定（改 Core 或在工作流运行时注入身份）。
+其它绕过 Host 直调 Core 的新入口同理。**新增任何动作入口前，先回到本节把身份放进作用域或调用
+`InputIdentity.Derive`。**
+
+**怎么验**：`dotnet test tests/AgentWorkbench.ApplicationTests/AgentWorkbench.ApplicationTests.csproj --no-restore --filter "FullyQualifiedName~InputIdentityContractTests"`（H1–H10）。
+H1/H3/H9 锁「三条入口缺身份零副作用」，H2/H8/H10 锁「身份真的进作用域」，H4 锁「同号重放只执行一次」，
+H5 锁「换一次输入仍是新请求」（防误杀真实需求），H6 锁键序 / 参数语义，H7 锁提交体形状。
+负控：删掉任一入口判空 → H1/H3/H9 红；把 `Derive` 改回随机 → H4/H6 红。
+
 ## 依赖
 
 全部模块（组合根是唯一允许依赖所有模块的地方）：Shared、Domain、Persistence、Documents、Knowledge、Providers、

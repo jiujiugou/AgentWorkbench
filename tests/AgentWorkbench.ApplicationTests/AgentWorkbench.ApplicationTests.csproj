@@ -39,5 +39,6 @@
     <ProjectReference Include="..\..\src\Core\Knowledge\AgentWorkbench.Documents\AgentWorkbench.Documents.csproj" />
     <ProjectReference Include="..\..\src\Core\Knowledge\AgentWorkbench.Knowledge.Local\AgentWorkbench.Knowledge.Local.csproj" />
     <ProjectReference Include="..\..\src\Core\Orchestration\AgentWorkbench.Workflow\AgentWorkbench.Workflow.csproj" />
+    <ProjectReference Include="..\..\src\Host\AgentWorkbench.Webapi\AgentWorkbench.Webapi.csproj" />
   </ItemGroup>
 </Project>

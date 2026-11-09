@@ -23,15 +23,15 @@ namespace AgentWorkbench.Webapi.Hubs;
 /// <param name="Text">用户输入的自然语言。</param>
 /// <param name="History">历史轮次（保留字段，当前由 ChatHistoryProvider 从会话存储恢复）。</param>
 /// <param name="ClientMessageId">
-/// 本次输入的客户端标识，由前端在点击发送时生成、在一次输入内保持不变。
-/// 它是派生动作请求号的输入之一：同一次输入被触发两次（模型原样重试、客户端重放到网关）
-/// 会收敛到同一个 requestId，从而被去重表挡住。缺省时请求号退化为一次性 ID。
+/// 本次输入的客户端标识，由前端在点击发送时生成、在一次输入内保持不变。<b>必填</b>：
+/// 它是派生动作请求号的输入之一，缺失时 Hub 直接拒绝、不起 run、不落消息。
+/// 将来若加断线补发，重发必须复用同一次输入的值——服务端现编的号对重试无效。
 /// </param>
 public sealed record ChatRequest(
     string? ConversationId,
     string Text,
     List<ChatTurn>? History,
-    string? ClientMessageId = null);
+    string ClientMessageId);
 
 /// <summary>
 /// Agent 实时通道：接收用户消息，流式推送 token，并汇报工具调用事件。
@@ -94,6 +94,15 @@ public sealed class AgentHub : Hub
         }
         var (tenantId, userId) = Context.User.Owner();
 
+        // 输入身份是判重的地基，必须在任何副作用之前判，且必须在占连接闸之前。
+        // 缺了就静默退化成随机 requestId，同一句话重放会变成两张单——整套幂等白搭。
+        // 放在 TryAdd 之前：判空返回时没有占用 Generations 槽位，不需要走 finally 清理。
+        if (!InputIdentity.IsPresent(request.ClientMessageId))
+        {
+            await SendErrorAsync($"缺少本次输入的标识（{InputIdentity.MissingCode}），请刷新页面重试。");
+            return;
+        }
+
         // 放开并行调用后 Stop 才能插队进来，代价是同连接可以同时发起两次 Send；
         // 这里用 TryAdd 挡掉第二条，否则后到的会覆盖前一条的 CTS，导致前一条再也停不掉。
         //
@@ -133,11 +142,13 @@ public sealed class AgentHub : Hub
             await _conversations.AddMessageAsync(conversation.Id, "user", request.Text);
 
             // 翻译工具在 harness 的工具环里执行，此刻的 HttpContext 不保证还在（长连接）。
-        // 整段生成期间显式建立作用域，值随异步流进入工具调用；工具取不到身份会拒绝。
-        // 作用域在会话确定之后建立：conversationId 是派生请求号的输入，必须用真实会话 id，
-        // 不能用客户端传来的那个（新会话时它为 null）。
-        using var subjectScope = _subjectScope.Begin(
-            Context.User?.Identity?.Name, conversation.Id, request.ClientMessageId);
+            // 整段生成期间显式建立作用域，值随异步流进入工具调用；工具取不到身份会拒绝。
+            // 作用域在会话确定之后建立：conversationId 是派生请求号的输入，必须用真实会话 id，
+            // 不能用客户端传来的那个（新会话时它为 null）。
+            // clientMessageId 已在入口判空，这里放进去的是非空值——工具环里的
+            // IActionOriginProvider 因而永远拿得到「这是哪一次输入」。
+            using var subjectScope = _subjectScope.Begin(
+                Context.User?.Identity?.Name, conversation.Id, request.ClientMessageId);
 
         // conversationId 同时就是 harness 的 sessionId：一个会话一份跨 run 记忆。
             // 消息正文另存对话表，专供界面恢复（会话快照是模型记忆，两者职责不同，不重复读）。

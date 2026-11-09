@@ -37,6 +37,8 @@ public sealed class ProposeActionTool : IAgentToolProvider
     /// <param name="origin">
     /// 调用来源（会话 + 本次输入的客户端消息标识）。缺失时请求号退化为一次性 ID，
     /// 行为与引入去重之前一致；绝不因此放行多个请求共用一个号。
+    /// <b>生产路径不会走到这个分支</b>：Host 已要求输入身份必填，见
+    /// `src/Host/AgentWorkbench.Webapi/README.md`「输入身份契约」。
     /// </param>
     public ProposeActionTool(
         IActionSet actionSet,

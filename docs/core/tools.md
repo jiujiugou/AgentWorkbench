@@ -56,7 +56,16 @@ requestId = SHA256( conversationId | clientMessageId | actionKey | 规范化参�
 
 - 前三项来自宿主作用域（端口 `Core/Ports/ActionOriginProvider.cs`；Host 实现在 `Actions/ActionSubjectProvider.cs`，`AsyncLocal` 三元组，Hub 在**会话确定之后** `Begin`）。
 - 参数先规范化再参与计算：对象键排序、字符串走序列化器转义。**同一组参数换个键序必须算出同一个号**，否则「原样重试」会因为格式差异被当成新请求。
-- `clientMessageId` 由前端在点击发送时生成（`web/src/stores/agent.ts` 的 `dispatch`）。取不到时退化为一次性 `Guid`——**绝不退化成共用一个号**，那会把「不重复执行」变成「不执行」。
+- **`clientMessageId` 必填，由 Host 的三条 web 入口强制**（`Actions/InputIdentity.cs`）：SignalR 的 `ChatRequest`、HTTP 动作递单的 `ActionSubmitBody`、HTTP 直接起 run 的 `HarnessRunBody` 都要求非空，缺了直接拒绝、不起 run / 不进网关。**服务端现编的号对重试无效**——重发是另一次调用，只会再编一个新号。
+- 派生规则本身仍在 `Tools.Builtin/ActionRequestId.cs`（Core）。**`src/Core` 行为零改动**：Host 只补「必须先有身份」这一格，并复用同一套 Derive。HTTP 入口无会话，用归属 id 当隔离维度，且**不再接受客户端自报 `requestId` / `idempotencyKey`**。
+
+> **边界（2026-11-09 决定）**：超时重试 = 至少一次投递，这是 web 传输模型带来的必答题，
+> 解法**只放 Host**，不进 Core（换域 diff = 0，非 web 宿主也不必伪造输入号）。
+> Core 里 `Derive` 的「缺省回退随机号」保留，从三条 web 入口都走不到；
+> 但**绕过 Host 直接调 Core** 仍会触发回退——现存的一处是
+> `Core/Orchestration/Workflow/Steps/AgentStepExecutor.cs`（它自己调 `IAgentHarness.RunAsync`，
+> 不建 `IActionSubjectScope`）。契约与代价见
+> `src/Host/AgentWorkbench.Webapi/README.md`「输入身份契约」。
 
 **这把键挡得住什么、挡不住什么**（别夸大）：
 
@@ -65,8 +74,9 @@ requestId = SHA256( conversationId | clientMessageId | actionKey | 规范化参�
 | 模型在同一次输入里**原样**重试同一个动作 | 挡住：同号 → 去重表回放既有结果（`replayed_from_idempotency`） |
 | 模型**改参数**重试 | 放行：参数变 → 新号。这是「修正」，不是「重复」 |
 | 用户手点两次发送 | 放行：前端每次生成新 `clientMessageId`，那是两次真实输入 |
-| 客户端断线补发（将来） | 只要复用同一个 `clientMessageId` 就能挡住；当前前端没有自动重试，这条尚未发生 |
-| HTTP 手工递单 | 不参与派生：由客户端自带 `requestId` / `idempotencyKey` |
+| 客户端断线补发（将来） | 只要复用同一个 `clientMessageId` 就能挡住。**当前前端没有自动重试，也没有复用逻辑**（每次 `dispatch` 新生成 uuid）；加补发时必须复用同一次输入的值 |
+| 请求**不带** `clientMessageId` | **拒绝**：`client_message_id_required`，零 run、零网关调用 |
+| HTTP 手工递单 | 现在由 Host 用同一套 Derive 派生；提交体只收 `ClientMessageId`，客户端不再自报判重键 |
 
 ## 4. 三条边界（破了等于把执行权交给模型）
 
@@ -87,6 +97,7 @@ requestId = SHA256( conversationId | clientMessageId | actionKey | 规范化参�
 | 新库缺表 | DDL 有两处消费者，各写一套必分叉 | `ActionStoreSchema.Statements`（唯一事实源）；迁移 `M030_ActionRunStore` |
 | 工具描述里出现业务判断 | 描述来自域注入的数据，底座只拼接 | `ProposeActionTool.BuildDescription`；AC-02 禁词门禁 |
 | 请求号每次都不一样 | 工具里随机生成 requestId，去重表永远命中不了，「同一件事只做一次」当场失效 | `Tools.Builtin/ActionRequestId.cs`；`ProposeActionTool.ProposeAsync` 的派生调用 |
+| 入口放行没有身份的请求 | 服务端现编号 → 重放算出新号 → 判重表白搭 | **Host 专属**：`Actions/InputIdentity.cs`、`AgentHub.RunAsync` / `ActionsController.Submit` / `HarnessController.Run` 的判空 |
 | 同样的参数算出不同的号 | 参数原文参与计算，键序/转义写法一变就换号 | `ActionRequestId.Canonicalize` |
 
 ## 6. 换域改什么（AC-01 在工具层的落点）
@@ -114,3 +125,4 @@ dotnet test tests/AgentWorkbench.ApplicationTests/AgentWorkbench.ApplicationTest
 - **2026-11-09**：`POST /api/harness/run`（HTTP 同步入口）已用真实模型跑通端到端：`glm-4.7` 下 `erp.query` 被业务规则拒、`erp.draft` 成功且落库、`erp.submit` 挂起 → 审批 → `succeeded`（外部单号 `PO-2026-0001`），审计七条事件齐全。**SignalR Hub 那条仍未验**；且默认模型 `glm-4-flash-250414` 实测不调工具（直接反问「要查哪个订单」），按仓库默认配置启动时模型不会递单子。
 - **2026-11-09**：并发同 `requestId` 时，领取失败的分支返回已落库的既有结果，**不带 `replayed_from_idempotency` 标记**；响应上是否要区分「真正执行」与「回放」未定。审计里只有一次 execute 事件可查。
 - **2026-11-09**：Gitea 已挂组合根（`Actions:ActionSet=GiteaActionSet`），并做了双向对照：Gitea 域下 `issue.create` 返回 `pending/approval_required`、`erp.submit` 返回 `spec_not_found`；Erp 域下正好相反。`src/Core` 零改动。**但没配 token**，动作 fail-closed 且零 HTTP，只验证到「能力清单可读 + 域切换生效」；真实 HTTP 写入（M3）未验证。
+- **2026-11-09**：输入身份收口后，两条 HTTP 请求体都变了——`POST /api/harness/run` 新增必填 `clientMessageId`，`POST /api/actions` 删除 `requestId` / `idempotencyKey`、改必填 `clientMessageId`。本文件第 1 条那次真实端到端脚本**尚未按新契约复跑**；旧脚本不带字段会被 400 拒。SignalR 前端一直传该字段，不受影响。

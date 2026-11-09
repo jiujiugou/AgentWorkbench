@@ -462,9 +462,9 @@ export const useAgentStore = defineStore('agent', () => {
         conversationId: conversationId.value,
         text: content,
         history: [],
-        // 本次输入的唯一标识，后端用它派生动作请求号：
-        // 同一次输入被重放（重连补发、网关重试）时复用同一个值，去重表才拦得住；
-        // 用户重新说一句是新输入，应当产生新值——那本来就该办第二次。
+        // 本次输入的唯一标识：每次点击发送生成新值，后端用它派生动作请求号。
+        // 当前没有自动重发，也没有复用逻辑；将来若加断线补发，必须复用同一次输入的这个值——
+        // 服务端现编的号对重试无效。缺失时后端直接拒绝（client_message_id_required）。
         clientMessageId: crypto.randomUUID(),
       })
     } catch (e) {
