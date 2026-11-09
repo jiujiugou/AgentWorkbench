@@ -58,7 +58,7 @@
 | 轨迹没有保留期 | 表只涨不落 | 无归档、无清理 | 按天数 / 条数归档或清理 |
 | 成功率、工具失败率报表未落地 | 只有原始数据、没有结论 | 用量在 `ModelRuntime`，本模块无指标 | 定指标口径（成功 run / 总 run、P95、工具失败率） |
 | 没有落库往返测试 | 字段映射改坏没人发现 | 测试里只有 Fake / Recording 替身 | 临时 SQLite 上「写 → 读」往返 + 负控（不存在的 id 返回 `null`） |
-| 「模型当时看到了什么」无数据源 | §4.1 五字段之一答不上，无法复原当时用的指令与注入片段 | `chat_messages` 只记对话往返；`agent_runs` 只有 model / iterations / latency；指令由 `Context` 在 provider 下游注入、不落库 | 在 `ExecutionTrace` 加指令快照（正文或 hash + 片段 id），按 §三 五处一起改；**不要塞进 `chat_messages`**（一轮 run 可能有多次模型调用）。见 `docs/core/runtime.md` §7.3 第 10 条 |
+| 「模型当时看到了什么」无数据源 | §4.1 五字段之一答不上，无法复原当时用的指令与注入片段 | `chat_messages` 只记对话往返；`agent_runs` 只有 model / iterations / latency；指令由 `Context` 在 provider 下游注入、不落库 | 在 `ExecutionTrace` 加指令快照（正文或 hash + 片段 id），按 §三 五处一起改；**不要塞进 `chat_messages`**（一轮 run 可能有多次模型调用）。见 `docs/core/runtime.md` §7.3 第 9 条 |
 
 ---
 

@@ -227,7 +227,7 @@ public sealed class HistoryDivergenceTests
     }
 
     // [X3] 删除会话：`messages` 随外键级联删掉，`chat_messages` 无外键、原样留着。
-    // 后果：用户以为删干净了，模型下一轮还记着这段对话（§7.3 第 9 条）。
+    // 后果：用户以为删干净了，模型下一轮还记着这段对话（§7.3 第 8 条）。
     [Fact]
     public async Task X3_删除会话_界面历史消失_模型历史留下()
     {

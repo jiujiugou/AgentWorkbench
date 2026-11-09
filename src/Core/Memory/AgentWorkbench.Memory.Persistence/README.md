@@ -12,8 +12,9 @@
 
 - 本模块负责：只追加、按自增 `id` 读回、单条消息序列化不丢 `functionCall`；不覆盖、不裁剪、不删除。
 - 不负责：契约（应在 `Runtime.Session`）、注入形态与预算（`Runtime.Context`）、界面显示、
-  `system` 指令（注入发生在 provider 下游，不落库——见 `docs/core/runtime.md` §7.3 第 10 条）。
-- 改动的动机、三段归属与连锁问题见 `docs/core/runtime.md` §7；**加任何新 provider 之前先读 §7.3 第 2 条**。
+  `system` 指令（注入发生在 provider 下游，不落库——见 `docs/core/runtime.md` §7.3 第 9 条）。
+- 改动的动机、三段归属与连锁问题见 `docs/core/runtime.md` §7；**会话快照的并发写入归 §7.6 管**，
+  加新 provider 前先看那节的「L1 同时保护 `agent_sessions`」，不要当成独立缺陷。
 
 ---
 
@@ -21,6 +22,10 @@
 
 - `SqliteSessionStore`：`GetOrCreateAsync` 命中且未过期就 `DeserializeAsync`，否则新建；
   `SaveAsync` 用 MAF 序列化会话后 UPSERT。**快照里已经没有历史了**，只剩 StateBag 的非历史键。
+  整份 Upsert 无 version，但**单进程内不构成缺陷**：`SaveAsync` 唯一调用点在 Harness 的
+  `finally`，被 `ISessionRunGate` 的 `await using` 包住，同一 `sessionId` 不会有两个写入者。
+  剩余风险（L2 未实现的跨进程、未来绕过 Harness 的后台写入者）归 `docs/core/runtime.md` §7.6；
+  真要修到多实例，是在**这里**给 `SaveAsync` 加 `version` + `UPDATE ... WHERE version=?`（CAS）。
 - `SqliteChatHistoryProvider`：`ChatHistoryProvider` 的落库实现。每次模型调用前按 `sessionId`
   从 `chat_messages` 读回历史，run 结束把本轮新消息追加进去。`sessionId` 从
   `session.StateBag[AgentSessionKeys.SessionId]` 取（MAF 的会话对象不带 id）。

@@ -57,9 +57,15 @@
 所以本模块的快照只剩非历史状态——当前只有 `aw.session_id` 一个键。
 
 `ISessionStore` 的契约与两个实现都没变，但「快照里装什么」变了：
-两个 run 并发覆盖同一会话时，伤害从「丢掉整段对话、模型失忆」降到「丢掉一个 id」。
-覆盖机制本身**还在**——只要有新 provider 往 StateBag 放实质状态就会复发；
-**别为了彻底消除覆盖就顺手关掉 `SessionEnabled`**，理由见 `docs/core/runtime.md` §7.3 第 8 条。
+现在只剩 `aw.session_id` 一个常量，覆盖了也无害。
+
+**覆盖机制本身仍在**（`SqliteSessionStore.SaveAsync` 整份 Upsert、无 version），但**单进程内已被
+`ISessionRunGate` 串行保护**：`SaveAsync` 全仓只有一个调用点（Harness 的 finally），而闸用
+`await using` 包住整个方法体，不可能有两个 run 并发写同一 `sessionId`。
+所以**加新 provider 往 StateBag 放实质状态不会触发 lost update**——那只放大后果，不是触发条件。
+剩余风险只有两个：L2 未实现（跨进程）、以及未来绕过 Harness 直接写 StateBag 的后台任务，
+都归 `docs/core/runtime.md` §7.6 管，不是本模块的独立待办。
+**别为了消除覆盖机制就顺手关掉 `SessionEnabled`**，理由见 §7.3 第 7 条。
 
 `sessionId` 的传递不走构造函数：Harness 在每次 run 前写
 `session.StateBag[AgentSessionKeys.SessionId]`，provider 从同一个键读回。

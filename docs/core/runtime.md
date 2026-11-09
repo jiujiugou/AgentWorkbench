@@ -81,7 +81,7 @@ cd web; npm run build
 - `Runtime.Model` 引用 `Core/Foundation/Domain`（v1 文档业务记录）但零使用，是否该清未定。
 - `AgentHarnessService` 构造依赖较多，是否有收拢空间未评估。
 - **2026-11-09**：失败轮要不要在界面留痕、删除/TTL 时模型上下文跟不跟着清——两个边界条件尚未定，
-  见 §7.3 第 1 条；指令快照（「模型当时看到了什么」）未实现，见 §7.3 第 10 条。`IChatMessageStore`
+  见 §7.3 第 1 条；指令快照（「模型当时看到了什么」）未实现，见 §7.3 第 9 条。`IChatMessageStore`
   契约仍在实现模块、未归位，见 §7.1 注。
 
 ## 7. 会话历史：两个职责，三段归属
@@ -148,25 +148,24 @@ cd web; npm run build
    | 形态 | 界面（`messages`） | 模型（`chat_messages`） | 性质 |
    | --- | --- | --- | --- |
    | 正常一轮带工具（X1） | 2 条：user + assistant 文本 | 4 条：含 `functionCall` / `functionResult` | **正常**：界面本来就不展示执行过程 |
-   | system 指令与注入片段（X4） | 不存 | 也不存（注入在 provider 下游） | **正常**：指令是一次 run 的注入，不是一段对话；但由此引出下面第 10 条 |
+   | system 指令与注入片段（X4） | 不存 | 也不存（注入在 provider 下游） | **正常**：指令是一次 run 的注入，不是一段对话；但由此引出下面第 9 条 |
    | 失败的一轮（X2） | 1 条孤立提问（无答复） | **0 条**——provider 的 Store 一次都没被调用 | **边界未定**：界面这条路径没定义失败时写什么 |
    | 删除会话（X3） | 随外键级联删掉 | 无外键，**原样留着** | **边界未定**：模型这条路径没定义删除语义 |
 
    所以真正剩下的只有**两个待定边界条件**，不是「要不要合并 / 谁是真相」：
 
    - **失败轮**：界面要不要给那条提问留一个明确的失败标记（而不是一条看起来没答的孤问）。语义归 `Runtime.Harness` 定，Hub 执行。参考：codex 有 `turn_aborted` 记录，pi 明确「`pending` 不得作为已完成的 assistant 回复持久化」。
-   - **删除 / TTL**：删会话或会话过期时，模型上下文跟不跟着清；不清就明说它是审计资料、永久保留（同第 9 条）。参考：codex 删会话就是删那一个 rollout 文件，两个读者同时消失，不存在中间态。
+   - **删除 / TTL**：删会话或会话过期时，模型上下文跟不跟着清；不清就明说它是审计资料、永久保留（同第 8 条）。参考：codex 删会话就是删那一个 rollout 文件，两个读者同时消失，不存在中间态。
 
    **方向（不现在做）**：codex 用同一份 append-only 文件里的两种行类型（`response_item` = 模型看到的，`event_msg` = TUI 重放的）区分两个职责；pi 用同一棵 JSONL 树 + `excludeFromContext` / `display` 标记做投影，并把 system 消息也记进去。都是**一份真相 + 两种读法**，所以它们没有「一致性」这个问题。我们做不到直接照搬：① 这是被嵌进 ERP 的 web 底座，多入口、多租户、跨重启，不是单进程 CLI；② MAF 的 `ChatHistoryProvider` 只接受 `IEnumerable<ChatMessage>`，塞不进 `turn_aborted` / `token_count` 这类事件。触发点是客户真要审计回放、且那个口子验通了，属于 M2/M3。
-2. **`agent_sessions` 的覆盖机制还在。** 现在它只存一个 `aw.session_id`，丢了也无所谓。但一旦有新的 provider 往 StateBag 里放实质状态（压缩摘要、用户偏好），`lost update` 立刻复发，而且不会有人记得这件事。**加新 provider 前先读这一条。**
-3. **动作重复执行一点没解决。** 这次只保证「历史不重复」，不保证「同一句话只办一次」。`clientMessageId` 缺失仍退化成随机 `requestId`，判重表认不出是同一件事，结果是两张单。见 [core/tools.md](tools.md) §3。
-4. **审批后不重跑四道闸门。** `ActionRunService.ApproveAsync` 拿到 pending 就直接执行，挂起期间权限被收回也照跑。
-5. **历史没有条数上限。** provider 全量读回，裁剪仍归 Context；但 Context 的 trim 只影响「本次发给模型的内容」，不减少 SQLite 的读取量。会话很长时读会变慢，需要时在 store 加 `LIMIT`（注意：加 `LIMIT` 就是在 provider 里做裁剪，会与 §四的边界冲突，先想清楚再动）。
-6. **老数据没迁移。** 升级后，老会话在 `agent_sessions` 里的历史不再被读。症状是「界面记录都在，模型全忘了」。当前接受，因为库里只有测试对话；有真实数据时必须补一次性迁移。
-7. **跨机多实例仍不行。** SQLite 单文件，同机多进程可读写，跨机不行。
-8. **关掉 `SessionEnabled` 不等于关掉历史。** provider 按 `sessionId` 查 `chat_messages`，与 `AgentSession` 对象无关，所以历史照常工作；代价是 StateBag 里的非历史状态每轮丢失。**不要为了「彻底消除 lost update」直接关它**，先确认没有别的 provider 依赖 StateBag。
-9. **`chat_messages` 只增不减。** 不随会话 TTL 清理，也不随会话删除连带删；目前只有 `AppendAsync` / `LoadAsync`，没有 Delete。后果两条：磁盘无界增长；「删了会话，模型还记着」（与第 1 条的删除边界是同一件事，定边界时一起定）。要么并入 `MemoryRetentionService` 按最后活跃时间清，要么定性为审计资料、永久保留 + 配额告警。**这条比第 5 条更硬**——第 5 条只影响单次读取，这条影响整个库。
-10. **「模型当时看到了什么」没有数据源（X4 引出的真缺口）。** `chat_messages` 只记对话往返；system 指令与注入片段由 `ContextInjectingChatClient` 在 provider 下游注入，不落库；`agent_runs` 只有 model / iterations / latency。于是 §4.1 五字段里的「看到什么」答不上——不是答得不好，是没数据。补法：在 `ExecutionTrace` 加指令快照（正文或 hash + 片段 id），归 `Core/Engineering/Observability`，Harness 收尾填值；**不要塞进 `chat_messages`**（一轮 run 可能有多次模型调用，会和「一轮对话」混在一起）。参考 codex 的 `session_meta.instructions` / `turn_context` / `world_state`、pi 的持久化 `system` 消息。
+2. **动作重复执行一点没解决。** 这次只保证「历史不重复」，不保证「同一句话只办一次」。`clientMessageId` 缺失仍退化成随机 `requestId`，判重表认不出是同一件事，结果是两张单。见 [core/tools.md](tools.md) §3。
+3. **审批后不重跑四道闸门。** `ActionRunService.ApproveAsync` 拿到 pending 就直接执行，挂起期间权限被收回也照跑。
+4. **历史没有条数上限。** provider 全量读回，裁剪仍归 Context；但 Context 的 trim 只影响「本次发给模型的内容」，不减少 SQLite 的读取量。会话很长时读会变慢，需要时在 store 加 `LIMIT`（注意：加 `LIMIT` 就是在 provider 里做裁剪，会与 §四的边界冲突，先想清楚再动）。
+5. **老数据没迁移。** 升级后，老会话在 `agent_sessions` 里的历史不再被读。症状是「界面记录都在，模型全忘了」。当前接受，因为库里只有测试对话；有真实数据时必须补一次性迁移。
+6. **跨机多实例仍不行。** SQLite 单文件，同机多进程可读写，跨机不行。
+7. **关掉 `SessionEnabled` 不等于关掉历史。** provider 按 `sessionId` 查 `chat_messages`，与 `AgentSession` 对象无关，所以历史照常工作；代价是 StateBag 里的非历史状态每轮丢失。**别为了消除覆盖机制就直接关它**，先确认没有别的 provider 依赖 StateBag。
+8. **`chat_messages` 只增不减。** 不随会话 TTL 清理，也不随会话删除连带删；目前只有 `AppendAsync` / `LoadAsync`，没有 Delete。后果两条：磁盘无界增长；「删了会话，模型还记着」（与第 1 条的删除边界是同一件事，定边界时一起定）。要么并入 `MemoryRetentionService` 按最后活跃时间清，要么定性为审计资料、永久保留 + 配额告警。**这条比第 4 条更硬**——第 4 条只影响单次读取，这条影响整个库。
+9. **「模型当时看到了什么」没有数据源（X4 引出的真缺口）。** `chat_messages` 只记对话往返；system 指令与注入片段由 `ContextInjectingChatClient` 在 provider 下游注入，不落库；`agent_runs` 只有 model / iterations / latency。于是 §4.1 五字段里的「看到什么」答不上——不是答得不好，是没数据。补法：在 `ExecutionTrace` 加指令快照（正文或 hash + 片段 id），归 `Core/Engineering/Observability`，Harness 收尾填值；**不要塞进 `chat_messages`**（一轮 run 可能有多次模型调用，会和「一轮对话」混在一起）。参考 codex 的 `session_meta.instructions` / `turn_context` / `world_state`、pi 的持久化 `system` 消息。
 
 ### 7.4 一个不该再讨论的问题：要不要开 `RequirePerServiceCallChatHistoryPersistence`
 
@@ -209,6 +208,21 @@ X1/X4 是职责不同的正常结果，X2/X3 对应 §7.3 第 1 条那两个待�
 
 **覆盖边界（必读）**：L1 的锁在内存里，**只有单进程成立**。进程崩溃时锁随进程消失，不会留僵尸锁
 （这是相对数据库租约的唯一优势）；但同一台机器上跑两个进程、或跨机部署时，L1 一律不成立。
+
+**L1 同时保护 `agent_sessions`（2026-11-09 更正）**：`SqliteSessionStore.SaveAsync` 仍是整份
+`Upsert`、无 version，但它**全仓只有一个调用点**——`AgentHarnessService.cs:576` 的 finally；
+`await using var gate`（`:119` / `:190`）包住整个方法体，所以单进程内不可能有两个 run 并发写
+同一 `sessionId`。**加新 provider 往 StateBag 放实质状态不会触发 lost update**，那只是放大后果、
+不是触发条件。原先 §7.3 有一条把它写成「立刻复发」，与本节及 §7.2 自相矛盾，已删除。
+
+剩余风险只有两个，**都归本节管辖，不再单列为连锁问题**：
+
+1. **L2 未实现**：跨进程 / 多实例时 L1 失效，整份 Upsert 会静默覆盖。
+2. **绕过 Harness 的写入者**：未来若有后台任务（压缩摘要、偏好同步）直接写 StateBag，它不经过
+   会话闸。**加这类写入者前必须回到本节**：要么纳入同一把闸，要么给 `SaveAsync` 加 `version` +
+   `UPDATE ... WHERE version=?`（CAS）。
+
+当前 StateBag 只有 `aw.session_id` 一个常量，覆盖了也无害。这一格不是待办，是管辖声明。
 
 多实例需要 **L2：数据库租约**（未实现）：
 

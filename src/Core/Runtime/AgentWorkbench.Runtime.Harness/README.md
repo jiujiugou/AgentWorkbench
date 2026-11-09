@@ -38,6 +38,13 @@ ResolveSessionId(请求的 SessionId)                    会话标识（缺省�
 因为 Hub / `/api/harness/run` / Workflow 三个入口都走这里。
 覆盖范围只有单进程，跨进程要数据库租约——见 `docs/core/runtime.md` §7.6。
 
+**这道闸同时保护会话快照的写回。** `ISessionStore.SaveAsync` 全仓只在
+`SaveSessionQuietlyAsync` 里被调用（本模块的 `finally`），而 `await using var gate` 在
+`RunAsync` / `StreamAsync` 开头、作用域包住整个方法体含 `finally`。因此单进程内
+`agent_sessions` 的整份 Upsert 不会有两个 run 并发写；加新 provider 往 StateBag 放实质状态
+也不会触发 lost update。剩余风险只有「L2 未实现」与「未来绕过本模块直接写 StateBag 的后台任务」，
+都归 §7.6 管辖。
+
 ### 审批怎么接进来（harness 只做透传，不做判断）
 
 审批是**两个正交维度**里的第二维，两半都不在 harness 里实现：
