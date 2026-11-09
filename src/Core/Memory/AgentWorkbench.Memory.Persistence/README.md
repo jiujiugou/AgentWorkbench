@@ -3,18 +3,30 @@
 这个模块是 `Memory` 的**落库后端**：把契约模块里的 `ISessionStore` / `ILongTermMemoryStore` 换成 SQLite 版，
 让会话在进程重启后仍能续上、长期记忆有地方存。它不定义契约、不做历史策略，也不碰 prompt 组装。
 
+**2026-11-09 起它还负责对话历史**：`SqliteChatHistoryProvider` 把每条消息逐条追加进 `chat_messages`，
+取代「整个会话序列化后覆盖 `agent_sessions` 一行」那条路。改动的动机与**连锁问题**
+见 `docs/core/runtime.md` §7——加任何新 provider 之前先读那一节。
+
 ---
 
 ## 一、它是什么
 
 - `SqliteSessionStore`：`GetOrCreateAsync` 命中且未过期就 `DeserializeAsync`，否则新建；
-  `SaveAsync` 用 MAF 序列化会话后 UPSERT。
+  `SaveAsync` 用 MAF 序列化会话后 UPSERT。**快照里已经没有历史了**，只剩 StateBag 的非历史键。
+- `SqliteChatHistoryProvider`：`ChatHistoryProvider` 的落库实现。每次模型调用前按 `sessionId`
+  从 `chat_messages` 读回历史，run 结束把本轮新消息追加进去。`sessionId` 从
+  `session.StateBag[AgentSessionKeys.SessionId]` 取（MAF 的会话对象不带 id）。
+- `SqliteChatMessageStore`：`chat_messages` 的读写（**EF Core**，`IDbContextFactory<AppDbContext>`，
+  与 `ConversationRepository` 同一套；建表仍归 FluentMigrator）。只追加、按自增 `id` 升序读回，
+  单条消息用 `AIJsonUtilities.DefaultOptions` 序列化（保住 `functionCall` / `functionResult`）。
+  实体映射在 `Persistence/ChatMessageRecord.cs` + `AppDbContext.ChatMessages`。
 - `SqliteLongTermMemoryStore`：长期记忆的作用域隔离 / key 覆盖 / 保留期语义。
 - `SqliteSessionStateRepository` / `SqliteMemoryItemRepository`：两张表的读写（Dapper）。
 - `Tools/RememberTool`、`Tools/RecallTool`：agent 工具入口（`IAgentToolProvider`），作用域取自
   `IMemoryScopeAccessor`，模型只能选「本作用域 / 全局」。
 - `MemoryRetentionService`：`BackgroundService`，定期删过期会话行与过保留期的记忆行。
-- `AddNitroMemoryPersistence(...)`：注册上述实现，并用 `services.Replace` 覆盖 `AddNitroMemory` 的内存版注册。
+- `AddNitroMemoryPersistence(...)`：注册上述实现，并用 `services.Replace` 覆盖 `AddNitroMemory`
+  的内存版 `ISessionStore`，以及 `AddNitroContext` 注册的内存版 `ChatHistoryProvider`。
 
 ---
 
@@ -25,12 +37,29 @@
 ```sql
 agent_sessions (
   session_id TEXT PRIMARY KEY,   -- 64，对齐 agent_runs.session_id
-  state_json TEXT NOT NULL,      -- MAF 序列化结果，含聊天历史
+  state_json TEXT NOT NULL,      -- MAF 序列化结果；2026-11-09 起不再含聊天历史，只剩非历史状态
   created_at TEXT NOT NULL,      -- ISO-8601
   updated_at TEXT NOT NULL,
   expires_at TEXT NULL           -- NULL = 不过期
 )
 ```
+
+迁移 `M031_ChatHistory`（对话历史，DDL 与 `Persistence/ChatHistorySchema.cs` 共用一份）：
+
+```sql
+chat_messages (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,  -- 全局递增；会话内即写入顺序
+  session_id TEXT NOT NULL,
+  role       TEXT NOT NULL,                      -- 便于查询，不用反序列化 payload
+  payload    TEXT NOT NULL,                      -- 单条 ChatMessage 的 JSON（含 functionCall/Result）
+  created_at TEXT NOT NULL
+)
+-- ix_chat_messages_session(session_id, id)
+```
+
+> 刻意**不建** `(session_id, message_id)` 唯一约束：消息没有稳定的业务主键，
+> 按内容派生 id 会把「用户连说两遍同一句话」误当重复合并——那是两次合法输入。
+> 幂等属于动作层（`request_id`），不在这里伪装。
 
 迁移 `M024_CreateMemoryItems`（长期记忆）：
 
@@ -82,6 +111,12 @@ builder.Services.AddNitroMemoryPersistence(builder.Configuration); // 换成 SQL
 3. **序列化 `JsonSerializerOptions` 必须传 `null`**（见 `AgentSessionFactory` 注释），否则 MAF 抛异常。
 4. **召回不回 prompt 文本**：`SqliteLongTermMemoryStore` 只回 `MemoryItem`；格式化注入归 `Context`。
 5. **工具的作用域来自 ambient，不来自模型参数**。
+6. **历史 provider 不能持有会话相关状态**。它注册为单例、服务所有会话，`sessionId` 只能从
+   `StateBag[AgentSessionKeys.SessionId]` 读。把当前会话 id 存进实例字段必然串号——官方明确要求
+   session 状态放 StateBag。
+7. **不要开 `RequirePerServiceCallChatHistoryPersistence`**。实测（`HistoryProviderProbeTests.H1`）
+   一次 run 结束时工具调用与工具结果都已在历史里；开那个开关只会让 `FunctionInvokingChatClient`
+   把对话当成服务端管理、清掉自己累积的历史，改变守卫与轨迹行为，收益为零。
 
 ## 依赖
 

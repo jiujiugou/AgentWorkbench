@@ -44,6 +44,9 @@ public sealed class AgentHarnessService : IAgentHarness
     /// <summary>统一采样温度：越低越确定，便于测试与结果复现。</summary>
     private const float Temperature = 0.7f;
 
+    /// <summary>会话被占用时回给用户的文案。前端据此提示「稍候」，与「服务出错」区分开。</summary>
+    private const string SessionBusyMessage = "这条会话正在回答中，请稍候再发。";
+
     // —— 以下依赖全部来自其它模块的契约，Harness 只负责把它们串起来 ——
     private readonly IChatClientFactory _factory;   // 模型网关：解析端点 / 产出 IChatClient
     private readonly IModelRuntime _runtime;        // 单次模型调用语义：超时 / 重试 / 并发闸门 / 用量
@@ -51,6 +54,7 @@ public sealed class AgentHarnessService : IAgentHarness
     private readonly IToolExecutionPipeline _pipeline; // 工具执行环：把工具调用接进模型循环
     private readonly IContextAssembler _context; // 上下文组装：历史 / 指令 / 片段 → 模型请求
     private readonly ISessionStore _sessions;       // 会话存储：跨 run 的会话快照
+    private readonly ISessionRunGate _gate;         // 会话互斥：同一 sessionId 同时只允许一个 run
     private readonly IOptions<MemoryOptions> _memoryOptions;   // 记忆开关（会话是否启用）
     private readonly IMemoryScopeAccessor _memoryScope;        // 记忆作用域：隔离并发 run 的 remember/recall
     private readonly IAgentLoop _loop;              // 执行控制：迭代预算、run 级超时、用量守卫
@@ -66,6 +70,7 @@ public sealed class AgentHarnessService : IAgentHarness
         IToolExecutionPipeline pipeline,
         IContextAssembler context,
         ISessionStore sessions,
+        ISessionRunGate gate,
         IOptions<MemoryOptions> memoryOptions,
         IMemoryScopeAccessor memoryScope,
         IAgentLoop loop,
@@ -80,6 +85,7 @@ public sealed class AgentHarnessService : IAgentHarness
         _pipeline = pipeline;
         _context = context;
         _sessions = sessions;
+        _gate = gate;
         _memoryOptions = memoryOptions;
         _memoryScope = memoryScope;
         _loop = loop;
@@ -106,6 +112,14 @@ public sealed class AgentHarnessService : IAgentHarness
     public async Task<HarnessRunResult> RunAsync(HarnessRunRequest request, CancellationToken cancellationToken = default)
     {
         var sessionId = ResolveSessionId(request.SessionId);
+
+        // 会话互斥：同一 sessionId 同时只允许一个 run 在推进。抢不到就如实回 session_busy，
+        // 不排队（排队没有上限，第二句话可能几分钟后才处理，用户早已忘了上下文）。
+        // 本次没有开始跑，因此不落轨迹——RunId=0 即「这次不算一次 run」。
+        await using var gate = await _gate.TryAcquireAsync(sessionId, cancellationToken);
+        if (gate is null)
+            return SessionBusyResult(sessionId);
+
         using var memoryScope = _memoryScope.Begin(MemoryScope.Session(sessionId));
         var run = await PrepareRunAsync(request, sessionId, cancellationToken);
 
@@ -169,6 +183,21 @@ public sealed class AgentHarnessService : IAgentHarness
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var sessionId = ResolveSessionId(request.SessionId);
+
+        // 与 RunAsync 同一道闸：同一 sessionId 同时只允许一个 run。
+        // 抢不到时产出一个 Failed 事件就结束——不抛异常，否则会被 Hub 的 catch 当成「服务出错」，
+        // 与「这条会话正在回答」混在一起。
+        await using var gate = await _gate.TryAcquireAsync(sessionId, cancellationToken);
+        if (gate is null)
+        {
+            yield return new HarnessStreamEvent(
+                HarnessStreamEventKind.Failed,
+                Error: SessionBusyMessage,
+                Status: AgentRunStatus.Failed,
+                Code: AgentRunCode.SessionBusy);
+            yield break;
+        }
+
         using var memoryScope = _memoryScope.Begin(MemoryScope.Session(sessionId));
         var run = await PrepareRunAsync(request, sessionId, cancellationToken);
 
@@ -291,6 +320,13 @@ public sealed class AgentHarnessService : IAgentHarness
         => string.IsNullOrWhiteSpace(sessionId) ? Guid.NewGuid().ToString("N") : sessionId!;
 
     /// <summary>
+    /// 被会话闸拒绝的结果。<c>RunId=0</c> 表示本次没有开始跑、也没有落轨迹——
+    /// 不是「跑了一次但失败了」，回放接口拿 0 查不到东西是预期行为。
+    /// </summary>
+    private static HarnessRunResult SessionBusyResult(string sessionId)
+        => new(0, sessionId, string.Empty, 0, null, 0, [], AgentRunStatus.Failed, AgentRunCode.SessionBusy);
+
+    /// <summary>
     /// 一次 run 的公共准备（<see cref="RunAsync"/> 与 <see cref="StreamAsync"/> 共用）：
     /// 解析模型 → 装配工具环与守卫 → 建 Agent → 开/建会话。模型未配置时已落轨迹并抛出。
     /// </summary>
@@ -349,6 +385,11 @@ public sealed class AgentHarnessService : IAgentHarness
         var session = _memoryOptions.Value.SessionEnabled
             ? await _sessions.GetOrCreateAsync(sessionId, sessionFactory, cancellationToken)
             : await agent.CreateSessionAsync(cancellationToken);
+
+        // 历史 provider 靠这个键查库：MAF 的 AgentSession 本身不带 id，id 由编排层维护。
+        // 落库版 provider 用它定位「这是哪个会话的历史」；内存版忽略它。
+        // 写入时机必须在 BuildAgent 之后、本次 run 真正开始之前。
+        session.StateBag.SetValue(AgentSessionKeys.SessionId, sessionId, null!);
 
         return new PreparedRun(sessionId, endpoint, execution, agent, session, sessionFactory, sw, guard, messages);
     }

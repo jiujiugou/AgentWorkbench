@@ -33,6 +33,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
 
     public DbSet<ConversationRecord> Conversations => Set<ConversationRecord>();
     public DbSet<MessageRecord> Messages => Set<MessageRecord>();
+    public DbSet<ChatMessageRecord> ChatMessages => Set<ChatMessageRecord>();
 
     public DbSet<TenantRecord> Tenants => Set<TenantRecord>();
 
@@ -67,6 +68,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
 
         Map<ConversationRecord>(modelBuilder, "conversations", generated: false);
         Map<MessageRecord>(modelBuilder, "messages");
+        Map<ChatMessageRecord>(modelBuilder, "chat_messages");
 
         Map<TenantRecord>(modelBuilder, "tenants", generated: false);
 

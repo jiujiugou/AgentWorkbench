@@ -96,6 +96,11 @@ public sealed class AgentHub : Hub
 
         // 放开并行调用后 Stop 才能插队进来，代价是同连接可以同时发起两次 Send；
         // 这里用 TryAdd 挡掉第二条，否则后到的会覆盖前一条的 CTS，导致前一条再也停不掉。
+        //
+        // 注意本闸的职责边界：它是<b>连接级防抖</b>，只保 Stop 能找到正确的 CTS。
+        // 它<b>不</b>承担会话互斥——两个标签页是两条连接，本闸对它们完全无感；
+        // 同一会话的并发由 Harness 的 ISessionRunGate 拦（返回 session_busy）。
+        // 不要把这两层混成一层：删掉它 Stop 会坏，靠它挡并发则挡不住。
         if (!Generations.TryAdd(Context.ConnectionId, linked))
         {
             await SendErrorAsync("已有生成在进行中，请先停止或等待完成。");
@@ -180,7 +185,8 @@ public sealed class AgentHub : Hub
                     case HarnessStreamEventKind.Failed:
                         // 失败已由 harness 落轨迹（含失败分类码），这里只负责让用户看见。
                         // 同时把终态发下去：没有它，「用户取消」和「服务出错」在界面上长得一样。
-                        await NotifyStoppedAsync(messageId, evt.Status, evt.Error);
+                        // Code 再细分一层：session_busy 表示这条会话正忙、本次根本没开始跑，前端应提示「稍候」。
+                        await NotifyStoppedAsync(messageId, evt.Status, evt.Error, evt.Code);
                         await SendErrorAsync(evt.Error ?? "生成失败。");
                         break;
 
@@ -367,12 +373,12 @@ public sealed class AgentHub : Hub
         => text is null || text.Length <= max ? text : text[..max] + "…";
 
     /// <summary>发终态通知；连接已断时静默失败（这里的目的只是让还活着的客户端知道发生了中止）。</summary>
-    private async Task NotifyStoppedAsync(string messageId, string? status, string? error)
+    private async Task NotifyStoppedAsync(string messageId, string? status, string? error, string? code = null)
     {
         if (status is null) return;
         try
         {
-            await Clients.Caller.SendAsync("ReceiveStopped", new { messageId, status, error });
+            await Clients.Caller.SendAsync("ReceiveStopped", new { messageId, status, error, code });
         }
         catch (Exception ex)
         {

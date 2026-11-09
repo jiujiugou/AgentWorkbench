@@ -39,6 +39,12 @@ public static class AgentRunCode
     /// <summary>检索结果被判"资料不足"，否决层终止生成。</summary>
     public const string KnowledgeInsufficient = "knowledge_insufficient";
 
+    /// <summary>
+    /// 同一 sessionId 已有 run 在推进，本次被会话闸拒绝（未开始执行、未落轨迹）。
+    /// 与其它失败分开，前端可据此提示「请稍候」而不是「服务出错」。
+    /// </summary>
+    public const string SessionBusy = "session_busy";
+
     /// <summary>其余未归类异常。</summary>
     public const string Unhandled = "unhandled_error";
 }

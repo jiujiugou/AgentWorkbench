@@ -32,10 +32,15 @@ public enum HarnessStreamEventKind
 /// 失败/终止时已落库的终态（取值见 <c>AgentRunStatus</c>：cancelled / timeout / failed）。
 /// 只给一句错误文本时，界面无法区分「用户取消」与「服务出错」——这两个对观众的含义完全不同。
 /// </param>
+/// <param name="Code">
+/// 结束原因码（取值见 <c>AgentRunCode</c>）；正常收尾时为 <c>null</c>。
+/// <c>session_busy</c> 表示本次被会话闸拒绝、根本没有开始跑——调用方应提示「稍候」而不是「出错」。
+/// </param>
 public sealed record HarnessStreamEvent(
     HarnessStreamEventKind Kind,
     string? Text = null,
     ToolCallTrace? Tool = null,
     HarnessRunResult? Result = null,
     string? Error = null,
-    string? Status = null);
+    string? Status = null,
+    string? Code = null);

@@ -56,6 +56,7 @@ public sealed class ContextAssemblerTests
             null!,                                    // IToolExecutionPipeline
             assembler,                               // IContextAssembler
             null!,                                    // ISessionStore
+            new SessionRunGate(),                    // ISessionRunGate（只调 GetCapabilitiesAsync，不会被抢）
             Options.Create(new MemoryOptions()),     // IOptions<MemoryOptions>
             null!,                                    // IMemoryScopeAccessor
             null!,                                    // IAgentLoop

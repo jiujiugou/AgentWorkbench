@@ -13,17 +13,25 @@
 ### 一次 run 的流水线
 
 ```
-ResolveAsync(端点)                                   Providers
+ResolveSessionId(请求的 SessionId)                    会话标识（缺省随机，无跨 run 记忆）
+  → ISessionRunGate.TryAcquireAsync(sessionId)         会话互斥（抢不到 → session_busy，直接返回，不落轨迹）
+  → ResolveAsync(端点)                                 Providers
   → IModelRuntime.Wrap(client)                       模型交互（超时 / 重试 / 并发 / 用量）
   → IAgentLoop.CreateGuard(用量来源)                  执行控制（一次 run 一个守卫）
   → IToolExecutionPipeline.Create(client, 预算+守卫+审批者)  工具调用（工具环 + 轨迹采集 + 环内终止 + 审批闸门）
   → ChatClientAgent（工具来自 IToolCatalog）           对话运行时 + 白名单目录（Safety）
   → 用户原文直接进模型（知识检索走 search_knowledge 工具，harness 不暗中拼装）
-  → ISessionStore.GetOrCreateAsync(sessionId)         记忆
+  → ISessionStore.GetOrCreateAsync(sessionId)         会话快照（历史不在这里，见 §7.6 与 docs/core/runtime.md）
   → IAgentLoop.ExecuteAsync(...)                      执行控制（run 级超时）
   → 收尾分类（循环 / 预算 / 跑满 / 取消 / 超时 / 失败）  执行控制 + 编排层
   → IExecutionTraceStore.SaveAsync(轨迹+状态+归类码)    可观测（四条路径都落库）
 ```
+
+**会话互斥是这条流水线的第一格，不是最后一步。** 同一 `sessionId` 同时只允许一个 run：
+`RunAsync` 返回 `Code=session_busy, RunId=0`（0 = 没开始跑、没落轨迹），
+`StreamAsync` 产出**一个 Failed 事件**就结束。闸在 Harness 而不是 Hub，
+因为 Hub / `/api/harness/run` / Workflow 三个入口都走这里。
+覆盖范围只有单进程，跨进程要数据库租约——见 `docs/core/runtime.md` §7.6。
 
 ### 审批怎么接进来（harness 只做透传，不做判断）
 

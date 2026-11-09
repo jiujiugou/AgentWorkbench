@@ -6,7 +6,8 @@ using Microsoft.Extensions.Options;
 namespace AgentWorkbench.Runtime.Context;
 
 /// <inheritdoc />
-internal sealed class ContextAssembler(IOptions<ContextOptions> options) : IContextAssembler
+internal sealed class ContextAssembler(IOptions<ContextOptions> options, ChatHistoryProvider history)
+    : IContextAssembler
 {
     public ContextOptions Options => options.Value;
 
@@ -39,8 +40,11 @@ internal sealed class ContextAssembler(IOptions<ContextOptions> options) : ICont
         return new ContextInjectingChatClient(inner, bundle.Instructions);
     }
 
-    public ChatHistoryProvider CreateChatHistoryProvider()
-        => new InMemoryChatHistoryProvider(new InMemoryChatHistoryProviderOptions());
+    /// <summary>
+    /// 历史 provider 由 DI 提供，本模块不决定它存哪（内存 / SQLite）。
+    /// 装配点在这里而不是 Harness：历史属于「上下文从哪来」，存储实现不属于 Context 的依赖。
+    /// </summary>
+    public ChatHistoryProvider CreateChatHistoryProvider() => history;
 
     /// <summary>只保留最近 N 条历史；<c>&lt;= 0</c> 表示不截断。</summary>
     private IReadOnlyList<ContextTurn> TrimHistory(IReadOnlyList<ContextTurn>? history)
