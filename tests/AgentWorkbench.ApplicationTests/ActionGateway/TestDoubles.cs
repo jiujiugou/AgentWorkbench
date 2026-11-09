@@ -26,9 +26,13 @@ public sealed class StubPermissionQuery : IPermissionQuery
     public bool Allow { get; set; } = true;
     public int CallCount { get; private set; }
 
+    /// <summary>最近一次收到的权限查询，用于核对「谁在申请」不是模型填的。</summary>
+    public PermissionQuery? LastQuery { get; private set; }
+
     public ValueTask<PermissionDecision> QueryAsync(PermissionQuery query, CancellationToken ct)
     {
         CallCount++;
+        LastQuery = query;
         return ValueTask.FromResult(new PermissionDecision(Allow, Allow ? "stub allow" : "stub deny"));
     }
 }
@@ -64,8 +68,15 @@ public sealed class StubSpecRegistry : IActionSpecRegistry
 {
     public ActionSpec? Spec { get; set; }
 
+    /// <summary>
+    /// 默认 false（不按名匹配，保持既有测试行为）。设为 true 才按 ActionKey 严格查找，
+    /// 用于验证「清单外的能力名会被拒绝」——否则 stub 恒返回同一个 spec，那条断言是假绿。
+    /// </summary>
+    public bool MatchKey { get; set; }
+
     public ValueTask<ActionSpec?> FindAsync(string actionKey, CancellationToken ct)
-        => ValueTask.FromResult(Spec);
+        => ValueTask.FromResult(
+            MatchKey && !string.Equals(Spec?.ActionKey, actionKey, StringComparison.Ordinal) ? null : Spec);
 
     public ValueTask<IReadOnlyList<ActionSpec>> ListAsync(CancellationToken ct)
         => ValueTask.FromResult<IReadOnlyList<ActionSpec>>(Spec is null ? [] : [Spec]);

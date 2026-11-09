@@ -12,5 +12,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AgentWorkbench.Tools.Abstractions\AgentWorkbench.Tools.Abstractions.csproj" />
+    <!--
+      唯一例外：翻译工具需要既有收单入口 ActionRunService（ActionGateway）与动作契约（Ports）。
+      两者都零 NuGet 包依赖，且方向单向、无环；ActionGateway / Ports 都不反过来引用 Builtin。
+      除此之外本工程仍只放「与业务无关的最小工具集」，不得出现任何能力名或参数含义判断。
+    -->
+    <ProjectReference Include="..\..\Ports\AgentWorkbench.Ports.csproj" />
+    <ProjectReference Include="..\AgentWorkbench.ActionGateway\AgentWorkbench.ActionGateway.csproj" />
   </ItemGroup>
 </Project>

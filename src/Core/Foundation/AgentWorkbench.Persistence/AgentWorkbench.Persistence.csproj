@@ -28,6 +28,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- 只读 Ports 的契约类型（零包依赖），用于实现 IActionRunStore / ITraceSink / IAuditQuery。 -->
+    <ProjectReference Include="..\..\Ports\AgentWorkbench.Ports.csproj" />
     <ProjectReference Include="..\AgentWorkbench.Domain\AgentWorkbench.Domain.csproj" />
     <ProjectReference Include="..\AgentWorkbench.Shared\AgentWorkbench.Shared.csproj" />
   </ItemGroup>

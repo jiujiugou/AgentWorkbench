@@ -11,6 +11,7 @@ using AgentWorkbench.Persistence;
 using AgentWorkbench.Shared;
 using AgentWorkbench.Shared.Options;
 using AgentWorkbench.Runtime.Tools;
+using AgentWorkbench.Webapi.Actions;
 using AgentWorkbench.Webapi.Auth;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
@@ -37,6 +38,7 @@ public sealed class AgentHub : Hub
     private readonly IConversationRepository _conversations;
     private readonly ProviderOptions _providerOptions;
     private readonly KnowledgeOptions _knowledgeOptions;
+    private readonly IActionSubjectScope _subjectScope;
     private readonly ILogger<AgentHub> _logger;
 
     /// <summary>每个连接当前的生成任务，用于"停止生成"与断线取消。</summary>
@@ -47,12 +49,14 @@ public sealed class AgentHub : Hub
         IConversationRepository conversations,
         IOptions<ProviderOptions> providerOptions,
         IOptions<KnowledgeOptions> knowledgeOptions,
+        IActionSubjectScope subjectScope,
         ILogger<AgentHub> logger)
     {
         _harness = harness;
         _conversations = conversations;
         _providerOptions = providerOptions.Value;
         _knowledgeOptions = knowledgeOptions.Value;
+        _subjectScope = subjectScope;
         _logger = logger;
     }
 
@@ -85,6 +89,10 @@ public sealed class AgentHub : Hub
             await SendErrorAsync("已有生成在进行中，请先停止或等待完成。");
             return;
         }
+
+        // 翻译工具在 harness 的工具环里执行，此刻的 HttpContext 不保证还在（长连接）。
+        // 整段生成期间显式建立身份作用域，值随异步流进入工具调用；工具取不到身份会拒绝。
+        using var subjectScope = _subjectScope.Begin(Context.User?.Identity?.Name);
 
         var answer = new StringBuilder();
         ConversationRecord? conversation = null;

@@ -21,11 +21,13 @@ public sealed class ActionsController : ControllerBase
 {
     private readonly ActionRunService _service;
     private readonly IActionRunStore _store;
+    private readonly IActionSubjectProvider _subjects;
 
-    public ActionsController(ActionRunService service, IActionRunStore store)
+    public ActionsController(ActionRunService service, IActionRunStore store, IActionSubjectProvider subjects)
     {
         _service = service;
         _store = store;
+        _subjects = subjects;
     }
 
     /// <summary>提交一次结构化动作请求。副作用动作返回 202 + Pending，等审批。</summary>
@@ -37,9 +39,10 @@ public sealed class ActionsController : ControllerBase
 
         // 归属声明必须齐全（中间件已挡一次，这里双保险）。
         var (_, userId) = User.Owner();
-        // Subject 用登录名而不是内部 GUID：动作域的权限判据按人/工号走（PDP 白名单是 "wang" 这类名字），
+        // Subject 走统一身份端口：HTTP 与 Hub 两条入口不再各写一遍。
+        // 仍用登录名而不是内部 GUID：动作域的权限判据按人/工号走（PDP 白名单是 "wang" 这类名字），
         // GUID 只承担会话与档案的归属隔离。两者混用会让真实请求在第 2 道被判 permission_denied。
-        var subject = User.Identity?.Name ?? userId;
+        var subject = _subjects.CurrentSubject ?? userId;
         var requestId = string.IsNullOrWhiteSpace(body.RequestId) ? Guid.NewGuid().ToString("N") : body.RequestId!;
         var argumentsJson = body.Arguments is { } args && args.ValueKind != JsonValueKind.Undefined
             ? args.GetRawText()
