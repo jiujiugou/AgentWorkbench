@@ -39,7 +39,8 @@ Runtime.Context     ← 只依赖 Shared + Microsoft.Extensions.AI / MAF
 
 MAF 1.23 提供了三层上下文能力：
 
-1. `ChatHistoryProvider` / `InMemoryChatHistoryProvider` —— 会话历史，**已使用**，创建入口收在本模块的 `CreateChatHistoryProvider()`。
+1. `ChatHistoryProvider` —— 会话历史，**已使用**。创建入口收在本模块的 `CreateChatHistoryProvider()`，
+   但实现由 DI 注入（现为 `Memory.Persistence/ChatHistory/SqliteChatHistoryProvider`），本模块不认识存储、不查库。
 2. `AIContext`（Messages / Instructions / Tools 三件套）—— 本模块的 `ContextBundle` 就是它的投影；MAF 未公开 `AIContext` 构造函数，因此用自有 record 承载，语义一一对应。
 3. `AIContextProvider` —— **不挂到 Agent 上**。挂 `ChatClientAgentOptions.AIContextProviders` 会让 MEA 在我们装配的 `FunctionInvokingChatClient` 外面再包一层函数调用环，绕过 `ToolExecutionPipeline` 的守卫与轨迹采集（实测：同参重复调用不再判 `loop_detected`，工具异常不再归类 `tool_error`）。
 

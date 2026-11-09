@@ -21,7 +21,7 @@ ResolveSessionId(请求的 SessionId)                    会话标识（缺省�
   → IToolExecutionPipeline.Create(client, 预算+守卫+审批者)  工具调用（工具环 + 轨迹采集 + 环内终止 + 审批闸门）
   → ChatClientAgent（工具来自 IToolCatalog）           对话运行时 + 白名单目录（Safety）
   → 用户原文直接进模型（知识检索走 search_knowledge 工具，harness 不暗中拼装）
-  → ISessionStore.GetOrCreateAsync(sessionId)         会话快照（历史不在这里，见 §7.6 与 docs/core/runtime.md）
+  → ISessionStore.GetOrCreateAsync(sessionId)         会话快照（历史不在这里，见 docs/core/runtime.md §7.1）
   → IAgentLoop.ExecuteAsync(...)                      执行控制（run 级超时）
   → 收尾分类（循环 / 预算 / 跑满 / 取消 / 超时 / 失败）  执行控制 + 编排层
   → IExecutionTraceStore.SaveAsync(轨迹+状态+归类码)    可观测（四条路径都落库）

@@ -10,7 +10,7 @@
 > **最重要的现状**：Runtime 这条链只服务 **v1 知识问答**；v3 主线的受控动作链不走这里。模型的入口是 `propose_action`（`Core/Tools/Builtin`），四道网关与落库见 [core/tools.md](tools.md)。别把本文件读成「产品主线怎么跑」。
 >
 > **2026-11-09 变化**：对话历史改为逐条落 `chat_messages`（`SqliteChatHistoryProvider`），
-> 不再随会话快照整份覆盖。已解决的与**由此产生的连锁问题**见 §7——那一节比这里重要。
+> 不再随会话快照整份覆盖。§7 先讲清两个职责各自走哪条路，再列连锁问题——那一节比这里重要。
 
 ## 1. 路由（先读这三个，别全仓 grep）
 
@@ -80,20 +80,49 @@ cd web; npm run build
 - **2026-11-08**：11-01 端到端真跑曾出现「模型零检索、凭常识编六条建议，系统判 `unsupported` 但答案照给」。当前来源面板已改由工具完成事件驱动，**同类问题是否仍存在未复测**；不把旧结论当现状。
 - `Runtime.Model` 引用 `Core/Foundation/Domain`（v1 文档业务记录）但零使用，是否该清未定。
 - `AgentHarnessService` 构造依赖较多，是否有收拢空间未评估。
+- **2026-11-09**：失败轮要不要在界面留痕、删除/TTL 时模型上下文跟不跟着清——两个边界条件尚未定，
+  见 §7.3 第 1 条；指令快照（「模型当时看到了什么」）未实现，见 §7.3 第 10 条。`IChatMessageStore`
+  契约仍在实现模块、未归位，见 §7.1 注。
 
-## 7. 会话历史：现在谁存什么，以及连锁问题
+## 7. 会话历史：两个职责，三段归属
 
-**这一节是给下一个人（包括三个月后的你）读的。改造之前的失效模式不重复讲，只讲改完之后的形状和它带来的新麻烦。**
+**这一节是给下一个人（包括三个月后的你）读的。改造之前的失效模式不重复讲，只讲现在的职责边界。**
 
-### 7.1 三张表，各管一件事
+### 7.1 先把名字叫对
+
+「两个历史源」是个会误导人的说法。这里不是同一份数据存了两遍、后来走岔了，而是**两个不同的职责，各自有一条路径，没有汇合点**：
+
+- **模型上下文**：回答「下一轮模型该看到什么」（用户消息、模型回复、工具调用与结果、指令与注入内容）。
+- **界面投影**：回答「人回头看时该显示什么」（聊天正文、工具完成提示、token 用量、任务开始/结束）。
+
+它们唯一的共同点是都描述同一段对话。**所以「两边不一致」不是缺陷，是两件事本来就不该对得上**；X1/X4 实测到的差异属于正常结果，不是待修的 bug。10-13 起它们就是有意的分离（`AgentHub.cs:143` 那行注释「专供界面恢复」是当时的决定），11-09 只是把模型那一侧从整份快照换成逐条追加。
+
+**三段归属**（「界面」和「审计」常被混成一个词，但不是一回事）：
+
+| 职责 | 拥有者 | 物理表 | 换域要改吗 | 换 CLI/定时任务还成立吗 | 拿掉它底座还能跑吗 |
+| --- | --- | --- | --- | --- | --- |
+| 模型上下文 | `Core/Runtime.Session`（契约）、`Core/Memory.Persistence`（实现）、`Core/Runtime.Context`（装配点） | `chat_messages` | 不改 | 成立 | **不能**（每轮失忆，回到案例一） |
+| 审计轨迹 | `Core/Engineering/AgentWorkbench.Observability` | `agent_runs` / `agent_steps` | 不改 | 成立 | **不能**（§4.1 五字段答不上） |
+| 界面恢复 | **`Host/AgentWorkbench.Webapi`**（`AgentHub:133/360` 决定写、`ConversationsController` 读） | `messages`（`conversations` 子表） | 不改 | **不成立**（没有界面） | **能**，只是刷新看不到 |
+
+两条容易被绕进去的地方：
+
+- **「代码在 Core」不等于「职责归 Core」**。`ConversationRepository.cs` 确实在 `Core/Foundation/Persistence`，但它只是通用表读写机制，不认识 `messageId`、不认识「刷新」、不认识流式与前端展示结构。决定写什么、何时写、失败写不写的是 Host。
+- **AC-01 是必要条件不是充分条件**。表里三行「换域都不改」只证明它们不承载业务语义；真正把界面恢复分出去的是后两列（换入口不成立、拿掉底座照跑）。别用 AC-01 推出「都该归 Core」。
+
+`Core` 里这两块已经各有其位，**不需要新增模块，也不需要找一个统一负责人**——本来就不是同一个需求。
+
+**物理层：三张表各管一件事**
 
 | 表 | 谁写 | 存什么 | 写的方式 |
 | --- | --- | --- | --- |
-| `chat_messages` | `SqliteChatHistoryProvider` | 模型看到与产出的一切，含 `functionCall` / `functionResult` | **只追加**（`INSERT`，按 `id` 升序读） |
+| `chat_messages` | `SqliteChatHistoryProvider` | 模型看到与产出的对话往返，含 `functionCall` / `functionResult` | **只追加**（`INSERT`，按 `id` 升序读） |
 | `conversations` 的消息 | `AgentHub.RunAsync` | 界面正文（user / assistant 文本） | 只追加 |
 | `agent_sessions` | `SqliteSessionStore`（每次 run 的 finally） | StateBag 里除历史之外的东西，现在只有 `aw.session_id` | **整份覆盖**（`Upsert`） |
 
 键名契约在 `Runtime.Session/AgentSessionKeys.cs`：编排层写 `aw.session_id`，provider 读同一个键。MAF 的 `AgentSession` 不带 id，这个键是唯一来源。
+
+**注**：`IChatMessageStore` 契约目前定义在 `Memory.Persistence` 里，按本仓「契约留本模块、实现放持久化模块」的红线应挪到 `Runtime.Session`。这是 Core 内部归位，不改行为，尚未做。
 
 ### 7.2 已经解决的
 
@@ -101,20 +130,23 @@ cd web; npm run build
 
 **乱（两个 run 交错写同一会话）**：追加式不丢，但两个 run 仍会把对话交错写进一个会话，模型在半截上下文里继续推理。现在由会话闸挡住，第二个请求返回 `session_busy`。见 §7.6。
 
-### 7.3 连锁问题（改造带来的，不是遗留的）
+### 7.3 连锁问题（含一条已澄清的伪问题）
 
-1. **两个历史源，且会不一致。** 2026-11-09 实测（`HistoryDivergenceTests` X1–X4），四种形态，都不需要巧合：
+1. **「两个历史源不一致」是命名造成的伪问题，不是缺陷（2026-11-09 澄清）。** 见 §7.1：两条路径各自有各自的作用，没有汇合点，也不存在一致性可承诺。`HistoryDivergenceTests` X1–X4 实测到的四种形状仍然有效，但要**按性质分开读**：
 
-   | 形态 | 界面（`messages`） | 模型（`chat_messages`） |
-   | --- | --- | --- |
-   | 正常一轮带工具 | 2 条：user + assistant 文本 | 4 条：含 `functionCall` / `functionResult` |
-   | 失败的一轮 | 1 条孤立提问（无答复） | **0 条**——provider 的 Store 一次都没被调用 |
-   | 删除会话 | 随外键级联删掉 | 无外键，**原样留着** |
-   | system 指令与注入片段 | 不存 | **也不存**（注入发生在 provider 下游） |
+   | 形态 | 界面（`messages`） | 模型（`chat_messages`） | 性质 |
+   | --- | --- | --- | --- |
+   | 正常一轮带工具（X1） | 2 条：user + assistant 文本 | 4 条：含 `functionCall` / `functionResult` | **正常**：界面本来就不展示执行过程 |
+   | system 指令与注入片段（X4） | 不存 | 也不存（注入在 provider 下游） | **正常**：指令是一次 run 的注入，不是一段对话；但由此引出下面第 10 条 |
+   | 失败的一轮（X2） | 1 条孤立提问（无答复） | **0 条**——provider 的 Store 一次都没被调用 | **边界未定**：界面这条路径没定义失败时写什么 |
+   | 删除会话（X3） | 随外键级联删掉 | 无外键，**原样留着** | **边界未定**：模型这条路径没定义删除语义 |
 
-   后果按严重度：① 界面看不到模型调过 `propose_action`、工具返回了什么，而模型记得；② 失败轮在界面上留下「我问了没答」，在模型那里连「问过」都没有；③ 用户删了会话，模型下一轮还记着（同第 9 条）；④ **光看 `chat_messages` 复原不出「模型当时看到了什么」**——审计判据里那半句目前没有数据支撑。
+   所以真正剩下的只有**两个待定边界条件**，不是「要不要合并 / 谁是真相」：
 
-   **没定谁是真相。** 二选一：合并成一张表（加 `audience` 列，并把指令/片段也记进去），或明确规定「界面读 `conversations`、模型读 `chat_messages`，两者不做一致性承诺，审计只认 `action_trace`」。不决定的话，这就是下一轮的「两个真相源打架」。
+   - **失败轮**：界面要不要给那条提问留一个明确的失败标记（而不是一条看起来没答的孤问）。语义归 `Runtime.Harness` 定，Hub 执行。参考：codex 有 `turn_aborted` 记录，pi 明确「`pending` 不得作为已完成的 assistant 回复持久化」。
+   - **删除 / TTL**：删会话或会话过期时，模型上下文跟不跟着清；不清就明说它是审计资料、永久保留（同第 9 条）。参考：codex 删会话就是删那一个 rollout 文件，两个读者同时消失，不存在中间态。
+
+   **方向（不现在做）**：codex 用同一份 append-only 文件里的两种行类型（`response_item` = 模型看到的，`event_msg` = TUI 重放的）区分两个职责；pi 用同一棵 JSONL 树 + `excludeFromContext` / `display` 标记做投影，并把 system 消息也记进去。都是**一份真相 + 两种读法**，所以它们没有「一致性」这个问题。我们做不到直接照搬：① 这是被嵌进 ERP 的 web 底座，多入口、多租户、跨重启，不是单进程 CLI；② MAF 的 `ChatHistoryProvider` 只接受 `IEnumerable<ChatMessage>`，塞不进 `turn_aborted` / `token_count` 这类事件。触发点是客户真要审计回放、且那个口子验通了，属于 M2/M3。
 2. **`agent_sessions` 的覆盖机制还在。** 现在它只存一个 `aw.session_id`，丢了也无所谓。但一旦有新的 provider 往 StateBag 里放实质状态（压缩摘要、用户偏好），`lost update` 立刻复发，而且不会有人记得这件事。**加新 provider 前先读这一条。**
 3. **动作重复执行一点没解决。** 这次只保证「历史不重复」，不保证「同一句话只办一次」。`clientMessageId` 缺失仍退化成随机 `requestId`，判重表认不出是同一件事，结果是两张单。见 [core/tools.md](tools.md) §3。
 4. **审批后不重跑四道闸门。** `ActionRunService.ApproveAsync` 拿到 pending 就直接执行，挂起期间权限被收回也照跑。
@@ -122,7 +154,8 @@ cd web; npm run build
 6. **老数据没迁移。** 升级后，老会话在 `agent_sessions` 里的历史不再被读。症状是「界面记录都在，模型全忘了」。当前接受，因为库里只有测试对话；有真实数据时必须补一次性迁移。
 7. **跨机多实例仍不行。** SQLite 单文件，同机多进程可读写，跨机不行。
 8. **关掉 `SessionEnabled` 不等于关掉历史。** provider 按 `sessionId` 查 `chat_messages`，与 `AgentSession` 对象无关，所以历史照常工作；代价是 StateBag 里的非历史状态每轮丢失。**不要为了「彻底消除 lost update」直接关它**，先确认没有别的 provider 依赖 StateBag。
-9. **`chat_messages` 只增不减。** 不随会话 TTL 清理，也不随会话删除连带删；目前只有 `AppendAsync` / `LoadAsync`，没有 Delete。后果两条：磁盘无界增长；「删了会话，模型还记着」。要么并入 `MemoryRetentionService` 按最后活跃时间清，要么定性为审计资料、永久保留 + 配额告警。**这条比第 5 条更硬**——第 5 条只影响单次读取，这条影响整个库。
+9. **`chat_messages` 只增不减。** 不随会话 TTL 清理，也不随会话删除连带删；目前只有 `AppendAsync` / `LoadAsync`，没有 Delete。后果两条：磁盘无界增长；「删了会话，模型还记着」（与第 1 条的删除边界是同一件事，定边界时一起定）。要么并入 `MemoryRetentionService` 按最后活跃时间清，要么定性为审计资料、永久保留 + 配额告警。**这条比第 5 条更硬**——第 5 条只影响单次读取，这条影响整个库。
+10. **「模型当时看到了什么」没有数据源（X4 引出的真缺口）。** `chat_messages` 只记对话往返；system 指令与注入片段由 `ContextInjectingChatClient` 在 provider 下游注入，不落库；`agent_runs` 只有 model / iterations / latency。于是 §4.1 五字段里的「看到什么」答不上——不是答得不好，是没数据。补法：在 `ExecutionTrace` 加指令快照（正文或 hash + 片段 id），归 `Core/Engineering/Observability`，Harness 收尾填值；**不要塞进 `chat_messages`**（一轮 run 可能有多次模型调用，会和「一轮对话」混在一起）。参考 codex 的 `session_meta.instructions` / `turn_context` / `world_state`、pi 的持久化 `system` 消息。
 
 ### 7.4 一个不该再讨论的问题：要不要开 `RequirePerServiceCallChatHistoryPersistence`
 
@@ -138,7 +171,8 @@ dotnet test tests/AgentWorkbench.ApplicationTests/AgentWorkbench.ApplicationTest
 ```
 
 前三组 5 + 2 + 4 条（C1–C5 / H1–H2 / X1–X4）：C1 是「历史不会被覆盖」的直接证据，H1 是「不用开
-`RequirePerServiceCallChatHistoryPersistence`」的直接证据，X1–X4 是 §7.3 第 1 条那四种分歧形状的直接证据
+`RequirePerServiceCallChatHistoryPersistence`」的直接证据，X1–X4 **锁的是两条路径的形状，不是功能验收**——
+X1/X4 是职责不同的正常结果，X2/X3 对应 §7.3 第 1 条那两个待定边界
 （负控：provider 不落库 → X1/X3 红）。第四组 5 条（G1–G5）见 §7.6。
 
 ### 7.6 会话互斥（L1，进程内）
