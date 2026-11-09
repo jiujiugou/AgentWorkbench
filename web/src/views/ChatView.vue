@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { ArrowDown, Delete, MagicStick, Promotion, VideoPause } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import ChatMessage from '@/components/ChatMessage.vue'
+import { QUICK_STARTS } from '@/suggestions'
 import { useAgentStore } from '@/stores/agent'
 
 const agent = useAgentStore()
@@ -12,11 +13,47 @@ const router = useRouter()
 const input = ref('')
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const listRef = ref<HTMLElement | null>(null)
-const knowledgeMode = ref(false)
 const atBottom = ref(true)
 
 const hasModels = computed(() => agent.modelOptions.length > 0)
 const providersWithModels = computed(() => agent.providers.filter((p) => p.models.length > 0))
+
+const activeConversation = computed(() =>
+  agent.conversations.find((c) => c.id === agent.conversationId),
+)
+
+/**
+ * 当前入口。有会话时以会话的 `kind` 为准——刷新、路由切回、重开页面都不能
+ * 让知识库会话被显示成通用入口；没有会话时，才是用户为下一条新会话选的入口。
+ * 产品默认入口是知识库问答。
+ */
+const knowledgeMode = ref(activeConversation.value?.kind !== 'general')
+
+watch(
+  () => activeConversation.value?.kind,
+  (kind) => {
+    if (kind) knowledgeMode.value = kind === 'knowledge'
+  },
+  { immediate: true },
+)
+
+/**
+ * 真正决定这一条消息发往哪个入口的值。当前会话存在时永远跟着会话类型，
+ * 不跟顶部开关走：开关只负责“下一条新会话”，不能让旧会话的答案合同漂移。
+ */
+// C# 后端不在会话里存 kind；沿用「会话存在时以 kind 为准」会让入口恒为通用对话，
+// 知识库开关形同虚设。这里只看当前开关。
+const sendToKnowledge = computed(() => knowledgeMode.value)
+
+function setMode(knowledge: boolean): void {
+  if (sendToKnowledge.value === knowledge) return
+  if (agent.generating) {
+    ElMessage.warning('生成中，请先停止或等待完成')
+    return
+  }
+  knowledgeMode.value = knowledge
+  agent.newChat()
+}
 
 const currentTitle = computed(() => {
   const c = agent.conversations.find((x) => x.id === agent.conversationId)
@@ -24,13 +61,6 @@ const currentTitle = computed(() => {
 })
 
 const showJump = computed(() => !atBottom.value && agent.messages.length > 0)
-
-const suggestions = [
-  '你好，请介绍一下你自己',
-  '帮我解释一下 RAG 的工作原理',
-  '用 Python 写一个快速排序，并说明时间复杂度',
-  '把这段话改写得更专业：今天开会讨论了项目进度，感觉有点慢。',
-]
 
 function scrollToBottom(smooth = false): void {
   const el = listRef.value
@@ -69,7 +99,7 @@ async function handleSend(text?: string): Promise<void> {
   input.value = ''
   void nextTick(autoResize)
   atBottom.value = true
-  await (knowledgeMode.value ? agent.ask(content) : agent.send(content))
+  await (sendToKnowledge.value ? agent.ask(content) : agent.send(content))
 }
 
 function onKeydown(e: KeyboardEvent): void {
@@ -88,9 +118,27 @@ async function handleClear(): Promise<void> {
   ElMessage.success('已清空当前对话')
 }
 
+/**
+ * 消费新建对话弹窗带过来的第一句。
+ *
+ * 两处都要调：已经在对话页时靠 `watch`（弹窗不改路由），从别的页进来时
+ * 值早就写好了、`watch` 不会触发，只能靠 `onMounted`。**读走就清空**，
+ * 否则来回切页会重复发送。
+ */
+function consumePending(): void {
+  const question = agent.pendingQuestion
+  if (!question) return
+  agent.pendingQuestion = ''
+  void handleSend(question)
+}
+
+watch(() => agent.pendingQuestion, consumePending)
+
 onMounted(() => {
+  // C# 后端：问答走 /hubs/agent 的 Send / Ask，进页面先建好 Hub 连接。
   void agent.connect()
   void nextTick(() => scrollToBottom())
+  consumePending()
 })
 </script>
 
@@ -99,13 +147,15 @@ onMounted(() => {
     <header class="chat-header">
       <div class="chat-heading">
         <h1 class="chat-title" :title="currentTitle">{{ currentTitle }}</h1>
-        <span v-if="knowledgeMode" class="mode-badge">知识库问答</span>
+        <span class="mode-badge" :class="{ general: !knowledgeMode }">
+          {{ knowledgeMode ? '知识库问答' : '通用对话 · 未使用企业资料' }}
+        </span>
       </div>
 
       <div class="chat-actions">
         <div class="mode-toggle">
-          <button :class="{ on: !knowledgeMode }" @click="knowledgeMode = false">对话</button>
-          <button :class="{ on: knowledgeMode }" @click="knowledgeMode = true">知识库问答</button>
+          <button :class="{ on: !knowledgeMode }" @click="setMode(false)">通用对话</button>
+          <button :class="{ on: knowledgeMode }" @click="setMode(true)">知识库问答</button>
         </div>
 
         <el-select
@@ -139,32 +189,35 @@ onMounted(() => {
     </header>
 
     <div ref="listRef" class="chat-scroll" @scroll="onScroll">
-      <div v-if="agent.messages.length === 0" class="welcome">
-        <div class="welcome-icon">
-          <el-icon><MagicStick /></el-icon>
+      <div class="chat-inner">
+        <div v-if="agent.messages.length === 0" class="welcome">
+          <div class="welcome-icon">
+            <el-icon><MagicStick /></el-icon>
+          </div>
+          <h2>有什么可以帮忙的？</h2>
+          <p>「知识库问答」会在需要时检索知识库并给出引用来源；「通用对话」直接聊天并明确标注未使用企业资料。</p>
+          <div class="suggestions">
+            <button v-for="s in QUICK_STARTS" :key="s" class="suggestion" @click="handleSend(s)">
+              {{ s }}
+            </button>
+          </div>
         </div>
-        <h2>有什么可以帮忙的？</h2>
-        <p>「对话」直接聊天；「知识库问答」会在需要时检索知识库并给出引用来源。</p>
-        <div class="suggestions">
-          <button v-for="s in suggestions" :key="s" class="suggestion" @click="handleSend(s)">
-            {{ s }}
-          </button>
-        </div>
-      </div>
 
-      <template v-else>
-        <ChatMessage
-          v-for="m in agent.messages"
-          :key="m.id"
-          :message="m"
-          :sources="agent.sources[m.id]"
-          :citations="agent.citations[m.id]"
-          :refusal="agent.refusals[m.id]"
-          :tools="agent.toolSteps[m.id]"
-          :run="agent.runs[m.id]"
-          :stop-status="agent.stops[m.id]"
-        />
-      </template>
+        <template v-else>
+          <ChatMessage
+            v-for="m in agent.messages"
+            :key="m.id"
+            :message="m"
+            :mode="m.mode"
+            :sources="agent.sources[m.id]"
+            :citations="agent.citations[m.id]"
+            :refusal="agent.refusals[m.id]"
+            :tools="agent.toolSteps[m.id]"
+            :run="agent.runs[m.id]"
+            :stop-status="agent.stops[m.id]"
+          />
+        </template>
+      </div>
     </div>
 
     <transition name="aw-pop">
@@ -184,7 +237,6 @@ onMounted(() => {
           @input="autoResize"
         />
         <div class="composer-actions">
-          <span class="hint">Enter 发送 · Shift+Enter 换行</span>
           <div class="composer-buttons">
             <el-button v-if="agent.generating" round type="danger" plain :icon="VideoPause" @click="handleStop">
               停止
@@ -210,12 +262,10 @@ onMounted(() => {
 .chat-page {
   position: relative;
   height: 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   background: var(--aw-surface);
-  border: 1px solid var(--aw-border);
-  border-radius: var(--aw-radius-l);
-  box-shadow: var(--aw-shadow-1);
   overflow: hidden;
 }
 
@@ -226,8 +276,9 @@ onMounted(() => {
   justify-content: space-between;
   gap: 12px 16px;
   flex-wrap: wrap;
-  padding: 11px 18px;
+  padding: 12px 26px;
   border-bottom: 1px solid var(--aw-border);
+  background: var(--aw-surface);
 }
 
 .chat-heading {
@@ -239,9 +290,10 @@ onMounted(() => {
 
 .chat-title {
   margin: 0;
-  font-size: 15px;
+  font-size: 15.5px;
   font-weight: 650;
-  max-width: 340px;
+  letter-spacing: -0.01em;
+  max-width: 420px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -254,6 +306,12 @@ onMounted(() => {
   background: var(--el-color-primary-light-9);
   border-radius: var(--aw-radius-full);
   padding: 2px 10px;
+}
+
+.mode-badge.general {
+  color: var(--aw-text-2);
+  background: var(--aw-surface-3);
+  border: 1px solid var(--aw-border);
 }
 
 .chat-actions {
@@ -314,17 +372,29 @@ onMounted(() => {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 22px 26px;
+  padding: 18px 26px 8px;
   overscroll-behavior: contain;
 }
 
+/* 内容限宽居中：整行铺满时，一行 1600px 的正文没人读得下去。
+   注意限的是**内容**，不是背景——画布仍然铺满整个窗口。 */
+.chat-inner {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 860px;
+  min-height: 100%;
+  margin: 0 auto;
+}
+
 .welcome {
-  height: 100%;
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
+  padding: 24px 0 40px;
   animation: aw-fade-in 320ms var(--aw-ease);
 }
 
@@ -356,23 +426,27 @@ onMounted(() => {
 }
 
 .suggestions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  justify-content: center;
-  max-width: 580px;
+  width: 100%;
+  max-width: 640px;
 }
 
 .suggestion {
   border: 1px solid var(--aw-border);
-  background: var(--aw-surface-2);
-  border-radius: var(--aw-radius-full);
-  padding: 8px 16px;
+  background: var(--aw-surface);
+  border-radius: 16px;
+  padding: 13px 16px;
+  font-family: inherit;
   font-size: 13px;
+  line-height: 1.55;
+  text-align: left;
   color: var(--aw-text-2);
   cursor: pointer;
   transition: border-color var(--aw-dur) var(--aw-ease), color var(--aw-dur) var(--aw-ease),
-    background-color var(--aw-dur) var(--aw-ease), transform var(--aw-dur) var(--aw-ease);
+    background-color var(--aw-dur) var(--aw-ease), transform var(--aw-dur) var(--aw-ease),
+    box-shadow var(--aw-dur) var(--aw-ease);
 }
 
 .suggestion:hover {
@@ -380,13 +454,14 @@ onMounted(() => {
   color: var(--aw-primary);
   background: var(--el-color-primary-light-9);
   transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgb(79 70 229 / 0.08);
 }
 
 /* ---------- 回到底部 ---------- */
 .jump-btn {
   position: absolute;
-  right: 30px;
-  bottom: 132px;
+  right: 34px;
+  bottom: 122px;
   width: 36px;
   height: 36px;
   display: grid;
@@ -421,24 +496,26 @@ onMounted(() => {
 /* ---------- 输入区 ---------- */
 .composer {
   flex: none;
-  border-top: 1px solid var(--aw-border);
-  padding: 13px 18px 15px;
-  background: var(--aw-surface);
+  padding: 8px 26px 18px;
+  /* 顶部渐隐：消息滚到输入框后面时淡出，而不是被一条硬边框切断。 */
+  background: linear-gradient(to top, var(--aw-surface) 72%, rgb(255 255 255 / 0));
 }
 
 .composer-inner {
+  max-width: 860px;
+  margin: 0 auto;
   border: 1px solid var(--aw-border);
-  border-radius: var(--aw-radius-l);
-  background: var(--aw-surface-2);
-  padding: 10px 12px 8px;
+  border-radius: 20px;
+  background: var(--aw-surface);
+  padding: 11px 13px 9px;
+  box-shadow: 0 6px 24px rgb(23 26 43 / 0.07);
   transition: border-color var(--aw-dur) var(--aw-ease), box-shadow var(--aw-dur) var(--aw-ease),
     background-color var(--aw-dur) var(--aw-ease);
 }
 
 .composer-inner:focus-within {
   border-color: var(--aw-primary);
-  background: var(--aw-surface);
-  box-shadow: 0 0 0 3px rgb(79 70 229 / 0.1);
+  box-shadow: 0 8px 28px rgb(79 70 229 / 0.14);
 }
 
 .composer-inner textarea {
@@ -463,13 +540,8 @@ onMounted(() => {
 .composer-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 10px;
-}
-
-.hint {
-  font-size: 11.5px;
-  color: var(--aw-text-3);
 }
 
 .composer-buttons {
@@ -479,11 +551,15 @@ onMounted(() => {
 
 @media (max-width: 640px) {
   .chat-scroll {
-    padding: 16px 14px;
+    padding: 14px 16px 6px;
   }
 
-  .hint {
-    display: none;
+  .composer {
+    padding: 6px 16px 14px;
+  }
+
+  .suggestions {
+    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -16,7 +16,7 @@ const steps = computed(() => props.tools ?? [])
 const hasAnything = computed(() => steps.value.length > 0 || !!props.run || !!props.stopStatus)
 
 /** 后端 AgentRunStatus 取值 → 展示文案 + 语气（取值见 Shared/Execution/AgentRunStatus.cs）。 */
-const STATUS: Record<string, { text: string; tone: 'ok' | 'warn' | 'bad' }> = {
+const STATUS: Record<string, { text: string; tone: 'ok' | 'warn' | 'bad' | 'live' }> = {
   succeeded: { text: '正常收尾', tone: 'ok' },
   iteration_limit: { text: '跑满迭代，强制收口', tone: 'warn' },
   loop_detected: { text: '检测到循环，已终止', tone: 'warn' },
@@ -24,6 +24,11 @@ const STATUS: Record<string, { text: string; tone: 'ok' | 'warn' | 'bad' }> = {
   cancelled: { text: '已取消', tone: 'warn' },
   timeout: { text: '超时，已终止', tone: 'bad' },
   failed: { text: '失败', tone: 'bad' },
+  // 拒答是一次**完成了**的运行，不是失败，也不是"没跑"：语气要与失败分开，
+  // 否则用户会把"资料里没有"当成系统坏了（C-V13 的界面一侧）
+  refused: { text: '拒答（资料不足）', tone: 'warn' },
+  // 停在 running 的 run 有两种可能：真在跑，或进程已经不在了。文案不替它二选一。
+  running: { text: '运行中', tone: 'live' },
 }
 
 const status = computed(() => {
@@ -38,10 +43,19 @@ const latency = computed(() => {
   return ms >= 1000 ? (ms / 1000).toFixed(1) + 's' : ms + 'ms'
 })
 
+/**
+ * 四段流水线 vs agent 循环。
+ *
+ * Python 版的作答是「预检索 → 判定 → 生成 → 校验」，**没有迭代**：一次就是一轮。
+ * 照 C# 的模板说"1 轮迭代"会让用户以为模型在反复调工具，而实际上它一次都没选过工具
+ * （工具是系统在生成前调好的）。同一个组件服务两种形态，所以由数据说自己是哪种。
+ */
+const pipeline = computed(() => props.run?.pipeline === true)
+
 const headline = computed(() => {
   const parts: string[] = []
   if (props.run) {
-    parts.push(`${props.run.iterations} 轮迭代`)
+    parts.push(pipeline.value ? '四段流水线' : `${props.run.iterations} 轮迭代`)
     parts.push(`${steps.value.length || props.run.tools} 次工具调用`)
     if (latency.value) parts.push(latency.value)
   } else if (props.stopStatus) {
@@ -76,7 +90,8 @@ function oneLine(text?: string | null, max = 220): string {
         <template v-if="stopStatus">在调用任何工具前就已中止。</template>
         <template v-else>
           本次 run 没有调用任何工具（模型直接作答）。
-          <template v-if="run">共 {{ run.iterations }} 轮迭代，耗时 {{ latency }}。</template>
+          <template v-if="run && pipeline">流水线跑完了，没有单独的工具步。</template>
+          <template v-else-if="run">共 {{ run.iterations }} 轮迭代，耗时 {{ latency }}。</template>
         </template>
       </div>
 
@@ -84,7 +99,7 @@ function oneLine(text?: string | null, max = 220): string {
         <div class="step-head">
           <span class="step-idx">#{{ i + 1 }}</span>
           <span class="step-name">{{ s.name }}</span>
-          <span class="step-iter">第 {{ s.iteration + 1 }} 轮</span>
+          <span v-if="!pipeline" class="step-iter">第 {{ s.iteration + 1 }} 轮</span>
           <el-icon v-if="s.error" class="step-warn"><Warning /></el-icon>
         </div>
         <div v-if="s.arguments" class="step-row">
@@ -102,7 +117,7 @@ function oneLine(text?: string | null, max = 220): string {
       </div>
 
       <div v-if="run" class="trace-foot">
-        run #{{ run.runId }}
+        run #{{ String(run.runId).slice(0, 8) }}
         <template v-if="run.model"> · {{ run.model }}</template>
         · {{ run.steps }} 步轨迹
         <template v-if="run.code"> · 原因码 {{ run.code }}</template>
@@ -179,7 +194,8 @@ function oneLine(text?: string | null, max = 220): string {
   background: color-mix(in srgb, var(--aw-danger) 14%, transparent);
 }
 
-.trace-status.running {
+.trace-status.running,
+.trace-status.live {
   color: var(--aw-primary);
   background: color-mix(in srgb, var(--aw-primary) 12%, transparent);
 }

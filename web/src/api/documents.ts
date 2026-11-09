@@ -1,3 +1,5 @@
+import { handle, messageOf } from './http'
+
 /**
  * F2 知识资料管理 · API
  * 对应 DocumentsController（/api/documents）。
@@ -24,6 +26,8 @@ export interface DocumentDto {
   vectorCount?: number | null
   /** 索引覆盖度；text_only / partial 表示语义检索覆盖不全。 */
   indexState?: IndexState | string
+  /** 文档所属知识库；可见性由知识库决定，不在这里做二次 ACL。 */
+  kbId?: string | null
 }
 
 export interface DocumentPageDto {
@@ -41,27 +45,9 @@ export interface DocumentChunkDto {
   charCount: number
 }
 
+// 必须与 C# DocumentsController.Upload 的白名单一致（Python 侧另有 docx/xlsx 解析器）。
 export const ACCEPT_EXTS = ['.pdf', '.txt', '.md', '.json']
 export const MAX_FILE_BYTES = 30 * 1024 * 1024
-
-function parseError(text: string): string {
-  if (!text) return ''
-  try {
-    const obj = JSON.parse(text) as { message?: string }
-    return obj.message ?? text
-  } catch {
-    return text
-  }
-}
-
-async function handle<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    throw new Error(parseError(text) || `HTTP ${response.status}`)
-  }
-  if (response.status === 204) return undefined as T
-  return (await response.json()) as T
-}
 
 export async function listDocuments(): Promise<DocumentDto[]> {
   return handle<DocumentDto[]>(await fetch('/api/documents'))
@@ -87,6 +73,7 @@ export async function removeDocument(id: string): Promise<void> {
 export function uploadDocument(
   file: File,
   onProgress: (percent: number) => void,
+  kbId?: string | null,
 ): { promise: Promise<DocumentDto>; abort: () => void } {
   const xhr = new XMLHttpRequest()
   const promise = new Promise<DocumentDto>((resolve, reject) => {
@@ -102,13 +89,14 @@ export function uploadDocument(
           reject(new Error('响应不是合法 JSON'))
         }
       } else {
-        reject(new Error(parseError(xhr.responseText) || `HTTP ${xhr.status}`))
+        reject(new Error(messageOf(xhr.responseText) || `HTTP ${xhr.status}`))
       }
     })
     xhr.addEventListener('error', () => reject(new Error('网络错误')))
     xhr.addEventListener('abort', () => reject(new Error('已取消')))
     const form = new FormData()
     form.append('file', file)
+    if (kbId) form.append('kb_id', kbId)
     xhr.send(form)
   })
   return { promise, abort: () => xhr.abort() }

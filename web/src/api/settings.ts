@@ -1,3 +1,5 @@
+import { handle } from './http'
+
 export interface ProviderModel {
   id: number
   providerId: number
@@ -21,7 +23,8 @@ export interface SettingsPreview {
   baseUrl: string
   model: string
   embeddingModel: string
-  temperature: number
+  // Python 版没有 temperature 这个旋钮：后端恒返回 null，界面显示「不适用」
+  temperature: number | null
   systemPrompt: string
   apiKeyConfigured: boolean
   configured: boolean
@@ -43,30 +46,11 @@ export interface TestResult {
 
 const jsonHeaders = { 'Content-Type': 'application/json' }
 
-function parseError(text: string): string {
-  if (!text) return ''
-  try {
-    const obj = JSON.parse(text) as { message?: string }
-    return obj.message ?? text
-  } catch {
-    return text
-  }
-}
-
-async function handle<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    throw new Error(parseError(text) || `HTTP ${response.status}`)
-  }
-  if (response.status === 204) return undefined as T
-  const text = await response.text()
-  if (!text) return undefined as T
-  return JSON.parse(text) as T
-}
 
 export const settingsApi = {
   preview: () => fetch('/api/settings').then((r) => handle<SettingsPreview>(r)),
 
+  // C# SettingsController.ListProviders 返回裸数组；Python 侧才是 {providers:[...]} 包装。
   listProviders: () => fetch('/api/settings/providers').then((r) => handle<Provider[]>(r)),
 
   createProvider: (input: ProviderInput) =>

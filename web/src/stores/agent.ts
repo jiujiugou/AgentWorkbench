@@ -3,7 +3,14 @@ import { computed, ref, shallowRef } from 'vue'
 import * as signalR from '@microsoft/signalr'
 import { ElMessage } from 'element-plus'
 import type { CitationReport, RefusalInfo, RetrievalSource, RunSummary, ToolStepEvent } from '@/types'
-import { conversationsApi, type Conversation, type ConversationMessage } from '@/api/conversations'
+import { historyReport, historySources } from '@/api/knowledge'
+import {
+  conversationsApi,
+  toRunSummary,
+  toToolSteps,
+  type Conversation,
+  type ConversationKind,
+} from '@/api/conversations'
 import { settingsApi, type Provider } from '@/api/settings'
 
 export interface ChatMessage {
@@ -11,6 +18,13 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   pending?: boolean
+  /**
+   * 历史消息带回来的那次运行终态。只读：它来自 `agent_runs`，不在前端重算。
+   * `running` + 空正文 = 那一轮没跑完（进程可能已中断），与“跑完但空”分开显示。
+   */
+  runStatus?: string | null
+  /** 这条消息所属会话的答案合同。general 时界面必须标“未使用企业资料”。 */
+  mode?: ConversationKind
 }
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected'
@@ -29,6 +43,8 @@ export const useAgentStore = defineStore('agent', () => {
   const status = ref<ConnectionStatus>('disconnected')
   const messages = ref<ChatMessage[]>([])
   const generating = ref(false)
+  /** C# 后端由 Hub 用 messageId 创建助手消息，入口模式要在建消息时就带上。 */
+  let activeMode: 'knowledge' | 'general' = 'knowledge'
   const conversationId = ref<string | null>(null)
   const conversations = ref<Conversation[]>([])
   const sources = ref<Record<string, RetrievalSource[]>>({})
@@ -43,23 +59,28 @@ export const useAgentStore = defineStore('agent', () => {
   /** 中止时的终态（cancelled / timeout / failed）；取消路径没有 run 摘要，靠它标状态。 */
   const stops = ref<Record<string, string>>({})
   const loadingConversation = ref(false)
-  /** 服务端标题为默认值时，用首条用户消息派生的显示标题 */
-  const derivedTitles = ref<Record<string, string>>({})
-  /** 等待服务端回传 conversationId 时，随第一条消息带上标题 */
-  let pendingTitle: string | null = null
+  /**
+   * 新建对话弹窗带过来的第一句。**只在这里过一手，不在弹窗里直接发**：
+   * 发送要落在 ChatView（它管滚动、自动增高、generating 态），弹窗只管收集意图。
+   * ChatView 读走之后必须清空——不清的话，从别的页面回到对话页会再发一次。
+   */
+  const pendingQuestion = ref('')
 
   const providers = ref<Provider[]>([])
   const selectedModelId = ref<number | null>(null)
 
   // ---------- 会话标题 ----------
 
+  /**
+   * 标题**只从库里来**。
+   *
+   * 以前这里是 `derivedTitles[id] || c.title`：前端拿首条消息自己截前 18 字，
+   * 再盖在服务端标题上。两份恰好一样时看不出问题，一旦规则改动（比如改成 20 字），
+   * 两台设备会因为各自的会话加载顺序不同而显示不同的名字——而库里那份是对的。
+   * 标题现在由 `derive_title` 在服务端写定一次（C-V9），前端不再派生。
+   */
   function titleFor(c: Conversation): string {
-    return derivedTitles.value[c.id] || c.title || DEFAULT_TITLE
-  }
-
-  function deriveTitleFrom(text: string): string {
-    const t = text.trim().replace(/\s+/g, ' ')
-    return t.length > 18 ? t.slice(0, 18) + '…' : t
+    return c.title || DEFAULT_TITLE
   }
 
   // ---------- 会话列表 ----------
@@ -82,20 +103,61 @@ export const useAgentStore = defineStore('agent', () => {
     try {
       const history = await conversationsApi.messages(id)
       conversationId.value = id
-      messages.value = history.map((m: ConversationMessage) => ({
+      messages.value = history.map((m) => ({
         id: String(m.id),
         role: m.role,
         content: m.content,
+        runStatus: m.runStatus,
+        // C# 不在会话里存 kind；历史消息统一按知识库入口渲染
+        mode: 'knowledge',
       }))
-      sources.value = {}
-      refusals.value = {}
-      citations.value = {}
+
+      // 逐条恢复"答案 + 依据 + 过程"三块，而不是只恢复正文。
+      //
+      // 以前的写法是读完正文就把 sources / citations / toolSteps 全清空：
+      // 界面上历史回答变成"一段没有出处的文字"，用户会以为引用没存下来。
+      // 现在这三块都从库里读回来——引用读的是**当时的快照**，不回表查 chunks。
+      const nextSources: Record<string, RetrievalSource[]> = {}
+      const nextCitations: Record<string, CitationReport> = {}
+      const nextRefusals: Record<string, RefusalInfo> = {}
+      for (const m of history) {
+        if (m.role !== 'assistant') continue
+        const key = String(m.id)
+        // C# 的 /messages 只有正文，没有 citations 快照：没有就不重建
+        const cards = m.citations?.length ? historySources(m) : []
+        if (cards.length) nextSources[key] = cards
+        const report = m.citations?.length ? historyReport(m) : null
+        if (report) nextCitations[key] = report
+
+        // 拒答要在重开之后**还是拒答**（C-V13）。
+        //
+        // 判据用的是服务端带回来的 `runStatus`——那次运行的终态，写一次就不变。
+        // 刻意不做的两件事：拿正文和那句拒答文案比（改文案那天全部历史会一起
+        // 变成普通回答，而没有任何东西会红）；拿当前阈值重新判一遍（等于让
+        // "当时"随参数改口）。正文直接用库里那份，一字不改。
+        if (m.runStatus === 'refused') {
+          nextRefusals[key] = { text: m.content, code: m.runReason }
+        }
+      }
+
+      sources.value = nextSources
+      citations.value = nextCitations
+      refusals.value = nextRefusals
+      // 过程要按 run 一条条取。先清空：切会话时旧消息的 key 还在，不清就会
+      // 让新会话的某条消息意外继承另一条的轨迹（key 都是数字 id，很容易撞）。
       toolSteps.value = {}
       runs.value = {}
       stops.value = {}
-      const firstUser = messages.value.find((m) => m.role === 'user')
-      if (firstUser) derivedTitles.value[id] = deriveTitleFrom(firstUser.content)
+
       persistConversationId(id)
+
+      // 轨迹逐条拉，**不阻塞正文与引用的显示**：它们已经在上面设好了，
+      // 过程那一块晚几百毫秒到不影响阅读。
+      await Promise.all(
+        history
+          .filter((m) => m.role === 'assistant' && m.runId)
+          .map((m) => loadTrace(String(m.id), String(m.runId))),
+      )
     } catch {
       ElMessage.error('加载会话失败')
     } finally {
@@ -232,12 +294,16 @@ export const useAgentStore = defineStore('agent', () => {
   function findOrCreate(messageId: string): ChatMessage {
     let msg = messages.value.find((m) => m.id === messageId)
     if (!msg) {
-      msg = { id: messageId, role: 'assistant', content: '', pending: true }
+      msg = { id: messageId, role: 'assistant', content: '', pending: true, mode: activeMode }
       messages.value.push(msg)
     }
     return msg
   }
 
+  /**
+   * 建 SignalR 连接。C# 后端靠 `/hubs/agent` 逐字推流，
+   * ChatView 挂载时调一次；下面全部 ReceiveXxx 处理器与 Hub 事件一一对应。
+   */
   async function connect(): Promise<void> {
     if (connection.value && status.value === 'connected') return
     if (connection.value) {
@@ -256,10 +322,6 @@ export const useAgentStore = defineStore('agent', () => {
       if (p?.conversationId) {
         conversationId.value = p.conversationId
         persistConversationId(p.conversationId)
-        if (pendingTitle) {
-          derivedTitles.value[p.conversationId] = pendingTitle
-          pendingTitle = null
-        }
         void refreshConversations()
       }
     })
@@ -361,15 +423,39 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
+  /**
+   * 取一次运行的轨迹，填进"过程"那一块。
+   *
+   * 用展开赋值而不是就地改对象：`toolSteps` 是 `ref`，Vue 只追踪通过 `.value`
+   * 赋进去的那个代理。在异步回调里改 `nextSteps[key]` 改的是**原始对象**，
+   * 界面不会更新——而它不会报错，只是永远显示"没有过程"。
+   *
+   * 失败静默：答案与引用已经在手，缺的只是过程。为它弹一个错，
+   * 会让人以为这次回答本身出了问题。
+   */
+  async function loadTrace(messageId: string, runId: string): Promise<void> {
+    try {
+      const trace = await conversationsApi.trace(runId)
+      toolSteps.value = { ...toolSteps.value, [messageId]: toToolSteps(trace) }
+      runs.value = { ...runs.value, [messageId]: toRunSummary(trace) }
+    } catch {
+      /* 过程取不到不影响答案 */
+    }
+  }
+
+  /**
+   * 发送。C# 后端是 SignalR `/hubs/agent` 的 Send / Ask，
+   * 不是 Python 侧的 POST /api/knowledge/ask 与 /api/chat。
+   * 接收侧（connect 里的全部 ReceiveXxx）本来就是为这条链路写的，一行不改。
+   */
   async function dispatch(method: 'Send' | 'Ask', text: string): Promise<void> {
     const content = text.trim()
     if (!content || generating.value) return
 
     await connect()
-
     messages.value.push({ id: crypto.randomUUID(), role: 'user', content })
     generating.value = true
-    if (!conversationId.value) pendingTitle = deriveTitleFrom(content)
+    activeMode = method === 'Ask' ? 'knowledge' : 'general'
 
     try {
       await connection.value!.invoke(method, {
@@ -379,14 +465,18 @@ export const useAgentStore = defineStore('agent', () => {
       })
     } catch (e) {
       generating.value = false
-      pendingTitle = null
-      messages.value.push({ id: crypto.randomUUID(), role: 'assistant', content: '⚠️ ' + (e as Error).message })
+      messages.value.push({
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: '⚠️ ' + (e as Error).message,
+      })
     }
   }
 
   const send = (text: string) => dispatch('Send', text)
   const ask = (text: string) => dispatch('Ask', text)
 
+  /** 停止走 Hub 的 Stop；Python 侧那条 POST /api/runs/cancel 在 C# 后端不存在。 */
   async function stop(): Promise<void> {
     try {
       await connection.value?.invoke('Stop')
@@ -434,6 +524,7 @@ export const useAgentStore = defineStore('agent', () => {
     // 会话
     conversations,
     loadingConversation,
+    pendingQuestion,
     titleFor,
     refreshConversations,
     selectConversation,

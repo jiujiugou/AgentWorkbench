@@ -236,7 +236,7 @@ async function fetchForCurrent(): Promise<void> {
         </div>
         <div class="preview-item">
           <span class="k">温度</span>
-          <span class="v">{{ preview.temperature }}</span>
+          <span class="v">{{ preview.temperature ?? '不适用' }}</span>
         </div>
       </div>
     </section>
@@ -257,7 +257,7 @@ async function fetchForCurrent(): Promise<void> {
           <el-table-column prop="baseUrl" label="BaseUrl" min-width="220" show-overflow-tooltip />
           <el-table-column label="API Key" width="130">
             <template #default="{ row }">
-              <span class="mono">{{ row.hasApiKey ? row.apiKeyMasked : '未设置' }}</span>
+              <span class="mono">{{ row.hasApiKey ? '已保存' : '未设置' }}</span>
             </template>
           </el-table-column>
           <el-table-column label="模型" min-width="230">

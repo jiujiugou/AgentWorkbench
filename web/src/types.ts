@@ -4,6 +4,11 @@ export interface RetrievalSource {
   documentId: string
   fileName: string
   seq: number
+  /**
+   * 本次证据里的编号（1 起）。**历史快照只有被引用的那几块**，编号会跳号，
+   * 所以不能靠数组下标反推——`citations.ts` 用 `no` 精确查找，查不到才退回下标。
+   */
+  no?: number
   heading?: string | null
   pageFrom?: number | null
   pageTo?: number | null
@@ -24,10 +29,18 @@ export interface ToolStepEvent {
 
 /** 一次 run 的摘要（来自 SignalR ReceiveDone 的 run 字段，与后端 HarnessRunResult 对齐）。 */
 export interface RunSummary {
-  runId: number
+  /** Python 侧是 uuid hex（C# 侧是自增整数）。这里是字符串——两者都能显示。 */
+  runId: string
+  /**
+   * 轮次。**Python 版恒为 1**：一次作答是四段流水线，没有 agent 循环。
+   * 是否显示成"轮迭代"看 `pipeline`，写死"N 轮迭代"会让界面撒谎。
+   */
   iterations: number
+  /** true = 四段流水线（预检索 → 判定 → 生成 → 校验），不显示"轮迭代"。 */
+  pipeline?: boolean
   model?: string | null
-  latencyMs: number
+  /** null = 没记到耗时（崩溃、或供应商没回）。不补 0——0 是「没花时间」。 */
+  latencyMs: number | null
   /** 正常收尾 / 跑满迭代 / 循环 / 超预算 / 超时 / 取消 / 失败，取值见后端 AgentRunStatus。 */
   status: string
   /** 结束原因码，取值见后端 AgentRunCode；正常收尾时为 null。 */

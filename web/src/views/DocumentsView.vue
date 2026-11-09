@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   CircleCloseFilled,
@@ -8,6 +8,7 @@ import {
   Download,
   Grid,
   Menu as ListIcon,
+  Plus,
   RefreshRight,
   Search,
   UploadFilled,
@@ -25,6 +26,12 @@ import {
   reparseDocument,
   uploadDocument,
 } from '@/api/documents'
+import {
+  createKnowledgeBase,
+  listKnowledgeBases,
+  type KnowledgeBaseDto,
+} from '@/api/knowledgeBases'
+import { cachedUser } from '@/api/auth'
 
 /* ---------------- 状态 ---------------- */
 
@@ -34,6 +41,22 @@ const keyword = ref('')
 const viewMode = ref<'grid' | 'list'>('list')
 const statusFilter = ref<string>('')
 const typeFilter = ref<string>('')
+
+// 删除是管理员的动作（ADR 0008）。这里只决定「看不看得见按钮」——
+// 后端仍然会判一次，因为前端拿到的 role 可能是几分钟前的缓存。
+const isAdmin = ref(false)
+const myLevelRank = ref(1)
+
+const knowledgeBases = ref<KnowledgeBaseDto[]>([])
+const targetKbId = ref('')
+const kbFilter = ref('')
+const kbDialogOpen = ref(false)
+const kbSaving = ref(false)
+const kbForm = reactive<{
+  name: string
+  visibility: 'public' | 'private'
+  minLevelRank: number
+}>({ name: '', visibility: 'private', minLevelRank: 1 })
 
 const uploads = ref<{ key: number; name: string; percent: number; abort: () => void; error: string }[]>([])
 let uploadKey = 0
@@ -55,10 +78,22 @@ function extOf(name: string): string {
   return i >= 0 ? name.slice(i).toLowerCase() : ''
 }
 
+const accessibleKbs = computed(() =>
+  knowledgeBases.value.filter(
+    (kb) => kb.visibility === 'public' || (kb.minLevelRank ?? 1) <= myLevelRank.value,
+  ),
+)
+
+function kbName(id: string | null | undefined): string {
+  if (!id) return '未归属'
+  return knowledgeBases.value.find((kb) => kb.id === id)?.name ?? '知识库'
+}
+
 const filtered = computed(() =>
   docs.value.filter((d) => {
     if (statusFilter.value && d.status !== statusFilter.value) return false
     if (typeFilter.value && extOf(d.fileName) !== typeFilter.value) return false
+    if (kbFilter.value && d.kbId !== kbFilter.value) return false
     if (keyword.value && !d.fileName.toLowerCase().includes(keyword.value.toLowerCase())) return false
     return true
   }),
@@ -123,7 +158,27 @@ function schedulePoll(): void {
   if (busy) pollTimer = window.setTimeout(() => void refresh(true), 3000)
 }
 
-onMounted(() => void refresh())
+async function loadKnowledgeBases(): Promise<void> {
+  try {
+    knowledgeBases.value = await listKnowledgeBases()
+  } catch (e) {
+    ElMessage.error(`加载知识库失败：${(e as Error).message}`)
+    return
+  }
+  if (!accessibleKbs.value.some((kb) => kb.id === targetKbId.value)) {
+    targetKbId.value =
+      accessibleKbs.value.find((kb) => kb.isDefault)?.id ?? accessibleKbs.value[0]?.id ?? ''
+  }
+}
+
+onMounted(() => {
+  void refresh()
+  void cachedUser().then(async (user) => {
+    isAdmin.value = user?.role === 'owner' || user?.role === 'admin'
+    myLevelRank.value = user?.levelRank ?? 1
+    await loadKnowledgeBases()
+  })
+})
 onBeforeUnmount(() => {
   if (pollTimer !== null) window.clearTimeout(pollTimer)
 })
@@ -146,6 +201,14 @@ function onDrop(ev: DragEvent): void {
 }
 
 async function startUploads(files: File[]): Promise<void> {
+  if (!isAdmin.value) {
+    ElMessage.warning('只有团队管理员可以新增文档')
+    return
+  }
+  if (!targetKbId.value) {
+    ElMessage.warning('请先选择目标知识库')
+    return
+  }
   for (const file of files) {
     const ext = extOf(file.name)
     if (!ACCEPT_EXTS.includes(ext)) {
@@ -158,7 +221,7 @@ async function startUploads(files: File[]): Promise<void> {
     }
     const item = { key: ++uploadKey, name: file.name, percent: 0, abort: (): void => {}, error: '' }
     uploads.value.push(item)
-    const task = uploadDocument(file, (p) => (item.percent = p))
+    const task = uploadDocument(file, (p) => (item.percent = p), targetKbId.value)
     item.abort = task.abort
     try {
       await task.promise
@@ -201,6 +264,10 @@ async function openDetail(doc: DocumentDto): Promise<void> {
 }
 
 async function onReparse(doc: DocumentDto): Promise<void> {
+  if (!isAdmin.value) {
+    ElMessage.warning('只有团队管理员可以重新解析文档')
+    return
+  }
   try {
     await reparseDocument(doc.id)
     ElMessage.success('已重新排队解析')
@@ -228,6 +295,46 @@ async function onDelete(doc: DocumentDto): Promise<void> {
     await refresh(true)
   } catch (e) {
     ElMessage.error((e as Error).message)
+  }
+}
+
+/* ---------------- 知识库 ---------------- */
+
+function openKbDialog(): void {
+  kbForm.name = ''
+  kbForm.visibility = 'private'
+  kbForm.minLevelRank = 1
+  kbDialogOpen.value = true
+}
+
+async function saveKnowledgeBase(): Promise<void> {
+  const name = kbForm.name.trim()
+  if (!name) {
+    ElMessage.warning('请填写知识库名称')
+    return
+  }
+  if (
+    kbForm.visibility === 'private' &&
+    (kbForm.minLevelRank < 1 || kbForm.minLevelRank > myLevelRank.value)
+  ) {
+    ElMessage.warning(`私人库门槛必须在 L1~L${myLevelRank.value} 之间`)
+    return
+  }
+  kbSaving.value = true
+  try {
+    const created = await createKnowledgeBase({
+      name,
+      visibility: kbForm.visibility,
+      minLevelRank: kbForm.visibility === 'private' ? kbForm.minLevelRank : null,
+    })
+    kbDialogOpen.value = false
+    await loadKnowledgeBases()
+    targetKbId.value = created.id
+    ElMessage.success(`已创建知识库「${created.name}」`)
+  } catch (e) {
+    ElMessage.error(`创建知识库失败：${(e as Error).message}`)
+  } finally {
+    kbSaving.value = false
   }
 }
 
@@ -297,6 +404,16 @@ const typeOptions = computed(() => {
           <el-option label="全部类型" value="" />
           <el-option v-for="t in typeOptions" :key="t" :label="t.slice(1).toUpperCase()" :value="t" />
         </el-select>
+        <el-select
+          v-if="accessibleKbs.length > 1"
+          v-model="kbFilter"
+          placeholder="知识库"
+          clearable
+          class="chip-select"
+        >
+          <el-option label="全部知识库" value="" />
+          <el-option v-for="kb in accessibleKbs" :key="kb.id" :label="kb.name" :value="kb.id" />
+        </el-select>
       </div>
 
       <!-- 列表视图 -->
@@ -322,7 +439,10 @@ const typeOptions = computed(() => {
             <span class="file-badge" :style="{ background: extColor(d.fileName) }">
               {{ extOf(d.fileName).slice(1).toUpperCase() || 'FILE' }}
             </span>
-            <span class="name-text" :title="d.fileName">{{ d.fileName }}</span>
+            <span class="name-copy">
+              <span class="name-text" :title="d.fileName">{{ d.fileName }}</span>
+              <span class="kb-name">{{ kbName(d.kbId) }}</span>
+            </span>
           </span>
           <span class="cell-dim">{{ fmtSize(d.sizeBytes) }}</span>
           <span>
@@ -335,17 +455,17 @@ const typeOptions = computed(() => {
           <span class="cell-dim">{{ d.chunkCount ?? '—' }}</span>
           <span class="cell-dim">{{ fmtTime(d.createdAt) }}</span>
           <span class="row-actions" @click.stop>
-            <button class="row-icon" title="重新解析" @click="onReparse(d)">
+            <button v-if="isAdmin" class="row-icon" title="重新解析" @click="onReparse(d)">
               <el-icon><RefreshRight /></el-icon>
             </button>
-            <button class="row-icon danger" title="删除" @click="onDelete(d)">
+            <button v-if="isAdmin" class="row-icon danger" title="删除" @click="onDelete(d)">
               <el-icon><Delete /></el-icon>
             </button>
           </span>
         </div>
         <div v-if="filtered.length === 0" class="empty">
           <el-icon><FileIcon /></el-icon>
-          <p>{{ docs.length === 0 ? '还没有资料，从右侧传一份 PDF 开始' : '没有符合筛选条件的资料' }}</p>
+          <p>{{ docs.length === 0 ? '还没有资料，从右侧传一份文件开始' : '没有符合筛选条件的资料' }}</p>
         </div>
       </div>
 
@@ -364,36 +484,70 @@ const typeOptions = computed(() => {
             {{ extOf(d.fileName).slice(1).toUpperCase() || 'FILE' }}
           </span>
           <span class="gname" :title="d.fileName">{{ d.fileName }}</span>
+          <span class="kb-name">{{ kbName(d.kbId) }}</span>
           <span class="status" :class="statusClass(d)"
             >{{ statusText(d) }}<i v-if="d.status === 'parsing'" class="dot"
           /></span>
           <span class="gmeta">{{ fmtSize(d.sizeBytes) }} · {{ fmtTime(d.createdAt) }}</span>
-          <button class="row-icon danger gdel" title="删除" @click.stop="onDelete(d)">
+          <button
+            v-if="isAdmin"
+            class="row-icon danger gdel"
+            title="删除"
+            @click.stop="onDelete(d)"
+          >
             <el-icon><Delete /></el-icon>
           </button>
         </div>
         <div v-if="filtered.length === 0" class="empty">
           <el-icon><FileIcon /></el-icon>
-          <p>{{ docs.length === 0 ? '还没有资料，从右侧传一份 PDF 开始' : '没有符合筛选条件的资料' }}</p>
+          <p>{{ docs.length === 0 ? '还没有资料，从右侧传一份文件开始' : '没有符合筛选条件的资料' }}</p>
         </div>
       </div>
     </section>
 
-    <!-- ============ 右：上传面板 ============ -->
+    <!-- ============ 右：新增文档面板 ============ -->
     <aside class="upload-panel">
-      <div
-        class="dropzone"
-        role="button"
-        tabindex="0"
-        @click="pickFiles"
-        @keydown.enter="pickFiles"
-        @dragover.prevent
-        @drop.prevent="onDrop"
-      >
-        <el-icon class="dz-icon"><UploadFilled /></el-icon>
-        <p class="dz-text">拖拽文件到这里，或点击选择</p>
-        <button class="btn-dark" @click.stop="pickFiles">上传文件</button>
-        <p class="dz-hint">支持 PDF / TXT / MD / JSON，单个 ≤ 30 MB</p>
+      <div class="panel-head">
+        <div>
+          <h2 class="panel-title">新增文档</h2>
+          <p class="panel-sub">文档继承目标知识库的可见性</p>
+        </div>
+        <button v-if="isAdmin" class="link-btn" @click="openKbDialog">
+          <el-icon><Plus /></el-icon>新建知识库
+        </button>
+      </div>
+
+      <template v-if="isAdmin">
+        <label class="field-label" for="target-kb">上传到知识库</label>
+        <el-select id="target-kb" v-model="targetKbId" placeholder="选择知识库" class="kb-select">
+          <el-option
+            v-for="kb in accessibleKbs"
+            :key="kb.id"
+            :label="`${kb.name}${kb.visibility === 'private' ? ` · L${kb.minLevelRank ?? 1}+` : ''}`"
+            :value="kb.id"
+          />
+        </el-select>
+        <p v-if="accessibleKbs.length === 0" class="empty-hint">当前没有可上传的知识库。</p>
+
+        <div
+          class="dropzone"
+          role="button"
+          tabindex="0"
+          @click="pickFiles"
+          @keydown.enter="pickFiles"
+          @dragover.prevent
+          @drop.prevent="onDrop"
+        >
+          <el-icon class="dz-icon"><UploadFilled /></el-icon>
+          <p class="dz-text">拖拽文件到这里，或点击选择</p>
+          <button class="btn-dark" @click.stop="pickFiles">选择文件</button>
+          <p class="dz-hint">支持 PDF / TXT / MD / JSON，单个 ≤ 30 MB</p>
+        </div>
+      </template>
+
+      <div v-else class="readonly-note">
+        <el-icon><FileIcon /></el-icon>
+        <p>仅团队管理员可以新增文档。</p>
       </div>
 
       <input ref="fileInput" type="file" multiple :accept="ACCEPT_EXTS.join(',')" hidden @change="onFilesChosen" />
@@ -433,6 +587,7 @@ const typeOptions = computed(() => {
             <h2 :title="current.fileName">{{ current.fileName }}</h2>
             <div class="detail-sub">
               <span class="status" :class="statusClass(current)">{{ statusText(current) }}</span>
+              <span class="kb-name">{{ kbName(current.kbId) }}</span>
               <span>{{ fmtSize(current.sizeBytes) }}</span>
               <span v-if="current.pageCount">· {{ current.pageCount }} 页</span>
               <span v-if="current.chunkCount != null">· {{ current.chunkCount }} 片段</span>
@@ -449,10 +604,10 @@ const typeOptions = computed(() => {
           <a class="btn-ghost" :href="`/api/documents/${current.id}/file`" target="_blank" rel="noopener">
             <el-icon><Download /></el-icon> 原件
           </a>
-          <button class="btn-ghost" @click="onReparse(current)">
+          <button v-if="isAdmin" class="btn-ghost" @click="onReparse(current)">
             <el-icon><RefreshRight /></el-icon> 重新解析
           </button>
-          <button class="btn-ghost danger" @click="onDelete(current)">
+          <button v-if="isAdmin" class="btn-ghost danger" @click="onDelete(current)">
             <el-icon><Delete /></el-icon> 删除
           </button>
         </div>
@@ -481,6 +636,28 @@ const typeOptions = computed(() => {
         </div>
       </div>
     </el-drawer>
+
+    <el-dialog v-model="kbDialogOpen" title="新建知识库" width="420px" append-to-body>
+      <el-form label-position="top">
+        <el-form-item label="名称">
+          <el-input v-model="kbForm.name" maxlength="40" placeholder="例如：报价资料" />
+        </el-form-item>
+        <el-form-item label="可见性">
+          <el-radio-group v-model="kbForm.visibility">
+            <el-radio-button value="private">私人库</el-radio-button>
+            <el-radio-button value="public">公共库</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="kbForm.visibility === 'private'" label="最低可见等级">
+          <el-input-number v-model="kbForm.minLevelRank" :min="1" :max="myLevelRank" />
+          <span class="form-hint">L{{ kbForm.minLevelRank }} 及以上账号可读</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button text @click="kbDialogOpen = false">取消</el-button>
+        <el-button type="primary" :loading="kbSaving" @click="saveKnowledgeBase">创建</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -595,6 +772,7 @@ const typeOptions = computed(() => {
 /* ============ 标题与筛选 ============ */
 .title-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   margin: 20px 0 14px;
@@ -659,12 +837,33 @@ const typeOptions = computed(() => {
   min-width: 0;
 }
 
+.name-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .name-text {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 550;
+}
+
+.kb-name {
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 7px;
+  border-radius: var(--aw-radius-full);
+  background: var(--aw-surface-3);
+  color: var(--aw-text-3);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .cell-dim {
@@ -867,6 +1066,94 @@ const typeOptions = computed(() => {
   padding: 20px 18px;
   background: var(--aw-doc-panel);
   border-radius: var(--aw-radius-l);
+}
+
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.panel-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--aw-text);
+}
+
+.panel-sub {
+  margin: 3px 0 0;
+  font-size: 11.5px;
+  color: var(--aw-text-3);
+}
+
+.link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  border: none;
+  background: transparent;
+  color: var(--aw-doc-accent);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+}
+
+.field-label {
+  margin-bottom: -8px;
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--aw-text-2);
+}
+
+.kb-select {
+  width: 100%;
+}
+
+.kb-select :deep(.el-select__wrapper) {
+  min-height: 34px;
+  background: var(--aw-surface);
+  box-shadow: none;
+  border: 1px solid var(--aw-border);
+}
+
+.empty-hint {
+  font-size: 12px;
+  color: var(--aw-text-3);
+}
+
+.readonly-note {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 36px 16px;
+  border: 1px dashed var(--aw-border);
+  border-radius: var(--aw-radius-m);
+  color: var(--aw-text-3);
+  text-align: center;
+}
+
+.readonly-note .el-icon {
+  font-size: 28px;
+}
+
+.readonly-note p {
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.form-hint {
+  margin-left: 8px;
+  color: var(--aw-text-3);
+  font-size: 12px;
 }
 
 .dropzone {

@@ -68,7 +68,12 @@ function citeHtml(no: number, report: CitationReport, sources?: RetrievalSource[
   if (!item) return `[${no}]` // 越界编号后端已剥，走到这里说明数据不一致，退回纯文本不渲染假角标
 
   // 来源面板里同一编号的命中；缺席时退回校验记录里的文件名，卡片至少能说明出处是谁。
-  const source = sources?.[no - 1]
+  //
+  // 优先按 `no` 精确查，不靠下标：**历史快照只存被引用的那几块，编号会跳号**
+  // （5 块里只引了 1 和 3，`sources` 只有两条）。按下标查会把 [3] 配到 1 号的卡片上，
+  // 而卡片内容看起来"也像那么回事"——错得很安静。当次的来源是完整列表，
+  // `no` 与下标一一对应，两种来源共用这一条路径。
+  const source = sources?.find((s) => s.no === no) ?? sources?.[no - 1]
   const fileName = source?.fileName ?? item.fileName
   const page = pageLabel(source)
   const body = (source?.content ?? '').slice(0, 120)

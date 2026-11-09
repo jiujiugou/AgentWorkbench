@@ -3,24 +3,37 @@ import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { login } from '@/api/auth'
+import { useAgentStore } from '@/stores/agent'
 
 const route = useRoute()
 const router = useRouter()
+const agent = useAgentStore()
 
-const userName = ref('')
+const email = ref('')
 const password = ref('')
 const busy = ref(false)
 
 async function submit(): Promise<void> {
-  if (!userName.value.trim() || !password.value) {
+  if (!email.value.trim() || !password.value) {
     ElMessage.warning('输入用户名和密码')
     return
   }
   busy.value = true
   try {
-    const user = await login(userName.value.trim(), password.value)
-    ElMessage.success(`你好，${user.displayName || user.userName}`)
+    const user = await login(email.value.trim(), password.value)
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
+    if (user.mustChangePassword) {
+      // 先别 restore：业务请求此刻会被 403，徒增一串错误。
+      ElMessage.warning('首次登录请先修改初始口令')
+      void router.push({ path: '/change-password', query: { redirect } })
+      return
+    }
+    // 登录成功后必须**重跑一次初始化**：整个 SPA 只在 App.vue 挂载时初始化一次，
+    // 而那时用户还在登录页（所有请求都是 401）。不补这一句，会话列表与"当前模型"
+    // 会一直空着，界面显示「未配置模型 · 去设置」——明明配好了，用户以为没配。
+    // （D7 UI 验收抓到：登录后进对话页，模型标识一直停在"未配置模型"，刷新才正常。）
+    await agent.restore()
+    ElMessage.success(`你好，${user.displayName || user.userName}`)
     void router.push(redirect)
   } catch (e) {
     ElMessage.error((e as Error).message)
@@ -36,10 +49,17 @@ async function submit(): Promise<void> {
       <span class="brand-mark">AW</span>
       <h1>AgentWorkbench</h1>
       <p class="sub">登录后使用资料库与对话</p>
-      <input v-model="userName" placeholder="用户名" autocomplete="username" />
+      <input
+        v-model="email"
+        type="text"
+        placeholder="用户名"
+        autocomplete="username"
+        autocapitalize="off"
+        spellcheck="false"
+      />
       <input v-model="password" type="password" placeholder="密码" autocomplete="current-password" />
       <button type="submit" :disabled="busy">{{ busy ? '登录中…' : '登录' }}</button>
-      <p class="hint">演示账号：wang / demo1234</p>
+      <p class="hint">没有账号？由团队管理员发出邀请，用邀请链接建号。</p>
     </form>
   </div>
 </template>

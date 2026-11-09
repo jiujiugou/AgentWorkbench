@@ -9,6 +9,8 @@ import RunTrace from '@/components/RunTrace.vue'
 
 const props = defineProps<{
   message: ChatMessage
+  /** 这条会话的答案合同。general 时必须显示“未使用企业资料”。 */
+  mode?: 'knowledge' | 'general'
   sources?: RetrievalSource[]
   citations?: CitationReport
   refusal?: RefusalInfo
@@ -89,6 +91,26 @@ function onMarkdownClick(e: MouseEvent): void {
   if (code?.textContent) void copyText(code.textContent, '代码已复制')
 }
 
+/**
+ * 空正文有三种意思，必须分开说（C-V11 的界面一侧）。
+ *
+ * 三种都画成"一条空回答"，等于把三个排查方向压成一个：还在跑、跑完了但失败、
+ * 以及"这一轮什么也没留下"。判据来自那条 run 的终态，不在这里猜。
+ * `pending` 是当次推送的进行中（有打字动画），不走这里。
+ */
+const emptyNote = computed(() => {
+  if (props.message.role !== 'assistant' || props.message.pending) return ''
+  if (props.refusal || bodyText.value) return ''
+  if (props.stopStatus === 'cancelled') return '已停止生成。'
+  const status = props.message.runStatus
+  if (status === 'running') return '这一轮还没有结束。进程若已中断，它会一直停在这里。'
+  if (status === 'cancelled') return '这一轮已停止。'
+  if (status === 'failed' || status === 'limited') {
+    return '这一轮没有答上来，展开下面的执行过程看原因。'
+  }
+  return '这一轮没有留下正文。'
+})
+
 function pageLabel(s: RetrievalSource): string {
   if (s.pageFrom == null) return ''
   if (s.pageTo != null && s.pageTo !== s.pageFrom) return `P${s.pageFrom}–${s.pageTo}`
@@ -115,11 +137,16 @@ function pageLabel(s: RetrievalSource): string {
           <p class="refusal-text">{{ refusal.text }}</p>
         </div>
         <template v-else-if="message.role === 'assistant'">
+          <div v-if="mode === 'general'" class="general-note">
+            <span class="general-tag">通用对话</span>
+            <span class="general-text">未使用企业资料</span>
+          </div>
           <div v-if="supportNote" class="support-note">
             <span class="support-tag">无资料支撑</span>
             <span class="support-text">{{ supportNote }}</span>
           </div>
           <div class="markdown" v-html="html" @click="onMarkdownClick" />
+          <p v-if="emptyNote" class="empty-answer">{{ emptyNote }}</p>
         </template>
         <template v-else>{{ message.content }}</template>
 
@@ -288,6 +315,15 @@ function pageLabel(s: RetrievalSource): string {
 }
 
 /* ---------- Markdown ---------- */
+/* 空正文的说明。三种来源（还没跑完 / 跑完失败 / 什么也没留）共用这一处，
+   文案由 emptyNote 决定——它是"这一轮怎么了"，不是模型说的话，所以用弱语气。 */
+.empty-answer {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--aw-text-3);
+}
+
 .markdown :deep(p) {
   margin: 0 0 10px;
 }
@@ -690,6 +726,32 @@ function pageLabel(s: RetrievalSource): string {
 }
 
 /* ---------- 无资料支撑 ---------- */
+/* 通用对话的合同标识：它不是“资料不足”，也不是拒答；它只是明确告诉
+   读者这条回答没有企业资料依据。与知识库回答必须一眼可分（D-V2）。 */
+.general-note {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  border-radius: var(--aw-radius-l);
+  border-left: 3px solid var(--aw-primary);
+  background: var(--el-color-primary-light-9);
+}
+
+.general-tag {
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--aw-primary);
+}
+
+.general-text {
+  font-size: 12px;
+  color: var(--aw-text-3);
+  line-height: 1.5;
+}
+
 /* 与拒答卡片刻意区别：拒答是系统不给答案（橙色粗边框、独立卡片）；
    这一层答案照给，只是先告诉读者"下面没有出处可核"，所以是正文上方的一条窄提示，不遮内容。 */
 .support-note {

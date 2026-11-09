@@ -21,7 +21,11 @@ async function onDelete(id: string, title: string): Promise<void> {
 
 <template>
   <div class="conv-list">
-    <div v-if="agent.conversations.length === 0" class="conv-empty">还没有会话，发条消息就开始一个</div>
+    <div v-if="agent.conversations.length === 0" class="conv-empty">
+      <el-icon class="conv-empty-icon"><ChatDotSquare /></el-icon>
+      <p>还没有会话</p>
+      <span>点上面的「新对话」开始一个</span>
+    </div>
     <div
       v-for="c in agent.conversations"
       :key="c.id"
@@ -34,6 +38,7 @@ async function onDelete(id: string, title: string): Promise<void> {
       @keydown.enter="agent.selectConversation(c.id)"
     >
       <el-icon class="conv-icon"><ChatDotSquare /></el-icon>
+      <span class="conv-kind" :class="c.kind">{{ c.kind === 'general' ? '通用' : '知识库' }}</span>
       <span class="conv-title">{{ agent.titleFor(c) }}</span>
       <button
         class="conv-del"
@@ -52,21 +57,43 @@ async function onDelete(id: string, title: string): Promise<void> {
   flex-direction: column;
   gap: 2px;
   min-height: 0;
+  padding: 2px 0;
 }
 
 .conv-empty {
-  padding: 10px 12px;
-  font-size: 12px;
-  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 34px 14px;
+  text-align: center;
   color: var(--aw-text-3);
 }
 
+.conv-empty-icon {
+  font-size: 26px;
+  color: var(--aw-border-strong);
+}
+
+.conv-empty p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--aw-text-2);
+}
+
+.conv-empty span {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .conv-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 8px 10px;
-  border-radius: var(--aw-radius-s);
+  padding: 9px 10px;
+  border-radius: 10px;
   cursor: pointer;
   color: var(--aw-text-2);
   font-size: 13.5px;
@@ -80,9 +107,23 @@ async function onDelete(id: string, title: string): Promise<void> {
 }
 
 .conv-item.active {
-  background: var(--el-color-primary-light-9);
-  color: var(--aw-primary);
-  font-weight: 500;
+  background: var(--aw-surface);
+  color: var(--aw-text);
+  font-weight: 550;
+  box-shadow: var(--aw-shadow-1);
+}
+
+/* 活跃态左侧那条竖线：比整块换色安静，但扫一眼就知道在哪。 */
+.conv-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 3px;
+  height: 16px;
+  border-radius: 0 3px 3px 0;
+  background: var(--aw-primary);
+  transform: translateY(-50%);
 }
 
 .conv-item.active .conv-icon {
@@ -98,6 +139,21 @@ async function onDelete(id: string, title: string): Promise<void> {
 .conv-item.active .conv-icon,
 .conv-item:hover .conv-icon {
   color: inherit;
+}
+
+.conv-kind {
+  flex: none;
+  font-size: 10.5px;
+  line-height: 1.4;
+  padding: 1px 5px;
+  border-radius: 5px;
+  color: var(--aw-text-3);
+  background: var(--aw-surface-3);
+}
+
+.conv-kind.general {
+  color: var(--aw-primary);
+  background: var(--el-color-primary-light-9);
 }
 
 .conv-title {
