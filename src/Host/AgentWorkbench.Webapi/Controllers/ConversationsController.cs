@@ -43,7 +43,9 @@ public sealed class ConversationsController : ControllerBase
         if (await _repository.GetAsync(id, tenantId, userId) is null)
             return NotFound();
         var messages = await _repository.GetMessagesAsync(id);
-        return Ok(messages.Select(m => new { m.Id, m.Role, m.Content, m.CreatedAt }));
+        // runId 必须返回：界面回看历史时靠它找回当时的执行过程（GET /api/harness/runs/{id}）。
+        // 只有 assistant 消息有值；历史数据为 null，界面按「没有过程」显示。
+        return Ok(messages.Select(m => new { m.Id, m.Role, m.Content, m.CreatedAt, m.RunId }));
     }
 
     [HttpDelete("{id}")]

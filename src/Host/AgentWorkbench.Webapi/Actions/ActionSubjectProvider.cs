@@ -22,13 +22,14 @@ public interface IActionSubjectScope
 /// <summary>
 /// <see cref="IActionSubjectProvider"/> 与 <see cref="IActionOriginProvider"/> 的宿主实现。
 ///
-/// 三条 web 入口共用同一来源：
+/// 两条 web 入口共用同一来源：
 /// - `ActionsController`（HTTP 递单）：身份回退到 <see cref="IHttpContextAccessor"/> 当前请求的认证名；
 ///   不建作用域，自带输入标识由 <c>InputIdentity.Derive</c> 算号，不经过工具环。
-/// - `HarnessController`（HTTP 直接起 run）：在 <c>RunAsync</c> 期间 <c>Begin</c> 一个短作用域，
-///   把会话 id 与输入标识带进工具环。
 /// - SignalR Hub：长连接的后续调用不保证还有可用的 HttpContext，
 ///   因此由 Hub 在整段生成期间 <c>Begin</c> 一个作用域，值随异步流进入工具调用。
+///
+/// 曾经还有第三条 `HarnessController`（HTTP 直接起 run），已移除：它是绕过 Hub 的第二条对话路径，
+/// 没有流式、没有 Stop、没有会话复用，起 run 只能走 Hub（见 HarnessController 的类注释）。
 ///
 /// 用一个 AsyncLocal 记录三元组而不是三个单例字段：并发请求之间不串号，作用域结束自动还原。
 /// 取不到身份时返回 null，由调用方按 fail-closed 拒绝——绝不回退到默认账号。

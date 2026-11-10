@@ -15,7 +15,8 @@ public interface IConversationRepository
     Task<ConversationRecord> GetOrCreateAsync(string? id, string tenantId, string userId);
     Task<IReadOnlyList<ConversationRecord>> ListAsync(string tenantId, string userId);
     Task<bool> DeleteAsync(string id, string tenantId, string userId);
-    Task AddMessageAsync(string conversationId, string role, string content);
+    /// <summary>追加一条消息；<paramref name="runId"/> 只有 assistant 消息需要传（回看历史时据此找回执行过程）。</summary>
+    Task AddMessageAsync(string conversationId, string role, string content, long? runId = null);
     Task<IReadOnlyList<MessageRecord>> GetMessagesAsync(string conversationId);
     Task<int> CountMessagesAsync(string conversationId);
 }
@@ -95,7 +96,7 @@ public sealed class ConversationRepository(
     /// 插入消息与推进会话 <c>updated_at</c> 必须在同一事务里：只有一条成功时，
     /// 会话列表的排序会与实际最后一条消息脱节。两条语句共用 <c>db</c> 的连接与事务。
     /// </remarks>
-    public async Task AddMessageAsync(string conversationId, string role, string content)
+    public async Task AddMessageAsync(string conversationId, string role, string content, long? runId = null)
     {
         var now = DateTimeOffset.UtcNow.ToString("o");
 
@@ -107,7 +108,8 @@ public sealed class ConversationRepository(
             ConversationId = conversationId,
             Role = role,
             Content = content,
-            CreatedAt = now
+            CreatedAt = now,
+            RunId = runId
         });
         await db.SaveChangesAsync();
 

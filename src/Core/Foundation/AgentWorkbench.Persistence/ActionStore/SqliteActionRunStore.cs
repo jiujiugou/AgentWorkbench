@@ -64,8 +64,40 @@ public sealed class SqliteActionRunStore : IActionRunStore
         return checkpoint;
     }
 
-    public ValueTask<RunCheckpoint?> ResumeAsync(string requestId, CancellationToken ct)
-        => LoadCheckpointAsync(requestId, ct);
+    /// <summary>
+    /// 从挂起态恢复：<b>取出即清除</b>。
+    ///
+    /// <para>
+    /// 为什么必须删：<c>action_checkpoints</c> 就是「待办队列」，一条被批准或拒绝后就不再待办。
+    /// 早先这里是 <see cref="LoadCheckpointAsync"/> 的别名（只读不删），于是已完成、已失败的动作
+    /// 永远留在 <c>GET /api/actions/pending</c> 里——界面出现幽灵待办，用户看到「我明明批过了，它还在」。
+    /// 重复点批准虽然会被 <c>action_idempotency</c> 回放挡住、不会重复下单，但那是最后一道兜底，
+    /// 不该拿来当队列行为正确。
+    /// </para>
+    /// <para>
+    /// 删除与读取在同一个事务里完成：并发两次恢复，第二次读不到行、返回 null，
+    /// 调用方据此返回 <c>not_pending</c>，不会出现两个执行体同时认为「这一单归我」。
+    /// </para>
+    /// </summary>
+    public async ValueTask<RunCheckpoint?> ResumeAsync(string requestId, CancellationToken ct)
+    {
+        using var connection = _connections.Create();
+        using var transaction = connection.BeginTransaction();
+
+        var row = await connection.QuerySingleOrDefaultAsync<CheckpointRow>(
+            new CommandDefinition(LoadCheckpointSql, new { requestId }, transaction, cancellationToken: ct));
+        if (row is null)
+        {
+            transaction.Commit();
+            return null;
+        }
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DELETE FROM action_checkpoints WHERE request_id = @requestId",
+            new { requestId }, transaction, cancellationToken: ct));
+        transaction.Commit();
+        return ToCheckpoint(row);
+    }
 
     public async ValueTask<bool> TryClaimIdempotencyAsync(
         string requestId, string? idempotencyKey, CancellationToken ct)

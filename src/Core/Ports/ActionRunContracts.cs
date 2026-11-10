@@ -49,6 +49,11 @@ public interface IActionRunStore
     ValueTask<IReadOnlyList<RunCheckpoint>> ListCheckpointsAsync(string state, CancellationToken ct);
 
     ValueTask<RunCheckpoint> SuspendAsync(string requestId, string state, string progressBlob, CancellationToken ct);
+    /// <summary>
+    /// 从挂起态恢复一条待办，<b>取出即从待办队列移除</b>（不是只读）。
+    /// 批准与拒绝收口后都必须调用它，否则这条单会永远挂在宿主审批页上。
+    /// 已被取走时返回 <c>null</c>，调用方应回 <c>not_pending</c> 而不是再执行一次。
+    /// </summary>
     ValueTask<RunCheckpoint?> ResumeAsync(string requestId, CancellationToken ct);
     ValueTask<bool> TryClaimIdempotencyAsync(string requestId, string? idempotencyKey, CancellationToken ct);
     ValueTask<ActionResult?> LoadResultAsync(string requestId, CancellationToken ct);

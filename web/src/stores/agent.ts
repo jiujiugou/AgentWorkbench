@@ -426,6 +426,9 @@ export const useAgentStore = defineStore('agent', () => {
   /**
    * 取一次运行的轨迹，填进"过程"那一块。
    *
+   * 只在**回看历史**时走这条路：正在跑的 run 靠 `ReceiveTool` 增量攒过程，
+   * 已结束的 run 只能从 `GET /api/harness/runs/{id}` 读回（与实时事件同源，都是 `agent_steps`）。
+   *
    * 用展开赋值而不是就地改对象：`toolSteps` 是 `ref`，Vue 只追踪通过 `.value`
    * 赋进去的那个代理。在异步回调里改 `nextSteps[key]` 改的是**原始对象**，
    * 界面不会更新——而它不会报错，只是永远显示"没有过程"。
@@ -435,7 +438,7 @@ export const useAgentStore = defineStore('agent', () => {
    */
   async function loadTrace(messageId: string, runId: string): Promise<void> {
     try {
-      const trace = await conversationsApi.trace(runId)
+      const trace = await conversationsApi.runDetail(runId)
       toolSteps.value = { ...toolSteps.value, [messageId]: toToolSteps(trace) }
       runs.value = { ...runs.value, [messageId]: toRunSummary(trace) }
     } catch {
@@ -463,8 +466,10 @@ export const useAgentStore = defineStore('agent', () => {
         text: content,
         history: [],
         // 本次输入的唯一标识：每次点击发送生成新值，后端用它派生动作请求号。
-        // 当前没有自动重发，也没有复用逻辑；将来若加断线补发，必须复用同一次输入的这个值——
-        // 服务端现编的号对重试无效。缺失时后端直接拒绝（client_message_id_required）。
+        // 当前没有自动重发；若引入断线补发，复用同一次输入的这个值只是必要条件之一——
+        // 服务端还必须先有输入级去重（action_idempotency 只护动作、不护整段 run），
+        // 且要把 clientMessageId 带进终态事件，否则界面无法确认哪次输入已送达。
+        // 缺失时后端直接拒绝（client_message_id_required）。
         clientMessageId: crypto.randomUUID(),
       })
     } catch (e) {

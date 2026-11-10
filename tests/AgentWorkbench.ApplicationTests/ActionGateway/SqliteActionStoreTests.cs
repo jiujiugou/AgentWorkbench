@@ -176,4 +176,45 @@ public sealed class SqliteActionStoreTests
         }
         finally { cleanup(); }
     }
+
+    /// <summary>
+    /// S7：批准与拒绝都必须让这一单离开待办队列。
+    ///
+    /// <para>
+    /// 负控：把 <c>ResumeAsync</c> 改回「只读不删」→ 本用例红（待办里还能查到）。
+    /// 它挡的是审批页的幽灵待办：已办完的单一直挂在列表上，用户看到「我明明批过了，它还在」。
+    /// 重复点批准虽然会被幂等回放挡住、不会重复下单，但那不该被拿来当队列行为正确。
+    /// </para>
+    /// <para>
+    /// 后半段验的是「收口后再批不得第二次执行」：待办已被取走，<c>ApproveAsync</c> 必须回 null（not_pending），
+    /// 而不是再走一遍执行体。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task S7_批准与拒绝后都离开待办队列()
+    {
+        var (connections, cleanup) = NewDatabase();
+        try
+        {
+            var set = new TestActionSet();
+            var service = Service(set, connections, out _);
+            var store = new SqliteActionRunStore(connections);
+
+            await service.SubmitDeferredAsync(TestRequests.Create("done-1"), CancellationToken.None);
+            await service.SubmitDeferredAsync(TestRequests.Create("done-2"), CancellationToken.None);
+            var before = await store.ListCheckpointsAsync(ActionRunStates.PendingApproval, CancellationToken.None);
+            Assert.Equal(2, before.Count);
+
+            await service.ApproveAsync("done-1", "owner-wang", CancellationToken.None);
+            await service.RejectAsync("done-2", "不需要了", CancellationToken.None);
+
+            var after = await store.ListCheckpointsAsync(ActionRunStates.PendingApproval, CancellationToken.None);
+            Assert.Empty(after);
+
+            // 收口后再批：待办已取走 → not_pending，执行体不得再跑一次。
+            Assert.Null(await service.ApproveAsync("done-1", "owner-wang", CancellationToken.None));
+            Assert.Equal(1, set.ExecutorStub.WriteCallCount);
+        }
+        finally { cleanup(); }
+    }
 }

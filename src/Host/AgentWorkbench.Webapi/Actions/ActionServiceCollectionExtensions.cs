@@ -51,6 +51,8 @@ public static class ActionServiceCollectionExtensions
             services.AddSingleton<IActionRunStore>(sp => sp.GetRequiredService<SqliteActionRunStore>());
             services.AddSingleton<ITraceSink>(sp => sp.GetRequiredService<SqliteTraceStore>());
             services.AddSingleton<IAuditQuery>(sp => sp.GetRequiredService<SqliteTraceStore>());
+            // 追溯页的列表入口：只读，与 IAuditQuery 同源（都读 action_trace），不启动任何东西。
+            services.AddSingleton<IActionHistoryQuery>(sp => sp.GetRequiredService<SqliteTraceStore>());
         }
         else
         {
@@ -59,6 +61,7 @@ public static class ActionServiceCollectionExtensions
             services.AddSingleton<IActionRunStore>(sp => sp.GetRequiredService<InMemoryActionRunStore>());
             services.AddSingleton<ITraceSink>(sp => sp.GetRequiredService<InMemoryTraceStore>());
             services.AddSingleton<IAuditQuery>(sp => sp.GetRequiredService<InMemoryTraceStore>());
+            services.AddSingleton<IActionHistoryQuery>(sp => sp.GetRequiredService<InMemoryTraceStore>());
         }
 
         services.AddSingleton<IActionSet>(_ => ResolveActionSet(configuration));

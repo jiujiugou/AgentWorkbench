@@ -23,13 +23,35 @@ public sealed class ActionsController : ControllerBase
     private readonly ActionRunService _service;
     private readonly IActionRunStore _store;
     private readonly IActionSubjectProvider _subjects;
+    private readonly IActionHistoryQuery _history;
+    private readonly IActionSet _actionSet;
 
-    public ActionsController(ActionRunService service, IActionRunStore store, IActionSubjectProvider subjects)
+    public ActionsController(
+        ActionRunService service,
+        IActionRunStore store,
+        IActionSubjectProvider subjects,
+        IActionHistoryQuery history,
+        IActionSet actionSet)
     {
         _service = service;
         _store = store;
         _subjects = subjects;
+        _history = history;
+        _actionSet = actionSet;
     }
+
+    /// <summary>
+    /// 动作历史（追溯页入口）：最近的动作摘要，按提交时间倒序。
+    ///
+    /// 只读观察口，与 <c>/api/harness/runs/{id}</c> 同性质——<b>不启动 run、不执行动作、不改任何状态</b>。
+    /// 没有它，追溯页只能靠人记住一个 <c>requestId</c> 才能查，等于没有入口。
+    /// 细节（四道闸门结论、外部单号、谁批的）走 <c>/{requestId}/audit</c>，不在这里展开。
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> Recent(
+        [FromQuery] int limit = 50,
+        CancellationToken cancellationToken = default)
+        => Ok(await _history.RecentAsync(limit, cancellationToken));
 
     /// <summary>提交一次结构化动作请求。副作用动作返回 202 + Pending，等审批。</summary>
     [HttpPost]
@@ -91,7 +113,20 @@ public sealed class ActionsController : ControllerBase
     public async Task<IActionResult> Audit(string requestId, CancellationToken cancellationToken)
         => Ok(await _service.AuditTrailAsync(requestId, cancellationToken));
 
-    /// <summary>待办列表：只给已挂起的请求快照，不含业务单据状态。</summary>
+    /// <summary>
+    /// 待办列表：给审批页用的「决策包」。
+    ///
+    /// <para>
+    /// 早先这里只回 <c>actionKey</c> + 参数 JSON，审批页于是只能显示
+    /// <c>issue.create</c> 和一段 <c>{"title": ...}</c>——那是给工程师看的，
+    /// 要签字的人看不懂。动作域本来就在 <see cref="ActionSpec"/> 里写了
+    /// <c>DisplayName</c>（「创建议题」）、<c>RiskLevel</c>（中风险）、<c>SideEffecting</c>，
+    /// 只是没有接出来。这里只是把域已经写好的话搬到界面上，**不替审批人做判断**。
+    /// </para>
+    /// <para>
+    /// <c>RiskLevel</c> 只用于展示与排序，禁止参与放行/拒绝（见 <see cref="RiskLevels"/> 注释）。
+    /// </para>
+    /// </summary>
     [HttpGet("pending")]
     public async Task<IActionResult> Pending(CancellationToken cancellationToken)
     {
@@ -103,10 +138,18 @@ public sealed class ActionsController : ControllerBase
             if (request is null)
                 continue;
 
+            // 规格缺失不阻断列表：动作名照原样显示，但补一个 null 让人看得出「这单没有说明」。
+            var spec = await _actionSet.Specs.FindAsync(request.ActionKey, cancellationToken);
+
             rows.Add(new
             {
                 requestId = checkpoint.RequestId,
                 actionKey = request.ActionKey,
+                displayName = spec?.DisplayName ?? request.ActionKey,
+                description = spec?.Description,
+                riskLevel = spec?.RiskLevel,
+                sideEffecting = spec?.SideEffecting ?? true,
+                primitive = spec?.Primitive,
                 subject = request.Subject,
                 arguments = request.Arguments,
                 at = checkpoint.At,
@@ -152,8 +195,10 @@ public sealed class ActionsController : ControllerBase
 
 /// <summary>
 /// 提交体。Arguments 对底座不透明，这里只做透传。
-/// <c>ClientMessageId</c> = 「这是哪一次输入」，由调用方在发起时生成、重放时复用；
+/// <c>ClientMessageId</c> = 「这是哪一次输入」，由调用方在发起时生成、重放同一提交体时复用；
 /// 请求号由服务端派生，<b>不接受客户端自报 requestId</b>（那会把判重权交出去）。
+/// 此处「重放」仅指动作判重（<c>action_idempotency</c> 按 requestId 收敛，H4 已验），
+/// 不代表对话 run 幂等——Hub 与 <c>/api/harness/run</c> 都没有输入级去重。
 /// </summary>
 public sealed record ActionSubmitBody(
     string ActionKey,

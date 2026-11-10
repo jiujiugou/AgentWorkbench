@@ -1,18 +1,21 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
+  Bell,
   ChatLineSquare,
   FolderOpened,
   Menu,
   Plus,
   Setting,
   SwitchButton,
+  Tickets,
   UserFilled,
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import ConversationList from '@/components/ConversationList.vue'
 import { cachedUser, logout, type AuthUser } from '@/api/auth'
+import { actionsApi } from '@/api/actions'
 import { QUICK_STARTS } from '@/suggestions'
 import { useAgentStore } from '@/stores/agent'
 import { useHealthStore } from '@/stores/health'
@@ -34,6 +37,9 @@ const isAdmin = computed(() => user.value?.role === 'owner' || user.value?.role 
 const activeNav = computed(() => {
   if (route.path.startsWith('/admin')) return '/admin'
   if (route.path.startsWith('/settings')) return '/settings'
+  if (route.path.startsWith('/approvals')) return '/approvals'
+  // /actions 与 /actions/:requestId 都高亮同一项：详情是列表的下钻，不是并列页面。
+  if (route.path.startsWith('/actions')) return '/actions'
   if (isChat.value) return '/chat'
   return '/'
 })
@@ -106,6 +112,37 @@ async function signOut(): Promise<void> {
   void router.push('/login')
 }
 
+/**
+ * 侧边栏的待审批角标。
+ *
+ * 存在的理由只有一个：**模型挂起一单时，用户正停在对话页，看不到任何信号。**
+ * 没有角标的话，他会以为「模型说它提交了」只是句空话，而实际上有一件事正等着他点。
+ *
+ * 计数是提示，不是数据源：拿不到就保持原值、不弹错——每个网络抖动都打扰人。
+ * 与审批页同样用轮询（Hub 还没有挂起事件），间隔放宽到 15 秒。
+ */
+const pendingCount = ref(0)
+let pendingTimer: number | undefined
+
+async function refreshPendingCount(): Promise<void> {
+  try {
+    pendingCount.value = (await actionsApi.pending()).length
+  } catch {
+    /* 静默：角标失准比打断人更可接受 */
+  }
+}
+
+onMounted(() => {
+  void refreshPendingCount()
+  pendingTimer = window.setInterval(() => {
+    if (document.visibilityState === 'visible') void refreshPendingCount()
+  }, 15_000)
+})
+
+onUnmounted(() => {
+  if (pendingTimer !== undefined) window.clearInterval(pendingTimer)
+})
+
 onMounted(() => {
   void refreshUser()
   // 改密页不恢复业务数据：此刻服务端还没放行，restore() 只会制造一串 403。
@@ -129,6 +166,26 @@ onMounted(() => {
         </RouterLink>
         <RouterLink to="/chat" class="nav-item" :class="{ active: activeNav === '/chat' }" title="对话">
           <el-icon><ChatLineSquare /></el-icon>
+        </RouterLink>
+        <!-- 待审批：模型的写动作挂起后没有这个入口，用户在界面上就永远批准不了（S07 → S08 断链） -->
+        <RouterLink
+          to="/approvals"
+          class="nav-item"
+          :class="{ active: activeNav === '/approvals' }"
+          title="待审批"
+        >
+          <el-icon><Bell /></el-icon>
+          <span v-if="pendingCount" class="nav-badge">{{ pendingCount > 99 ? '99+' : pendingCount }}</span>
+        </RouterLink>
+        <!-- 追溯：判据②「任一动作能答 谁/何时/依据哪条规则/变成什么」的入口。
+             与待审批并列而不是藏在会话里——它要能脱离某次对话回答「系统在我这里做过什么」 -->
+        <RouterLink
+          to="/actions"
+          class="nav-item"
+          :class="{ active: activeNav === '/actions' }"
+          title="动作追溯"
+        >
+          <el-icon><Tickets /></el-icon>
         </RouterLink>
         <RouterLink
           v-if="isAdmin"
@@ -302,7 +359,29 @@ onMounted(() => {
   border-radius: 50%;
   color: rgb(244 239 233 / 0.62);
   text-decoration: none;
+  /* 角标绝对定位在右上角：不影响图标居中，也不改导航项的尺寸。 */
+  position: relative;
   transition: background-color var(--aw-dur) var(--aw-ease), color var(--aw-dur) var(--aw-ease);
+}
+
+/* 有单子等人处置时的提醒。红点不是装饰：没有它，用户停在对话页就完全看不到
+   「模型已经挂起一张单、正等着你批」这件事。 */
+.nav-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--aw-warning);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  box-sizing: border-box;
+  pointer-events: none;
 }
 
 .nav-item .el-icon {

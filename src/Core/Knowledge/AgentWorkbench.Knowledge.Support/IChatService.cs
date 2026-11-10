@@ -1,15 +1,13 @@
 namespace AgentWorkbench.Knowledge.Support;
 
-/// <summary>对话生成服务：基于 Microsoft Agent Framework 的 Agent 抽象，屏蔽具体供应商。</summary>
+/// <summary>模型可用性查询：只回答「现在能不能调模型」，不做任何生成。</summary>
+/// <remarks>
+/// 这里原本还有一条 <c>StreamAsync</c> —— v1 留下的第二条生成路径，自己做「拼 prompt → 调模型 →
+/// 遇 4xx 降级重试」。v3 把生成统一收进 <c>IAgentHarness</c> 之后它没有任何调用方，已删除。
+/// 生成路径只应有一条：再长出一条，工具环守卫、轨迹采集、输入身份就会各走一半。
+/// </remarks>
 public interface IChatService
 {
     /// <summary>是否已配置可用模型（运行时解析，未配置时前端提示去设置页）。</summary>
     Task<bool> IsConfiguredAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>流式生成回复，逐段返回文本增量；可覆盖系统提示词（用于 RAG 注入上下文）。</summary>
-    IAsyncEnumerable<string> StreamAsync(
-        IReadOnlyList<ChatTurn> history,
-        string userMessage,
-        CancellationToken cancellationToken,
-        string? systemPrompt = null);
 }

@@ -6,6 +6,7 @@ import { renderAnnotated } from '@/utils/citations'
 import type { CitationReport, RefusalInfo, RetrievalSource, RunSummary, ToolStepEvent } from '@/types'
 import type { ChatMessage } from '@/stores/agent'
 import RunTrace from '@/components/RunTrace.vue'
+import ActionCards from '@/components/ActionCards.vue'
 
 const props = defineProps<{
   message: ChatMessage
@@ -168,6 +169,10 @@ function pageLabel(s: RetrievalSource): string {
       <div v-if="citeSummary" class="cite-summary" title="引用体检：句级统计来自服务端的两级校验">
         <span class="cite-summary-dot" />{{ citeSummary }}
       </div>
+
+      <!-- 动作卡片放在「执行过程」之上：单子是产品的主语，工具调用只是它的来路。
+           藏在折叠面板里的话，模型挂起一单等人批准，用户在对话里看不见。 -->
+      <ActionCards v-if="message.role === 'assistant'" :tools="tools" />
 
       <RunTrace v-if="message.role === 'assistant'" :tools="tools" :run="run" :stop-status="stopStatus" />
 

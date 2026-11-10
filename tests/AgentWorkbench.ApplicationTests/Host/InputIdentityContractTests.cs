@@ -26,8 +26,9 @@ namespace AgentWorkbench.ApplicationTests.Host;
 /// Host 输入身份契约。<b>web 传输模型带来的必答题，只在 Host 内解决，Core 行为零改动。</b>
 ///
 /// 这套用例锁的是「缺身份必须被拒绝」，不是「幂等机制是否工作」——后者由
-/// ActionGateway 那组测试覆盖。负控：删掉任一入口的判空，H1 / H3 / H9 必须红；
+/// ActionGateway 那组测试覆盖。负控：删掉任一入口的判空，H1 / H3 必须红；
 /// 把 InputIdentity.Derive 改回 Guid.NewGuid()，H4 必须红。
+/// H11 是守卫：产品后端不得再有 HTTP 起 run 的入口（原第三条入口已移除）。
 /// </summary>
 public sealed class InputIdentityContractTests
 {
@@ -91,7 +92,7 @@ public sealed class InputIdentityContractTests
     [Fact]
     public async Task H3_Controller缺输入标识返回400且零网关调用()
     {
-        var controller = new ActionsController(null!, null!, new FakeSubjects("wang"))
+        var controller = new ActionsController(null!, null!, new FakeSubjects("wang"), null!, null!)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };
@@ -143,58 +144,26 @@ public sealed class InputIdentityContractTests
     }
 
     /// <summary>
-    /// [H9] 第三条 web 入口（<c>POST /api/harness/run</c>）也必须拒绝缺身份的请求。
-    /// 它不构造 <c>ActionRequest</c>，但会起工具环——漏了它，模型在里面递单照样退化成随机号。
-    /// 负控：删掉 HarnessController.Run 的判空 → 本用例红。
+    /// [H11] 守卫：产品后端不得再有「用 HTTP 起一次 run」的入口。
+    ///
+    /// <para>
+    /// 曾经有 <c>POST /api/harness/run</c>（原 H9/H10 验的是它的身份判空），已按设计移除。
+    /// 理由是它绕过 SignalR Hub，等于同时丢掉四样东西：流式增量、<c>Stop</c>、会话复用，
+    /// 以及客户端无法被输入级去重拦住。起 run 的唯一产品入口是 <c>/hubs/agent</c>。
+    /// </para>
+    /// <para>
+    /// 这条断言不验行为，只<b>阻止入口被悄悄加回来</b>：加回一个 HTTP 起 run 的端点，
+    /// 上面四个缺口会一起复活，而现有测试一条都不会红——所以必须有一条专门盯着它。
+    /// 需要程序化起 run 时：产品路径走 Hub，测试内直接调 <see cref="IAgentHarness.RunAsync"/>。
+    /// </para>
     /// </summary>
     [Fact]
-    public async Task H9_Harness入口缺标识返回400且零Harness调用()
+    public void H11_产品后端不得再暴露HTTP起run入口()
     {
-        var harness = new Mock<IAgentHarness>();
-        var scope = new Mock<IActionSubjectScope>();
-        var controller = new HarnessController(harness.Object, scope.Object)
-        {
-            ControllerContext = new ControllerContext
-            {
-                HttpContext = new DefaultHttpContext { User = Principal() }
-            },
-            ProblemDetailsFactory = ProblemFactory()
-        };
-
-        var result = await controller.Run(
-            new HarnessRunBody(null, "查一下 PO-1", " "), CancellationToken.None);
-
-        var obj = Assert.IsType<ObjectResult>(result);
-        Assert.Equal(StatusCodes.Status400BadRequest, obj.StatusCode);
-        Assert.Contains(InputIdentity.MissingCode, JsonSerializer.Serialize(obj.Value));
-        harness.Verify(
-            h => h.RunAsync(It.IsAny<HarnessRunRequest>(), It.IsAny<CancellationToken>()),
-            Times.Never);
-        scope.Verify(
-            s => s.Begin(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string>()),
-            Times.Never);
-    }
-
-    /// <summary>[H10] Harness 入口带标识时，会话 id 与输入号都进作用域。</summary>
-    [Fact]
-    public async Task H10_Harness入口带标识时身份进入作用域()
-    {
-        var harness = new Mock<IAgentHarness>();
-        var scope = new Mock<IActionSubjectScope>();
-        harness.Setup(h => h.RunAsync(It.IsAny<HarnessRunRequest>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("probe-stop"));
-        var controller = new HarnessController(harness.Object, scope.Object)
-        {
-            ControllerContext = new ControllerContext
-            {
-                HttpContext = new DefaultHttpContext { User = Principal() }
-            }
-        };
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => controller.Run(
-            new HarnessRunBody("conv-x", "查一下 PO-1", "m-h10"), CancellationToken.None));
-
-        scope.Verify(s => s.Begin(It.IsAny<string?>(), "conv-x", "m-h10"), Times.Once);
+        Assert.Null(typeof(HarnessController).GetMethod("Run"));
+        Assert.DoesNotContain(
+            typeof(HarnessController).GetMethods(),
+            m => m.GetCustomAttributes(typeof(HttpPostAttribute), inherit: false).Length > 0);
     }
 
     // ── 守卫本身与契约形状 ────────────────────────────────────────
@@ -293,7 +262,7 @@ public sealed class InputIdentityContractTests
         var set = new TestActionSet();
         set.Registry.Spec = set.QuerySpec;   // 无副作用、无需审批，能直接走到执行体
         var (service, _, store) = TestHarness.Create(set);
-        var controller = new ActionsController(service, store, new FakeSubjects("wang"))
+        var controller = new ActionsController(service, store, new FakeSubjects("wang"), null!, null!)
         {
             ControllerContext = new ControllerContext
             {

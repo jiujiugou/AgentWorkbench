@@ -46,12 +46,14 @@ public sealed class InMemoryActionRunStore : IActionRunStore
         }
     }
 
+    /// <summary>从挂起态恢复：取出即清除。语义与 SQLite 实现一致，见那边的注释。</summary>
     public ValueTask<RunCheckpoint?> ResumeAsync(string requestId, CancellationToken ct)
     {
         lock (_gate)
         {
             ResumeCount++;
-            return ValueTask.FromResult(_checkpoints.TryGetValue(requestId, out var cp) ? cp : null);
+            return ValueTask.FromResult(
+                _checkpoints.Remove(requestId, out var checkpoint) ? checkpoint : null);
         }
     }
 

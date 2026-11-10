@@ -13,6 +13,12 @@ namespace AgentWorkbench.Webapi.Actions;
 /// 关键约束：号必须在<b>重试之前</b>就存在。服务端收到请求才生成对重试无效——
 /// 那只会给重发那次再编一个新号，判重表仍然认不出。
 ///
+/// <b>范围</b>：这里说的重放是「同一动作请求重复送达」，由 <c>action_idempotency</c> 按
+/// requestId 收敛（HTTP 递单入口已验）。它<b>不等于</b>整段对话 run 的幂等：Hub 与
+/// <c>/api/harness/run</c> 都没有输入级去重，同一编号重复调用会跑两次 run。
+/// 要启用对话自动重发，须先在 Host 补输入级去重（键 = 认证主体 + 输入号，会话 id 此刻未定），
+/// 且去重写入失败必须拒绝本次 run。
+///
 /// 边界：Core 里 <c>ActionRequestId.Derive</c> 的「缺省回退随机号」保留不动。
 /// 本模块保证从三条 web 入口进入的请求号都齐全，那条回退因此不可达。
 /// 绕过 Host 直接调 Core（现存一处：Workflow 的 <c>AgentStepExecutor</c> 自己起 harness run）

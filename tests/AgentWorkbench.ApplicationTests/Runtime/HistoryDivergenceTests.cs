@@ -48,7 +48,11 @@ public sealed class HistoryDivergenceTests
     }
 
     /// <summary>
-    /// 建三张表：`conversations` / `messages`（照 M016 + M025）与 `chat_messages`（照 M031）。
+    /// 建三张表：`conversations` / `messages`（照 M016 + M025，外加 M032 的 `run_id`）
+    /// 与 `chat_messages`（照 M031）。
+    ///
+    /// 这份 DDL 是**手抄的**，不是跑迁移生成的：加列却忘了抄，会以
+    /// 「no column named xxx」的形式在这里炸掉——这正是它该做的事，别把报错改成关掉列。
     ///
     /// `ForeignKeys=True` 是生产行为（<c>StoragePaths</c> 写进连接串），
     /// 少了它 `DeleteAsync` 不会级联删 `messages`，X3 就验不出真实形状。
@@ -109,7 +113,8 @@ public sealed class HistoryDivergenceTests
                 conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
                 role            TEXT NOT NULL,
                 content         TEXT NOT NULL,
-                created_at      TEXT NOT NULL
+                created_at      TEXT NOT NULL,
+                run_id          INTEGER NULL
             )
             """;
         foreach (var statement in ChatHistorySchema.Statements)

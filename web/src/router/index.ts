@@ -6,6 +6,17 @@ const router = createRouter({
   routes: [
     { path: '/', name: 'documents', component: () => import('@/views/DocumentsView.vue') },
     { path: '/chat', name: 'chat', component: () => import('@/views/ChatView.vue') },
+    // 审批页不设 meta.admin：列表所有登录用户可见，批准/拒绝由服务端按角色拦。
+    // 界面提前收起按钮只是提示，不替代 `[Authorize(Roles="owner")]`。
+    { path: '/approvals', name: 'approvals', component: () => import('@/views/ApprovalsView.vue') },
+    // 追溯：产品判据②「任一动作能答谁/何时/看到什么/依据哪条规则/ERP 里变成什么」的入口。
+    // 独立一级页面，不从会话里钻进去——它要能脱离某次对话回答「系统在我这里做过什么」。
+    { path: '/actions', name: 'action-trace', component: () => import('@/views/ActionTraceView.vue') },
+    {
+      path: '/actions/:requestId',
+      name: 'action-detail',
+      component: () => import('@/views/ActionDetailView.vue'),
+    },
     { path: '/settings', name: 'settings', component: () => import('@/views/SettingsView.vue') },
     {
       path: '/admin',

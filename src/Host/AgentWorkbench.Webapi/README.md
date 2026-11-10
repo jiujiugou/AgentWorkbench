@@ -54,6 +54,12 @@
 **没改什么**：`src/Core` 行为零改动。`ActionRequestId.Derive` 的「缺省回退随机号」保留，从三条 web 入口
 都走不到；判重表、结果回放（`replayed_from_idempotency`）、超时只查证一律没动。
 
+**边界（动作判重 ≠ run 判重）**：`clientMessageId` 让 `requestId` 稳定，`action_idempotency`
+按它收敛的是**动作**。Hub 与 `/api/harness/run` 每次调用仍会建会话、落 user 消息、起一次完整
+run、写历史与轨迹；`Generations` 按连接、`ISessionRunGate` 只保同一时刻一个 run，两道都挡不住
+重发。因此当前对话入口不自动重发；要开，须先在 Host 补输入级去重（键 = 认证主体 + 输入号；
+会话 id 此刻尚未确定），且去重写入失败必须拒绝本次 run。这不是待办清单，是开启重放的前置条件。
+
 **已知代价（现存，不是待办，是取舍）**：`Core/Orchestration/Workflow/Steps/AgentStepExecutor.cs`
 自己调 `IAgentHarness.RunAsync` 且不建 `IActionSubjectScope`，模型在那条路上递动作**仍会退化成随机号**。
 它属于 Core 编排，按「解法只在 Host」的边界本次未动；要收口必须另定（改 Core 或在工作流运行时注入身份）。

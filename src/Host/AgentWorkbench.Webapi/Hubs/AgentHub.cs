@@ -25,7 +25,10 @@ namespace AgentWorkbench.Webapi.Hubs;
 /// <param name="ClientMessageId">
 /// 本次输入的客户端标识，由前端在点击发送时生成、在一次输入内保持不变。<b>必填</b>：
 /// 它是派生动作请求号的输入之一，缺失时 Hub 直接拒绝、不起 run、不落消息。
-/// 将来若加断线补发，重发必须复用同一次输入的值——服务端现编的号对重试无效。
+/// 当前对话入口没有自动重发。<b>若引入重放</b>，除了复用同一次输入的值（服务端现编的号对重试
+/// 无效），还必须先在本入口建输入级去重：键只能取认证主体 + 本值，此刻会话 id 尚未确定；
+/// <c>action_idempotency</c> 只按 requestId 护住动作，护不住整段 run，缺了这层去重就会
+/// 产生两条 user 消息、两次模型调用、两份轨迹。
 /// </param>
 public sealed record ChatRequest(
     string? ConversationId,
@@ -222,7 +225,7 @@ public sealed class AgentHub : Hub
                 }, linked.Token);
             }
 
-            await SaveAnswerAsync(conversation.Id, answer);
+            await SaveAnswerAsync(conversation.Id, answer, run?.RunId);
             if (!refused)
                 await PushCitationsAsync(messageId, answer.ToString(), evidence, linked.Token);
             await Clients.Caller.SendAsync("ReceiveDone", new
@@ -249,12 +252,12 @@ public sealed class AgentHub : Hub
             // 取消时 harness 的 Failed 事件常常送不进来（读端 token 已取消，await foreach 直接抛），
             // 所以终态要在这里补发一次，否则界面上的轨迹条永远停在「运行中」。
             await NotifyStoppedAsync(messageId, AgentRunStatus.Cancelled, "已停止生成。");
-            await SaveAnswerAsync(conversation?.Id, answer);
+            await SaveAnswerAsync(conversation?.Id, answer, run?.RunId);
             await SendErrorAsync("已停止生成。");
         }
         catch (Exception ex)
         {
-            await SaveAnswerAsync(conversation?.Id, answer);
+            await SaveAnswerAsync(conversation?.Id, answer, run?.RunId);
             _logger.LogError(ex, "生成失败：knowledgeMode={KnowledgeMode}", knowledgeMode);
             await SendErrorAsync(ex.Message);
         }
@@ -362,13 +365,16 @@ public sealed class AgentHub : Hub
         }
     }
 
-    private async Task SaveAnswerAsync(string? conversationId, StringBuilder answer)
+    private async Task SaveAnswerAsync(string? conversationId, StringBuilder answer, long? runId)
     {
         if (string.IsNullOrEmpty(conversationId) || answer.Length == 0)
             return;
         try
         {
-            await _conversations.AddMessageAsync(conversationId, "assistant", answer.ToString());
+            // runId 落到消息上，界面上「回看历史」才能顺着它找回当时的执行过程。
+            // 失败/取消轮可能还没拿到 run（HarnessRunResult 只在 Completed 时给出），此时为 null，
+            // 界面按「没有过程」显示——不按时间戳猜归属。
+            await _conversations.AddMessageAsync(conversationId, "assistant", answer.ToString(), runId);
         }
         catch (Exception ex)
         {

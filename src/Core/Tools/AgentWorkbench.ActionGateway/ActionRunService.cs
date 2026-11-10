@@ -131,6 +131,9 @@ public sealed class ActionRunService
         await WriteAsync(request, "approval", "deny", reason, null, null, ct);
         var result = ActionResults.Reject(requestId, ActionRejectionCodes.ApprovalDenied);
         await _store.SaveResultAsync(result, ct);
+        // 收口后离开待办队列。顺序放在落库之后：宁可留一条幽灵待办（再批会被幂等回放挡住），
+        // 也不要「队列清了但结果没落」——那才是真的丢单。
+        await _store.ResumeAsync(requestId, ct);
         return result;
     }
 
