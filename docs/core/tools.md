@@ -56,7 +56,7 @@ requestId = SHA256( conversationId | clientMessageId | actionKey | 规范化参�
 
 - 前三项来自宿主作用域（端口 `Core/Ports/ActionOriginProvider.cs`；Host 实现在 `Actions/ActionSubjectProvider.cs`，`AsyncLocal` 三元组，Hub 在**会话确定之后** `Begin`）。
 - 参数先规范化再参与计算：对象键排序、字符串走序列化器转义。**同一组参数换个键序必须算出同一个号**，否则「原样重试」会因为格式差异被当成新请求。
-- **`clientMessageId` 必填，由 Host 的三条 web 入口强制**（`Actions/InputIdentity.cs`）：SignalR 的 `ChatRequest`、HTTP 动作递单的 `ActionSubmitBody`、HTTP 直接起 run 的 `HarnessRunBody` 都要求非空，缺了直接拒绝、不起 run / 不进网关。**服务端现编的号对重试无效**——重发是另一次调用，只会再编一个新号。
+- **`clientMessageId` 必填，由 Host 的三条 web 入口强制**（`Actions/InputIdentity.cs`）：SignalR 的 `ChatRequest`、HTTP 动作递单的 `ActionSubmitBody`、HTTP 直接起 run 的 `HarnessRunBody` 都要求非空，缺了直接拒绝、不起 run / 不进网关。**服务端现编的号对重试无效**——重发是另一次调用，只会再编一个新号（这里说的是动作判重，不代表对话 run 幂等，见下表）。
 - 派生规则本身仍在 `Tools.Builtin/ActionRequestId.cs`（Core）。**`src/Core` 行为零改动**：Host 只补「必须先有身份」这一格，并复用同一套 Derive。HTTP 入口无会话，用归属 id 当隔离维度，且**不再接受客户端自报 `requestId` / `idempotencyKey`**。
 
 > **边界（2026-11-09 决定）**：超时重试 = 至少一次投递，这是 web 传输模型带来的必答题，
@@ -74,7 +74,8 @@ requestId = SHA256( conversationId | clientMessageId | actionKey | 规范化参�
 | 模型在同一次输入里**原样**重试同一个动作 | 挡住：同号 → 去重表回放既有结果（`replayed_from_idempotency`） |
 | 模型**改参数**重试 | 放行：参数变 → 新号。这是「修正」，不是「重复」 |
 | 用户手点两次发送 | 放行：前端每次生成新 `clientMessageId`，那是两次真实输入 |
-| 客户端断线补发（将来） | 只要复用同一个 `clientMessageId` 就能挡住。**当前前端没有自动重试，也没有复用逻辑**（每次 `dispatch` 新生成 uuid）；加补发时必须复用同一次输入的值 |
+| 客户端断线补发（将来） | **挡不住整段 run**。复用同一个 `clientMessageId` 只能让动作请求号稳定、`action_idempotency` 回放既有结果；Hub 仍会再建会话、再落 user 消息、再起一次 run、再写历史与轨迹。当前前端没有自动重发；要开，须先在 Host 补输入级去重（键 = 认证主体 + 输入号，会话 id 此刻未定），且终态事件要带回输入号 |
+| 同一 `clientMessageId` 重复调 `/api/harness/run` | 两次独立 run：本入口每次调用都现起 run，无会话时 sessionId 由 Host 现编 |
 | 请求**不带** `clientMessageId` | **拒绝**：`client_message_id_required`，零 run、零网关调用 |
 | HTTP 手工递单 | 现在由 Host 用同一套 Derive 派生；提交体只收 `ClientMessageId`，客户端不再自报判重键 |
 
