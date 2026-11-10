@@ -15,8 +15,6 @@ export type ConversationKind = 'knowledge' | 'general'
 export interface Conversation {
   id: string
   title: string
-  /** Python 侧创建时固定；C# 后端不返回，故可选。 */
-  kind?: ConversationKind
   createdAt: string
   updatedAt: string
 }
@@ -55,14 +53,6 @@ export interface ConversationMessage {
   runReason?: string | null
   /** Python 侧必有；C# 运行时为 undefined，store 侧用可选链兜底。 */
   citations: HistoryCitation[]
-}
-
-/** `/messages` 的外层。**不是裸数组**：引用按消息挂，外层还带会话类型，
- *  界面据此决定要不要显示“未使用企业资料”。 */
-export interface MessagesResponse {
-  conversationId: string
-  kind: ConversationKind
-  messages: ConversationMessage[]
 }
 
 // ── 轨迹 ──

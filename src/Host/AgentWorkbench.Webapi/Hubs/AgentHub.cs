@@ -41,11 +41,16 @@ public sealed record ChatRequest(
 /// 消息历史持久化到数据库，刷新/切换后可恢复。
 /// </summary>
 /// <remarks>
-/// 两条入口（普通对话 <see cref="Send"/> / 知识问答 <see cref="Ask"/>）走的是<b>同一条 harness 链路</b>：
-/// 同一 loop、同一执行控制、同一轨迹落库，差别只在注入的系统指令。
+/// 只有一个入口 <see cref="Send"/>：说什么由模型判断该查资料、该查系统、该提动作还是该直答。
+/// 曾经并列的第二条入口（<c>Ask</c>，知识问答）走的是<b>同一条 harness 链路</b>——同一 loop、
+/// 同一执行控制、同一轨迹落库，差别只在注入的一句系统指令。它不改变工具集，所以那个「选择」是假的：
+/// 选了「知识问答」照样能提动作，选了「通用对话」照样能检索。已删，指令改由
+/// <c>KnowledgeInstructions.Entry</c> 按意图分派。
+/// <para>
 /// 此前这里绕过 harness 直连对话 / 检索服务，于是「用户实际在用的这条路」既没有轨迹也没有预算，
 /// 评测一条都覆盖不到——这正是「验收假绿」的结构性来源。
-/// 来源面板改由工具完成事件驱动（模型调 <c>search_knowledge</c> 时推送），不再依赖服务端预检索。
+/// 来源面板由工具完成事件驱动（模型调 <c>search_knowledge</c> 时推送），不依赖服务端预检索。
+/// </para>
 /// </remarks>
 public sealed class AgentHub : Hub
 {
@@ -76,15 +81,12 @@ public sealed class AgentHub : Hub
     }
 
     /// <summary>发送一条消息并流式接收回复。</summary>
-    public Task Send(ChatRequest request) => RunAsync(request, knowledgeMode: false);
-
-    /// <summary>知识问答：模型需要依据时会调用 search_knowledge，命中来源随工具完成事件推送。</summary>
-    public Task Ask(ChatRequest request) => RunAsync(request, knowledgeMode: true);
+    public Task Send(ChatRequest request) => RunAsync(request);
 
     /// <summary>
-    /// 两条入口的共同实现：建/取会话 → 起一次 harness 流 → 按事件推进前端。
+    /// 唯一入口的实现：建/取会话 → 起一次 harness 流 → 按事件推进前端。
     /// </summary>
-    private async Task RunAsync(ChatRequest request, bool knowledgeMode)
+    private async Task RunAsync(ChatRequest request)
     {
         var messageId = Guid.NewGuid().ToString("N");
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(Context.ConnectionAborted);
@@ -156,7 +158,7 @@ public sealed class AgentHub : Hub
         // conversationId 同时就是 harness 的 sessionId：一个会话一份跨 run 记忆。
             // 消息正文另存对话表，专供界面恢复（会话快照是模型记忆，两者职责不同，不重复读）。
             var runRequest = new HarnessRunRequest(
-                conversation.Id, request.Text, ResolveInstructions(knowledgeMode));
+                conversation.Id, request.Text, ResolveInstructions());
 
             await foreach (var evt in _harness.StreamAsync(runRequest, linked.Token))
             {
@@ -258,7 +260,7 @@ public sealed class AgentHub : Hub
         catch (Exception ex)
         {
             await SaveAnswerAsync(conversation?.Id, answer, run?.RunId);
-            _logger.LogError(ex, "生成失败：knowledgeMode={KnowledgeMode}", knowledgeMode);
+            _logger.LogError(ex, "生成失败");
             await SendErrorAsync(ex.Message);
         }
         finally
@@ -267,14 +269,19 @@ public sealed class AgentHub : Hub
         }
     }
 
-    /// <summary>本次 run 的系统指令：知识模式用检索-引用规范，普通模式用设置页里的系统提示词。</summary>
-    private string? ResolveInstructions(bool knowledgeMode)
+    /// <summary>
+    /// 本次 run 的系统指令：按意图分派的通用规范放在前面，设置页里的自定义提示词接在后面。
+    /// </summary>
+    /// <remarks>
+    /// 顺序是刻意的：规范先出现，模型先看到「哪些事不能编」；用户提示词属于个性化约束，
+    /// 放在后面补足语气与风格。反过来（用户提示词在前）容易被读成「这些规矩可以覆盖」。
+    /// </remarks>
+    private string ResolveInstructions()
     {
-        if (knowledgeMode)
-            return KnowledgeInstructions.AnswerWithCitations;
-
         var prompt = _providerOptions.SystemPrompt;
-        return string.IsNullOrWhiteSpace(prompt) ? null : prompt;
+        return string.IsNullOrWhiteSpace(prompt)
+            ? KnowledgeInstructions.Entry
+            : KnowledgeInstructions.Entry + "\n\n" + prompt;
     }
 
     /// <summary>

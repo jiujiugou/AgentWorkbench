@@ -38,7 +38,6 @@ async function onDelete(id: string, title: string): Promise<void> {
       @keydown.enter="agent.selectConversation(c.id)"
     >
       <el-icon class="conv-icon"><ChatDotSquare /></el-icon>
-      <span class="conv-kind" :class="c.kind">{{ c.kind === 'general' ? '通用' : '知识库' }}</span>
       <span class="conv-title">{{ agent.titleFor(c) }}</span>
       <button
         class="conv-del"
@@ -139,21 +138,6 @@ async function onDelete(id: string, title: string): Promise<void> {
 .conv-item.active .conv-icon,
 .conv-item:hover .conv-icon {
   color: inherit;
-}
-
-.conv-kind {
-  flex: none;
-  font-size: 10.5px;
-  line-height: 1.4;
-  padding: 1px 5px;
-  border-radius: 5px;
-  color: var(--aw-text-3);
-  background: var(--aw-surface-3);
-}
-
-.conv-kind.general {
-  color: var(--aw-primary);
-  background: var(--el-color-primary-light-9);
 }
 
 .conv-title {

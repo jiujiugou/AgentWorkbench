@@ -139,7 +139,7 @@ function pageLabel(s: RetrievalSource): string {
         </div>
         <template v-else-if="message.role === 'assistant'">
           <div v-if="mode === 'general'" class="general-note">
-            <span class="general-tag">通用对话</span>
+            <span class="general-tag">直答</span>
             <span class="general-text">未使用企业资料</span>
           </div>
           <div v-if="supportNote" class="support-note">
@@ -731,8 +731,8 @@ function pageLabel(s: RetrievalSource): string {
 }
 
 /* ---------- 无资料支撑 ---------- */
-/* 通用对话的合同标识：它不是“资料不足”，也不是拒答；它只是明确告诉
-   读者这条回答没有企业资料依据。与知识库回答必须一眼可分（D-V2）。 */
+/* 直答的合同标识：它不是“资料不足”，也不是拒答；它只是明确告诉读者这条回答
+   没有引用企业资料——跑完后一条来源都没有，才打这个标（见 stores/agent.ts 的 ReceiveDone）。 */
 .general-note {
   display: flex;
   align-items: baseline;

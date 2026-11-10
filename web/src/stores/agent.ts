@@ -23,7 +23,10 @@ export interface ChatMessage {
    * `running` + 空正文 = 那一轮没跑完（进程可能已中断），与“跑完但空”分开显示。
    */
   runStatus?: string | null
-  /** 这条消息所属会话的答案合同。general 时界面必须标“未使用企业资料”。 */
+  /**
+   * 这条回答有没有引用企业资料。**是跑完之后的事实，不是用户选的模式**：
+   * 全程没有来源、也不是拒答，才标 general，界面据此显示「直答 · 未使用企业资料」。
+   */
   mode?: ConversationKind
 }
 
@@ -43,8 +46,6 @@ export const useAgentStore = defineStore('agent', () => {
   const status = ref<ConnectionStatus>('disconnected')
   const messages = ref<ChatMessage[]>([])
   const generating = ref(false)
-  /** C# 后端由 Hub 用 messageId 创建助手消息，入口模式要在建消息时就带上。 */
-  let activeMode: 'knowledge' | 'general' = 'knowledge'
   const conversationId = ref<string | null>(null)
   const conversations = ref<Conversation[]>([])
   const sources = ref<Record<string, RetrievalSource[]>>({})
@@ -103,14 +104,13 @@ export const useAgentStore = defineStore('agent', () => {
     try {
       const history = await conversationsApi.messages(id)
       conversationId.value = id
-      messages.value = history.map((m) => ({
+      const rows: ChatMessage[] = history.map((m) => ({
         id: String(m.id),
         role: m.role,
         content: m.content,
         runStatus: m.runStatus,
-        // C# 不在会话里存 kind；历史消息统一按知识库入口渲染
-        mode: 'knowledge',
       }))
+      messages.value = rows
 
       // 逐条恢复"答案 + 依据 + 过程"三块，而不是只恢复正文。
       //
@@ -128,6 +128,13 @@ export const useAgentStore = defineStore('agent', () => {
         if (cards.length) nextSources[key] = cards
         const report = m.citations?.length ? historyReport(m) : null
         if (report) nextCitations[key] = report
+
+        // 「未使用企业资料」是事后结论，不是用户选项：库里留着引用快照才算有依据。
+        // 拒答不打这个标——它已经在说「资料不足」，再叠一句会变成两个相反的解释。
+        const row = rows.find((r) => r.id === key)
+        if (row && m.runStatus !== 'refused') {
+          row.mode = cards.length ? 'knowledge' : 'general'
+        }
 
         // 拒答要在重开之后**还是拒答**（C-V13）。
         //
@@ -294,7 +301,7 @@ export const useAgentStore = defineStore('agent', () => {
   function findOrCreate(messageId: string): ChatMessage {
     let msg = messages.value.find((m) => m.id === messageId)
     if (!msg) {
-      msg = { id: messageId, role: 'assistant', content: '', pending: true, mode: activeMode }
+      msg = { id: messageId, role: 'assistant', content: '', pending: true }
       messages.value.push(msg)
     }
     return msg
@@ -377,7 +384,12 @@ export const useAgentStore = defineStore('agent', () => {
     })
 
     conn.on('ReceiveDone', (p: { messageId: string; conversationId?: string; run?: RunSummary | null }) => {
-      findOrCreate(p.messageId).pending = false
+      const msg = findOrCreate(p.messageId)
+      msg.pending = false
+      // 收尾时才判「这条回答有没有企业资料依据」：跑完仍没有来源、也不是拒答，
+      // 就是直答。放在这里而不是发送时，是因为发送时还不知道模型会不会检索。
+      if (!refusals.value[p.messageId] && !sources.value[p.messageId]?.length) msg.mode = 'general'
+      else if (sources.value[p.messageId]?.length) msg.mode = 'knowledge'
       if (p.run) runs.value[p.messageId] = p.run
       if (p?.conversationId) setConversationFromDone(p.conversationId)
       generating.value = false
@@ -447,21 +459,23 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   /**
-   * 发送。C# 后端是 SignalR `/hubs/agent` 的 Send / Ask，
-   * 不是 Python 侧的 POST /api/knowledge/ask 与 /api/chat。
-   * 接收侧（connect 里的全部 ReceiveXxx）本来就是为这条链路写的，一行不改。
+   * 发送。唯一入口，走 SignalR `/hubs/agent` 的 `Send`。
+   *
+   * 曾经这里有 `Send` / `Ask` 两条：用户自己选「通用对话」还是「知识库问答」。
+   * 两者走的是同一个工具环、同一个模型、同一条流，唯一差别是一句系统提示——
+   * 用户以为选的是通道，实际只选了措辞。开关已删，语言里说什么由系统判断。
+   * 接收侧（connect 里的全部 ReceiveXxx）一行不改。
    */
-  async function dispatch(method: 'Send' | 'Ask', text: string): Promise<void> {
+  async function dispatch(text: string): Promise<void> {
     const content = text.trim()
     if (!content || generating.value) return
 
     await connect()
     messages.value.push({ id: crypto.randomUUID(), role: 'user', content })
     generating.value = true
-    activeMode = method === 'Ask' ? 'knowledge' : 'general'
 
     try {
-      await connection.value!.invoke(method, {
+      await connection.value!.invoke('Send', {
         conversationId: conversationId.value,
         text: content,
         history: [],
@@ -482,8 +496,7 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
-  const send = (text: string) => dispatch('Send', text)
-  const ask = (text: string) => dispatch('Ask', text)
+  const send = (text: string) => dispatch(text)
 
   /** 停止走 Hub 的 Stop；Python 侧那条 POST /api/runs/cancel 在 C# 后端不存在。 */
   async function stop(): Promise<void> {
@@ -528,7 +541,6 @@ export const useAgentStore = defineStore('agent', () => {
     conversationId,
     connect,
     send,
-    ask,
     stop,
     // 会话
     conversations,

@@ -18,42 +18,9 @@ const atBottom = ref(true)
 const hasModels = computed(() => agent.modelOptions.length > 0)
 const providersWithModels = computed(() => agent.providers.filter((p) => p.models.length > 0))
 
-const activeConversation = computed(() =>
-  agent.conversations.find((c) => c.id === agent.conversationId),
-)
-
-/**
- * 当前入口。有会话时以会话的 `kind` 为准——刷新、路由切回、重开页面都不能
- * 让知识库会话被显示成通用入口；没有会话时，才是用户为下一条新会话选的入口。
- * 产品默认入口是知识库问答。
- */
-const knowledgeMode = ref(activeConversation.value?.kind !== 'general')
-
-watch(
-  () => activeConversation.value?.kind,
-  (kind) => {
-    if (kind) knowledgeMode.value = kind === 'knowledge'
-  },
-  { immediate: true },
-)
-
-/**
- * 真正决定这一条消息发往哪个入口的值。当前会话存在时永远跟着会话类型，
- * 不跟顶部开关走：开关只负责“下一条新会话”，不能让旧会话的答案合同漂移。
- */
-// C# 后端不在会话里存 kind；沿用「会话存在时以 kind 为准」会让入口恒为通用对话，
-// 知识库开关形同虚设。这里只看当前开关。
-const sendToKnowledge = computed(() => knowledgeMode.value)
-
-function setMode(knowledge: boolean): void {
-  if (sendToKnowledge.value === knowledge) return
-  if (agent.generating) {
-    ElMessage.warning('生成中，请先停止或等待完成')
-    return
-  }
-  knowledgeMode.value = knowledge
-  agent.newChat()
-}
+// 只有一个入口：说什么由模型判断该查资料、该查系统还是该直答。
+// 曾经这里有一个「通用对话 / 知识库问答」开关，它不改变工具集、只改一句措辞，
+// 给的是一个不存在的选择权——已删。
 
 const currentTitle = computed(() => {
   const c = agent.conversations.find((x) => x.id === agent.conversationId)
@@ -99,7 +66,7 @@ async function handleSend(text?: string): Promise<void> {
   input.value = ''
   void nextTick(autoResize)
   atBottom.value = true
-  await (sendToKnowledge.value ? agent.ask(content) : agent.send(content))
+  await agent.send(content)
 }
 
 function onKeydown(e: KeyboardEvent): void {
@@ -147,17 +114,9 @@ onMounted(() => {
     <header class="chat-header">
       <div class="chat-heading">
         <h1 class="chat-title" :title="currentTitle">{{ currentTitle }}</h1>
-        <span class="mode-badge" :class="{ general: !knowledgeMode }">
-          {{ knowledgeMode ? '知识库问答' : '通用对话 · 未使用企业资料' }}
-        </span>
       </div>
 
       <div class="chat-actions">
-        <div class="mode-toggle">
-          <button :class="{ on: !knowledgeMode }" @click="setMode(false)">通用对话</button>
-          <button :class="{ on: knowledgeMode }" @click="setMode(true)">知识库问答</button>
-        </div>
-
         <el-select
           v-if="hasModels"
           v-model="agent.selectedModelId"
@@ -195,7 +154,7 @@ onMounted(() => {
             <el-icon><MagicStick /></el-icon>
           </div>
           <h2>有什么可以帮忙的？</h2>
-          <p>「知识库问答」会在需要时检索知识库并给出引用来源；「通用对话」直接聊天并明确标注未使用企业资料。</p>
+          <p>涉及企业资料会自动检索并标注出处；需要查询或改动企业系统时会先向你确认。</p>
           <div class="suggestions">
             <button v-for="s in QUICK_STARTS" :key="s" class="suggestion" @click="handleSend(s)">
               {{ s }}
@@ -299,57 +258,11 @@ onMounted(() => {
   white-space: nowrap;
 }
 
-.mode-badge {
-  flex: none;
-  font-size: 11.5px;
-  color: var(--aw-primary);
-  background: var(--el-color-primary-light-9);
-  border-radius: var(--aw-radius-full);
-  padding: 2px 10px;
-}
-
-.mode-badge.general {
-  color: var(--aw-text-2);
-  background: var(--aw-surface-3);
-  border: 1px solid var(--aw-border);
-}
-
 .chat-actions {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-}
-
-.mode-toggle {
-  display: inline-flex;
-  gap: 2px;
-  padding: 3px;
-  background: var(--aw-surface-3);
-  border-radius: var(--aw-radius-full);
-}
-
-.mode-toggle button {
-  border: none;
-  background: transparent;
-  padding: 5px 14px;
-  border-radius: var(--aw-radius-full);
-  font-size: 12.5px;
-  color: var(--aw-text-2);
-  cursor: pointer;
-  transition: background-color var(--aw-dur) var(--aw-ease), color var(--aw-dur) var(--aw-ease),
-    box-shadow var(--aw-dur) var(--aw-ease);
-}
-
-.mode-toggle button:hover {
-  color: var(--aw-text);
-}
-
-.mode-toggle button.on {
-  background: var(--aw-surface);
-  color: var(--aw-primary);
-  font-weight: 550;
-  box-shadow: var(--aw-shadow-1);
 }
 
 .model-select {
