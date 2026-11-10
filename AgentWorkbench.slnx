@@ -18,6 +18,7 @@
   <Folder Name="/src/Core/Tools/">
     <Project Path="src/Core/Tools/AgentWorkbench.Tools.Abstractions/AgentWorkbench.Tools.Abstractions.csproj" />
     <Project Path="src/Core/Tools/AgentWorkbench.Tools.Builtin/AgentWorkbench.Tools.Builtin.csproj" />
+    <Project Path="src/Core/Tools/AgentWorkbench.Tools.Mcp/AgentWorkbench.Tools.Mcp.csproj" />
     <Project Path="src/Core/Tools/AgentWorkbench.ActionGateway/AgentWorkbench.ActionGateway.csproj" />
   </Folder>
   <Folder Name="/src/Core/Knowledge/">

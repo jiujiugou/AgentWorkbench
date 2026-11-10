@@ -12,6 +12,7 @@ using AgentWorkbench.Persistence;
 using AgentWorkbench.Runtime.Model;
 using AgentWorkbench.Runtime.Tools;
 using AgentWorkbench.Tools.Builtin;
+using AgentWorkbench.Tools.Mcp;
 using AgentWorkbench.Webapi.Actions;
 using AgentWorkbench.Webapi.Auth;
 using AgentWorkbench.Webapi.Hubs;
@@ -41,6 +42,8 @@ builder.Services.AddNitroModelRuntime(builder.Configuration);
 builder.Services.AddNitroContext(builder.Configuration);
 builder.Services.AddNitroToolExecution(builder.Configuration);
 builder.Services.AddNitroBuiltinTools();
+// 外部工具来源：MCP server。默认关闭（Mcp:Enabled=false 时启动期不连任何 server）。
+builder.Services.AddNitroMcp(builder.Configuration);
 builder.Services.AddNitroConversation(builder.Configuration);
 builder.Services.AddNitroKnowledge(builder.Configuration);
 builder.Services.AddNitroDocuments(builder.Configuration);

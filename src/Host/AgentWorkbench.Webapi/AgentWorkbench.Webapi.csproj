@@ -25,6 +25,7 @@
     <ProjectReference Include="..\..\Core\Runtime\AgentWorkbench.Runtime.Model\AgentWorkbench.Runtime.Model.csproj" />
     <ProjectReference Include="..\..\Core\Runtime\AgentWorkbench.Runtime.Tools\AgentWorkbench.Runtime.Tools.csproj" />
     <ProjectReference Include="..\..\Core\Tools\AgentWorkbench.Tools.Builtin\AgentWorkbench.Tools.Builtin.csproj" />
+    <ProjectReference Include="..\..\Core\Tools\AgentWorkbench.Tools.Mcp\AgentWorkbench.Tools.Mcp.csproj" />
     <ProjectReference Include="..\..\Core\Runtime\AgentWorkbench.Runtime.Session\AgentWorkbench.Runtime.Session.csproj" />
     <ProjectReference Include="..\..\Core\Memory\AgentWorkbench.Memory.Persistence\AgentWorkbench.Memory.Persistence.csproj" />
     <ProjectReference Include="..\..\Core\Engineering\AgentWorkbench.Observability\AgentWorkbench.Observability.csproj" />
