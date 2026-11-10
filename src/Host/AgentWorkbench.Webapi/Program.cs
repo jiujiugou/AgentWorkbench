@@ -142,6 +142,35 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<AgentHub>("/hubs/agent");
 
+// SPA 深链接（/approvals、/actions/{id}）刷新时不能 404：那是前端路由，不是后端接口。
+// 不配这一段的话，`localhost:8080` 能打开首页，但只要刷新任何一页就变成空白——
+// 而「首页好看、一刷新就炸」是最容易被当成偶发问题放过去的一种。
+//
+// /api 与 /hubs 刻意不参与回退：它们的 404 必须如实返回。若被 index.html 盖掉，
+// 调试时看到的是「接口 200 + 一页 HTML」，那是最难查的形态。
+app.MapFallback(async context =>
+{
+    if (context.Request.Path.StartsWithSegments("/api") || context.Request.Path.StartsWithSegments("/hubs"))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+
+    var webRoot = app.Environment.WebRootPath;
+    var indexPath = string.IsNullOrEmpty(webRoot) ? null : Path.Combine(webRoot, "index.html");
+    if (indexPath is null || !File.Exists(indexPath))
+    {
+        // 明确说「没构建过」，不要回一页空白让人去翻浏览器控制台。
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        context.Response.ContentType = "text/plain; charset=utf-8";
+        await context.Response.WriteAsync("前端未构建：先执行 cd web && npm run build");
+        return;
+    }
+
+    context.Response.ContentType = "text/html; charset=utf-8";
+    await context.Response.SendFileAsync(indexPath);
+});
+
 app.Run();
 
 /// <summary>

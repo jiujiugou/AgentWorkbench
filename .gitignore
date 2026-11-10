@@ -7,6 +7,11 @@ obj/
 node_modules/
 dist/
 
+# 前端构建产物：vite 直接输出到后端的静态目录（web/vite.config.ts 的 build.outDir），
+# `npm run build` 即发布。产物不入库——它和源码一一对应，提交它只会在每次改动时
+# 塞进一堆带 hash 的文件名。
+src/Host/AgentWorkbench.Webapi/wwwroot/
+
 # Runtime data / logs
 data/
 logs/
