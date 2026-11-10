@@ -269,8 +269,8 @@ public sealed class ProposeActionToolTests
     public async Task P14_没有来源标识时退化为一次性请求号()
     {
         // 事实锁定：Core 侧的 Derive 仍保留「没有来源标识就退化成一次性号」这条回退。
-        // 这是 Core 内部行为，不是 web 生产路径——Host 的三条入口都要求 clientMessageId 必填，
-        // 从那里进来走不到这个分支（唯一例外是 Workflow 的 AgentStepExecutor，它绕过 Host）。
+        // 这是 Core 内部行为，不是 web 生产路径——Host 的入口都要求 clientMessageId 必填，
+        // 从那里进来走不到这个分支（目前没有绕过 Host 的调用方）。
         // 见 src/Host/AgentWorkbench.Webapi/README.md「输入身份契约」。
         // 断言保留：绝不能退化成「所有请求共用一个号」——那会把不重复执行变成不执行。
         var (tool, set, _, _, _) = Create(origin: null);

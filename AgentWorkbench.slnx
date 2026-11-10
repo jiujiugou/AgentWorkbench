@@ -15,9 +15,6 @@
     <Project Path="src/Core/Runtime/AgentWorkbench.Runtime.Session/AgentWorkbench.Runtime.Session.csproj" />
     <Project Path="src/Core/Runtime/AgentWorkbench.Runtime.Tools/AgentWorkbench.Runtime.Tools.csproj" />
   </Folder>
-  <Folder Name="/src/Core/Orchestration/">
-    <Project Path="src/Core/Orchestration/AgentWorkbench.Workflow/AgentWorkbench.Workflow.csproj" />
-  </Folder>
   <Folder Name="/src/Core/Tools/">
     <Project Path="src/Core/Tools/AgentWorkbench.Tools.Abstractions/AgentWorkbench.Tools.Abstractions.csproj" />
     <Project Path="src/Core/Tools/AgentWorkbench.Tools.Builtin/AgentWorkbench.Tools.Builtin.csproj" />

@@ -38,8 +38,6 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<IAgentRunRepository, AgentRunRepository>();
         services.AddSingleton<IConversationRepository, ConversationRepository>();
         services.AddSingleton<ITenantRepository, TenantRepository>();
-        services.AddSingleton<IWorkflowRepository, WorkflowRepository>();
-        services.AddSingleton<IWorkflowIdempotencyStore, WorkflowIdempotencyStore>();
 
         services.AddFluentMigratorCore()
             .ConfigureRunner(runner => runner

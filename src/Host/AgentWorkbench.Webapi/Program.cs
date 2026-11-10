@@ -12,7 +12,6 @@ using AgentWorkbench.Persistence;
 using AgentWorkbench.Runtime.Model;
 using AgentWorkbench.Runtime.Tools;
 using AgentWorkbench.Tools.Builtin;
-using AgentWorkbench.Workflow;
 using AgentWorkbench.Webapi.Actions;
 using AgentWorkbench.Webapi.Auth;
 using AgentWorkbench.Webapi.Hubs;
@@ -50,11 +49,8 @@ builder.Services.AddNitroMemoryPersistence(builder.Configuration);
 builder.Services.AddNitroObservability();
 builder.Services.AddNitroAgentLoop(builder.Configuration);
 builder.Services.AddNitroAgentHarness(builder.Configuration);
-builder.Services.AddNitroWorkflow(builder.Configuration);
 // M1 受控动作链：四道校验 → 挂起审批 → 执行 → 审计。换域只改 Actions:ActionSet。
 builder.Services.AddNitroActions(builder.Configuration);
-// 用 SignalR 覆盖 Workflow 模块的默认空进度通知
-builder.Services.AddSingleton<IWorkflowProgressNotifier, SignalRWorkflowProgressNotifier>();
 
 // MaximumParallelInvocationsPerClient 默认 1：同一连接上的 Hub 方法是串行的。
 // 串行意味着「生成中」时 Stop() 排在 Send() 后面永远轮不到——停止按钮成了摆设
@@ -126,7 +122,6 @@ var app = builder.Build();
 // 启动即迁移，并种子默认供应商
 app.InitializeDatabase();
 await app.Services.SeedDefaultProviderAsync();
-await app.Services.SeedWorkflowAsync();
 await app.Services.SeedDemoIdentityAsync();
 
 app.UseSerilogRequestLogging();
@@ -146,7 +141,6 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<AgentHub>("/hubs/agent");
-app.MapHub<WorkflowHub>("/hubs/workflow");
 
 app.Run();
 

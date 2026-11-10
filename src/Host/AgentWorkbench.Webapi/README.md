@@ -6,16 +6,15 @@
 
 | 文件 | 说明 |
 | --- | --- |
-| `Program.cs` | 组合根：模块注册（`AddNitroPersistence/Safety/Providers/ModelRuntime/ToolExecution/Conversation/Knowledge/Documents/Context/Memory/MemoryPersistence/Observability/AgentLoop/AgentHarness/Workflow`）、Serilog、64MB 上传上限、启动即迁移 + 种子默认供应商与工作流、静态文件 + SPA、CORS、映射 Controllers 与 Hub |
+| `Program.cs` | 组合根：模块注册（`AddNitroPersistence/Providers/ModelRuntime/Context/ToolExecution/BuiltinTools/Conversation/Knowledge/Documents/Memory/MemoryPersistence/Observability/AgentLoop/AgentHarness/Actions`）、Serilog、64MB 上传上限、启动即迁移 + 种子默认供应商与演示身份、静态文件 + SPA、CORS、映射 Controllers 与 Hub |
 | `Controllers/HealthController.cs` | 健康检查 |
 | `Controllers/DocumentsController.cs` | P0 文档：上传 / 列表 / 详情 / 页 / 块 / 重解析 / 删除 / 下载原始 PDF |
 | `Controllers/KnowledgeController.cs` | P1 知识库：健康 / 索引 / 检索 / 带引用问答 |
 | `Controllers/SettingsController.cs` | 供应商与模型 CRUD / 激活 / 拉取模型 / 连通测试 |
 | `Controllers/ConversationsController.cs` | 会话列表 / 新建 / 消息 / 删除 |
-| `Controllers/HarnessController.cs` | Agent Harness：健康 / 运行 / 运行详情 |
-| `Controllers/WorkflowController.cs` | 工作流：定义 / 运行 / 步骤 / 单步重跑 / 取消 / 恢复 / 提示词版本 |
+| `Controllers/HarnessController.cs` | Agent Harness 只读：健康 / 运行详情（起 run 的 HTTP 入口已移除，见下节） |
+| `Controllers/ActionsController.cs` | 受控动作：提交 / 待审批 / 批准 / 拒绝 / 详情 / 审计 / 历史列表 |
 | `Hubs/AgentHub.cs` | SignalR 对话：`Send`（普通对话）、`Ask`（RAG 问答）、`Stop`（停止生成）；事件 `ReceiveConversation/ReceiveDelta/ReceiveTool/ReceiveSources/ReceiveRefusal/ReceiveDone/ReceiveCitations/ReceiveStopped/Error` |
-| `Hubs/WorkflowHub.cs` | 工作流步骤级进度推送（`/hubs/workflow`） |
 
 ## 界面投影（本模块独有的职责）
 
@@ -38,43 +37,44 @@
 换 CLI / 定时任务根本没有重放这回事——**这是 web 宿主特有的面，解法只在 Host，不进 `src/Core`**：
 换域 diff = 0，非 web 宿主也不必伪造输入号。这条边界是 2026-11-09 定下的。
 
-**落在哪**：`Actions/InputIdentity.cs` 是唯一守卫，三条 web 入口都调它。
+**落在哪**：`Actions/InputIdentity.cs` 是唯一守卫，两条会起工具环的 web 入口都调它。
 
 - `Hubs/AgentHub.cs`：`ChatRequest.ClientMessageId` 必填。判空在 `Generations.TryAdd` **之前**——
   缺了不建会话、不落 user 消息、不探活、不起 run、不建身份作用域。
 - `Controllers/ActionsController.cs`：`ActionSubmitBody.ClientMessageId` 必填，缺了返回 400 +
   `client_message_id_required`。提交体**不再收 `RequestId` / `IdempotencyKey`**（客户端自报最终判重键
   等于把判重权交出去）；请求号由 Host 用 `InputIdentity.Derive` 算，无会话入口用归属 id 当隔离维度。
-- `Controllers/HarnessController.cs`：`HarnessRunBody.ClientMessageId` 必填。这条入口**不构造
-  `ActionRequest`，但会起工具环**——漏了它，模型在里面调 `propose_action` 照样退化成随机号。
-  无会话时由 Host 生成 sessionId，并用同一个值 `Begin` 短作用域包住 `RunAsync`。
 - `Actions/ActionSubjectProvider.cs`：`Begin` 的会话与消息标识改为必填，作用域内身份必非空，
   工具环里的 `IActionOriginProvider` 因而拿得到「这是哪一次输入」。
 
-**没改什么**：`src/Core` 行为零改动。`ActionRequestId.Derive` 的「缺省回退随机号」保留，从三条 web 入口
+**已关掉的一条入口**：v1 的 `POST /api/harness/run` 于 2026-11-09 移除。它能绕过会话直接起工具环，
+等于给动作执行开了一个没有对话上下文、也不需要审批的侧门。`HarnessController` 现在只剩
+`GET /api/harness/health` 与 `GET /api/harness/runs/{id}` 两个只读口，H11 用反射锁住「该类不得再出现 `[HttpPost]`」。
+
+**没改什么**：`src/Core` 行为零改动。`ActionRequestId.Derive` 的「缺省回退随机号」保留，从这两条 web 入口
 都走不到；判重表、结果回放（`replayed_from_idempotency`）、超时只查证一律没动。
 
 **边界（动作判重 ≠ run 判重）**：`clientMessageId` 让 `requestId` 稳定，`action_idempotency`
-按它收敛的是**动作**。Hub 与 `/api/harness/run` 每次调用仍会建会话、落 user 消息、起一次完整
-run、写历史与轨迹；`Generations` 按连接、`ISessionRunGate` 只保同一时刻一个 run，两道都挡不住
-重发。因此当前对话入口不自动重发；要开，须先在 Host 补输入级去重（键 = 认证主体 + 输入号；
+按它收敛的是**动作**。Hub 每次调用仍会建会话、落 user 消息、起一次完整 run、写历史与轨迹；
+`Generations` 按连接、`ISessionRunGate` 只保同一时刻一个 run，两道都挡不住重发。
+因此当前对话入口不自动重发；要开，须先在 Host 补输入级去重（键 = 认证主体 + 输入号；
 会话 id 此刻尚未确定），且去重写入失败必须拒绝本次 run。这不是待办清单，是开启重放的前置条件。
 
-**已知代价（现存，不是待办，是取舍）**：`Core/Orchestration/Workflow/Steps/AgentStepExecutor.cs`
-自己调 `IAgentHarness.RunAsync` 且不建 `IActionSubjectScope`，模型在那条路上递动作**仍会退化成随机号**。
-它属于 Core 编排，按「解法只在 Host」的边界本次未动；要收口必须另定（改 Core 或在工作流运行时注入身份）。
-其它绕过 Host 直调 Core 的新入口同理。**新增任何动作入口前，先回到本节把身份放进作用域或调用
-`InputIdentity.Derive`。**
+**新增动作入口前**，先回到本节把身份放进作用域或调用 `InputIdentity.Derive`。
+v1 的 Workflow `AgentStepExecutor` 曾绕过 Host 直调 `IAgentHarness.RunAsync`（身份退化成随机号），
+该模块已于 2026-11-10 连同 `WorkflowHub` 一并删除，这条已知代价随之消失。
 
-**怎么验**：`dotnet test tests/AgentWorkbench.ApplicationTests/AgentWorkbench.ApplicationTests.csproj --no-restore --filter "FullyQualifiedName~InputIdentityContractTests"`（H1–H10）。
-H1/H3/H9 锁「三条入口缺身份零副作用」，H2/H8/H10 锁「身份真的进作用域」，H4 锁「同号重放只执行一次」，
-H5 锁「换一次输入仍是新请求」（防误杀真实需求），H6 锁键序 / 参数语义，H7 锁提交体形状。
-负控：删掉任一入口判空 → H1/H3/H9 红；把 `Derive` 改回随机 → H4/H6 红。
+**怎么验**：`dotnet test tests/AgentWorkbench.ApplicationTests/AgentWorkbench.ApplicationTests.csproj --no-restore --filter "FullyQualifiedName~InputIdentityContractTests"`（H1–H8、H11）。
+H1/H3 锁「两条入口缺身份零副作用」，H2/H8 锁「身份真的进作用域」，H4 锁「同号重放只执行一次」，
+H5 锁「换一次输入仍是新请求」（防误杀真实需求），H6 锁键序 / 参数语义，H7 锁提交体形状，
+H11 锁「产品后端不得再暴露 HTTP 起 run 入口」。
+负控：删掉任一入口判空 → H1/H3 红；把 `Derive` 改回随机 → H4/H6 红。
 
 ## 依赖
 
-全部模块（组合根是唯一允许依赖所有模块的地方）：Shared、Domain、Persistence、Documents、Knowledge、Providers、
-ModelRuntime、ToolExecution、Safety、AgentLoop、Context、Memory、Memory.Persistence、Observability、Conversation、AgentHarness、Workflow。
+全部模块（组合根是唯一允许依赖所有模块的地方）：Shared、Domain、Persistence、Documents、Knowledge、
+ModelRuntime、ToolExecution、AgentLoop、Context、Memory、Memory.Persistence、Observability、Conversation、
+AgentHarness、Ports、ActionGateway、Erp、FakeActionSet、Gitea。
 反向依赖**目前只由 csproj 保证**：`tests/AgentWorkbench.ArchitectureTests` 源码为空，
 旧文里写的 `LayeringTests.Modules_should_not_depend_on_webapi` 不存在，改引用时不会有任何东西变红，
 需人工确认。

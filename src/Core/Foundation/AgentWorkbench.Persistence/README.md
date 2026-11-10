@@ -29,19 +29,24 @@
 | M014 / M022 | `agent_runs`（+ `error_code`） | 一次 Harness run 的状态与归类码 |
 | M015 / M021 | `agent_steps`（+ `error`） | run 的每一步：工具 / 参数 / 结果 / 失败原因 |
 | M016 | `conversations` / `messages` | 对话历史（刷新、重启后可恢复） |
-| M017 | `workflow_definitions` | 工作流定义 |
+| M017 | `workflow_definitions` | v1 工作流定义（见下方说明） |
 | M018 | `prompt_versions` | 提示词版本 |
-| M019 | `workflow_runs` | 工作流运行 |
-| M020 | `workflow_steps` | 步骤级状态（= 检查点） |
+| M019 | `workflow_runs` | v1 工作流运行（见下方说明） |
+| M020 | `workflow_steps` | v1 步骤级状态（见下方说明） |
 | M023 | `agent_sessions` | 会话快照（MAF 序列化结果），重启后同 `sessionId` 可续 |
 | M024 | `memory_items` | 长期记忆：`scope_type` / `scope_id` 隔离，`mem_key` 覆盖，`expires_at` 保留期 |
 
 > 迁移号不连续（缺 M005 / M007–M013）：那是剥离垂直模块后留下的空号，不是丢文件。
 
+> **M017 / M019 / M020 / M028 是 v1 遗留**：`AgentWorkbench.Workflow` 模块与其仓储
+> （`WorkflowRepository`、`WorkflowIdempotencyStore`）已于 2026-11-10 删除，当前**没有任何代码读写这四张表**。
+> 迁移文件与 `AppDbContext` 里的映射暂时保留：删迁移不会回滚已建的表，反而会让迁移版本表出现
+> 「已应用但找不到对应类」的记录。真要清表，应单独加一个 drop 迁移，而不是删历史。
+
 ### 仓储有哪些
 
 `IDocumentRepository` / `IProviderRepository` / `IAgentRunRepository` / `IConversationRepository` /
-`IWorkflowRepository`，都在 `AddNitroPersistence` 里注册。仓储只做数据访问，不放业务判断。
+`ITenantRepository`，都在 `AddNitroPersistence` 里注册。仓储只做数据访问，不放业务判断。
 
 **这些表在本模块，不代表职责在本模块。** `conversations` / `messages`（界面投影）、
 `chat_messages`（模型上下文）、`agent_runs` / `agent_steps`（审计轨迹）的建表与仓储都在这里，

@@ -19,7 +19,6 @@
     <ProjectReference Include="..\..\Core\Knowledge\AgentWorkbench.Knowledge.Support\AgentWorkbench.Knowledge.Support.csproj" />
     <ProjectReference Include="..\..\Core\Runtime\AgentWorkbench.Runtime.Harness\AgentWorkbench.Runtime.Harness.csproj" />
     <ProjectReference Include="..\..\Core\Runtime\AgentWorkbench.Runtime.Context\AgentWorkbench.Runtime.Context.csproj" />
-    <ProjectReference Include="..\..\Core\Orchestration\AgentWorkbench.Workflow\AgentWorkbench.Workflow.csproj" />
     <ProjectReference Include="..\..\Core\Foundation\AgentWorkbench.Persistence\AgentWorkbench.Persistence.csproj" />
     <ProjectReference Include="..\..\Core\Foundation\AgentWorkbench.Domain\AgentWorkbench.Domain.csproj" />
     <ProjectReference Include="..\..\Core\Foundation\AgentWorkbench.Shared\AgentWorkbench.Shared.csproj" />

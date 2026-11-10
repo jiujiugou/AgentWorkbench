@@ -2,9 +2,7 @@
 // F5.4–F5.8：挂起恢复 / 幂等 / 超时只查证 / 审计五字段 / 假 ERP。
 // 严禁引用任何仓内不存在的类型：这里只做「契约文件存在性 + 源码标记扫描」，
 // 所有能力标记都是字符串字面量，不产生编译期符号引用，因此一定能编译。
-// 扫描范围固定为 src/Core/Ports/ 与 src/Domains/Erp/ 下的 .cs 契约文件（当前均只有 .gitkeep、无任何 .cs），
-// 刻意不扫 src/Core/Orchestration/AgentWorkbench.Workflow/ —— 那里已有 Workflow 层的 Checkpoint 字样，
-// 扫进去会让 F5.4 误绿（规格 §5.3 明确：Workflow 层有、Harness/契约层无）。
+// 扫描范围固定为 src/Core/Ports/ 与 src/Domains/Erp/ 下的 .cs 契约文件（当前均只有 .gitkeep、无任何 .cs）。
 // 共用的 ContractProbe 扫描器定义在 ActionContractExistenceTests.cs。
 // 编号与负控见每条测试注释；每条测试都自带「扫描器非恒真」自证。
 
