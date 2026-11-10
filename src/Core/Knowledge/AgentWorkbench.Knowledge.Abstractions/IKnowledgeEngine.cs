@@ -1,10 +1,14 @@
 using AgentWorkbench.Domain;
 using AgentWorkbench.Knowledge.Abstractions.Embedding;
-using AgentWorkbench.Knowledge.Abstractions.Retrieval;
 
 namespace AgentWorkbench.Knowledge.Abstractions;
 
 /// <summary>知识引擎能力位，前端据此决定按钮是否可用。</summary>
+/// <remarks>
+/// <c>Retrieve</c> 恒为 false：检索执行已移到 Python MCP server（<c>mcp__rag__search_knowledge</c>），
+/// C# 侧只负责把文档写进索引、以及拿到结果后做引用判定。这一位是 API 形状，
+/// 不是「系统能不能检索」的总闸——别把它当功能开关读。
+/// </remarks>
 public sealed record KnowledgeCapabilities(bool Retrieve, bool Ask, bool Upload, bool Rerank);
 
 /// <summary>索引覆盖度的取值（API 契约，前端按此渲染；判据是「块数 vs 向量数」而不是文档状态列）。</summary>
@@ -61,7 +65,7 @@ public sealed record RemoveResult(int FtsRemaining, int VectorsRemaining, Embedd
 {
     /// <summary>
     /// 可以安全删除记录了。向量残留只有在向量路可用时才有害——
-    /// 扩展不可用时检索本身也读不到（<c>HybridRetriever</c> 先判 Enabled），残留无害。
+    /// 扩展不可用时向量路读不到，但 Python 检索侧走词面路，残留无害。
     /// </summary>
     public bool Cleaned => Failure is null && FtsRemaining == 0;
 }
@@ -111,6 +115,4 @@ public interface IKnowledgeEngine
     Task<IndexResult> IndexDocumentAsync(string documentId, CancellationToken cancellationToken);
 
     Task<RemoveResult> RemoveDocumentAsync(string documentId, CancellationToken cancellationToken);
-
-    Task<IReadOnlyList<RetrievalHit>> RetrieveAsync(string query, int topK, CancellationToken cancellationToken);
 }

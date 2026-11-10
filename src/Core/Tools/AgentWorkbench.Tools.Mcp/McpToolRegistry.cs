@@ -127,8 +127,14 @@ public sealed class McpToolRegistry : IAsyncDisposable
             added++;
         }
 
-        _logger.LogInformation("MCP server {Server} 连上，暴露 {Added}/{Total} 个工具",
-            server.Name, added, listed.Count);
+        // 把工具名打出来不是为了好看：AllowTools 写错一个字母的后果是「静默少一个工具」，
+        // 而少了的那个不会报错、不会告警，只会在某天模型说「我没有这个能力」时才被发现。
+        // 日志里能对照 server 的原名，是唯一低成本的排障手段。
+        _logger.LogInformation("MCP server {Server} 连上，暴露 {Added}/{Total} 个工具：{Tools}",
+            server.Name, added, listed.Count,
+            added == 0 ? "（无）" : string.Join(", ", listed
+                .Where(t => allow.Count == 0 || allow.Contains(t.Name, StringComparer.Ordinal))
+                .Select(t => t.Name)));
     }
 
     private static IClientTransport CreateTransport(McpServerOptions server)

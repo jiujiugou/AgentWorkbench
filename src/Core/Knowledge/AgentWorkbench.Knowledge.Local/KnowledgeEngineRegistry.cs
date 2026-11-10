@@ -1,6 +1,5 @@
 using AgentWorkbench.Domain;
 using AgentWorkbench.Knowledge.Abstractions;
-using AgentWorkbench.Knowledge.Abstractions.Retrieval;
 using AgentWorkbench.Shared.Options;
 using Microsoft.Extensions.Options;
 
@@ -41,9 +40,5 @@ public sealed class UnavailableKnowledgeEngine : IKnowledgeEngine
         => throw new NotImplementedException($"知识引擎 '{Provider}' 尚未接入（仅 local 已实现）。");
 
     public Task<RemoveResult> RemoveDocumentAsync(string documentId, CancellationToken cancellationToken)
-        => throw new NotImplementedException($"知识引擎 '{Provider}' 尚未接入（仅 local 已实现）。");
-
-    public Task<IReadOnlyList<RetrievalHit>> RetrieveAsync(
-        string query, int topK, CancellationToken cancellationToken)
         => throw new NotImplementedException($"知识引擎 '{Provider}' 尚未接入（仅 local 已实现）。");
 }

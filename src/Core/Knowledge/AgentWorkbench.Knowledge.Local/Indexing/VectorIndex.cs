@@ -8,9 +8,13 @@ using Microsoft.Extensions.VectorData;
 namespace AgentWorkbench.Knowledge.Local.Indexing;
 
 /// <summary>
-/// 向量索引：封装 sqlite-vec（CommunityToolkit.VectorData.SqliteVec）的懒加载与错误降级。
-/// 后端不可用时 <see cref="Enabled"/> 置 false，上层自动退回纯全文检索。
+/// 向量索引：封装 sqlite-vec 的懒加载与错误降级。<b>只写不读</b>——检索已移到 Python MCP server。
 /// </summary>
+/// <remarks>
+/// 后端不可用时 <see cref="Enabled"/> 置 false，写入侧自动退回「只建全文索引」。
+/// 曾经这里有 <c>SearchAsync</c>（给 <c>HybridRetriever</c> 用），检索移出去后一并删除：
+/// 留着一个没人调用的读取口，只会让人误以为 C# 还在参与召回。
+/// </remarks>
 public sealed class VectorIndex
 {
     private readonly SqliteVectorStore _store;
@@ -84,26 +88,5 @@ public sealed class VectorIndex
         }
         await collection.DeleteAsync(chunkIds, cancellationToken);
         _logger.LogDebug("DeleteAsync: {Count} ids ElapsedMs={ElapsedMs}", chunkIds.Count(), sw.ElapsedMilliseconds);
-    }
-
-    public async Task<List<VectorSearchResult<ChunkVectorRecord>>> SearchAsync(
-        float[] vector, int top, CancellationToken cancellationToken)
-    {
-        var sw = Stopwatch.StartNew();
-        var collection = await GetCollectionAsync(create: false, cancellationToken);
-        if (collection is null)
-        {
-            _logger.LogDebug("SearchAsync skipped: collection null ElapsedMs={ElapsedMs}", sw.ElapsedMilliseconds);
-            return [];
-        }
-
-        var results = new List<VectorSearchResult<ChunkVectorRecord>>();
-        await foreach (var result in collection.SearchAsync(
-                           new ReadOnlyMemory<float>(vector), top, cancellationToken: cancellationToken))
-        {
-            results.Add(result);
-        }
-        _logger.LogDebug("SearchAsync: {Count} results ElapsedMs={ElapsedMs}", results.Count, sw.ElapsedMilliseconds);
-        return results;
     }
 }

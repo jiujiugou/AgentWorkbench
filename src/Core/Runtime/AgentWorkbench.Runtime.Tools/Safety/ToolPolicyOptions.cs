@@ -8,12 +8,15 @@ public sealed class ToolPolicyOptions
 {
     public const string SectionName = "Harness:Tools";
 
-    /// <summary>工具白名单（不在其中不注册、不可调用）。</summary>
+    /// <summary>
+    /// 工具白名单（不在其中不注册、不可调用）。
+    /// 检索走 MCP：<c>search_knowledge</c> 这个内置工具已删除，由 <c>mcp__rag__*</c> 承担。
+    /// </summary>
     public List<string> Whitelist { get; set; } =
     [
         "get_current_time",
         "calculator",
-        "search_knowledge",
+        "mcp__rag__*",
         "list_documents",
         "remember",
         "recall"

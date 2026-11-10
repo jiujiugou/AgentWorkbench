@@ -6,7 +6,6 @@ using AgentWorkbench.Domain;
 using AgentWorkbench.Knowledge.Abstractions.Retrieval;
 using AgentWorkbench.Knowledge.Local;
 using AgentWorkbench.Knowledge.Local.Citations;
-using AgentWorkbench.Knowledge.Local.Tools;
 using AgentWorkbench.Persistence;
 using AgentWorkbench.Shared;
 using AgentWorkbench.Shared.Options;
@@ -49,7 +48,7 @@ public sealed record ChatRequest(
 /// <para>
 /// 此前这里绕过 harness 直连对话 / 检索服务，于是「用户实际在用的这条路」既没有轨迹也没有预算，
 /// 评测一条都覆盖不到——这正是「验收假绿」的结构性来源。
-/// 来源面板由工具完成事件驱动（模型调 <c>search_knowledge</c> 时推送），不依赖服务端预检索。
+/// 来源面板由工具完成事件驱动（模型调 MCP 检索工具时推送），不依赖服务端预检索。
 /// </para>
 /// </remarks>
 public sealed class AgentHub : Hub
@@ -284,38 +283,70 @@ public sealed class AgentHub : Hub
             : KnowledgeInstructions.Entry + "\n\n" + prompt;
     }
 
+    /// <summary>MCP 检索工具全名：<c>mcp__{server}__{tool}</c>，与 appsettings 的 Mcp:Servers.Name 对应。</summary>
+    private const string McpKnowledgeToolName = "mcp__rag__search_knowledge";
+
+    /// <summary>MCP 工具结果的解析约定。camelCase + 大小写不敏感，与 Python server 的输出对齐。</summary>
+    private static readonly JsonSerializerOptions McpHitOptions = new(JsonSerializerDefaults.Web);
+
     /// <summary>
-    /// 把 <c>search_knowledge</c> 的工具结果解析成命中列表；不是该工具或解析失败时返回 <c>null</c>。
+    /// 把 MCP 检索工具的结果解析成命中列表；不是该工具、无命中或解析失败时返回 <c>null</c>。
     /// </summary>
     /// <remarks>
-    /// 返回原始 <see cref="RetrievalHit"/> 而不是投影后的匿名对象：同一份结果有两个消费者——
-    /// 界面来源面板（<see cref="ToSource"/>）与引用校验（按同一顺序还原 <c>[n]</c>）。
-    /// 来源面板是增益而非主链路：工具输出格式变了、被截断、或不是知识工具，都不该让整条对话挂掉。
-    /// 空命中也不推面板——弹一个空的「来源」比不弹更让人困惑。
+    /// 同一份结果有两个消费者：界面来源面板（<see cref="ToSource"/>）与引用校验
+    /// （<c>CitationVerifier</c> 按同一顺序还原 <c>[n]</c>）。两处必须读同一份，
+    /// 否则「编号对得上但内容对不上」这种最隐蔽的错会发生。
+    /// <para>
+    /// 兼容两种包装：MCP 工具结果可能是直接的对象，也可能是
+    /// <c>{"content":[{"type":"text","text":"&lt;JSON&gt;"}]}</c>（SDK 版本差异）。
+    /// 两种都取得到 <c>hits</c>；取不到就只记日志，不中断对话。
+    /// </para>
     /// </remarks>
     private IReadOnlyList<RetrievalHit>? TryReadKnowledgeHits(ToolCallTrace? trace)
     {
         if (trace is null
-            || !string.Equals(trace.Name, SearchKnowledgeTool.ToolName, StringComparison.Ordinal)
+            || !string.Equals(trace.Name, McpKnowledgeToolName, StringComparison.Ordinal)
             || string.IsNullOrWhiteSpace(trace.Result))
             return null;
 
         try
         {
-            // 工具输出是 { hits, sufficiency } 两段：这里只取 hits，判定由否决层读，
-            // 不在这条路径上重算——同一件事判两遍，迟早漂移。
             using var document = JsonDocument.Parse(trace.Result);
-            if (!document.RootElement.TryGetProperty("hits", out var hitsElement))
-                return null;
+            var root = document.RootElement;
 
-            var hits = hitsElement.Deserialize<List<RetrievalHit>>(SearchKnowledgeTool.SerializerOptions);
-            return hits is null or [] ? null : hits;
+            if (root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty("content", out var content)
+                && content.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var part in content.EnumerateArray())
+                {
+                    if (part.ValueKind == JsonValueKind.Object
+                        && part.TryGetProperty("text", out var text)
+                        && text.ValueKind == JsonValueKind.String)
+                    {
+                        using var inner = JsonDocument.Parse(text.GetString()!);
+                        var hits = ReadHits(inner.RootElement);
+                        if (hits is { Count: > 0 }) return hits;
+                    }
+                }
+                return null;
+            }
+
+            return ReadHits(root);
         }
         catch (JsonException ex)
         {
-            _logger.LogWarning(ex, "解析 search_knowledge 结果失败，本次不推送来源");
+            _logger.LogWarning(ex, "解析 MCP 检索结果失败，本次不推送来源");
             return null;
         }
+    }
+
+    private static List<RetrievalHit>? ReadHits(JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("hits", out var hitsElement))
+            return null;
+        var hits = hitsElement.Deserialize<List<RetrievalHit>>(McpHitOptions);
+        return hits is null or [] ? null : hits;
     }
 
     /// <summary>

@@ -148,7 +148,7 @@ public sealed record EmbeddingFailure(string Code, FailureKind Kind, string Mess
 /// 装饰器出口的失败异常：携带归因结果，供边界按 <see cref="EmbeddingFailure.Kind"/> 决策。
 /// </summary>
 /// <remarks>
-/// 之所以仍用异常而不是 Result 类型：调用方（ChunkIndexer / HybridRetriever）已经在 catch 上，
+/// 之所以仍用异常而不是 Result 类型：调用方（ChunkIndexer）已经在 catch 上，
 /// 换成 Result 会让三层签名同时变形；而边界需要的"为什么失败"由 <see cref="Failure"/> 完整携带，
 /// 不损失任何信息。Permanent 与 Transient 的区别体现在 <see cref="EmbeddingFailure.Kind"/> 上，
 /// 不在异常类型上——避免调用方为了区分而写两段 catch。

@@ -43,5 +43,8 @@ tests/TestResults/
 __pycache__/
 *.pyc
 
+# MCP 工具侧的 Python 虚拟环境（按 requirements.txt 重建，不入库）
+tools/mcp-rag/.venv/
+
 # 本地备份文件（迁移脚本留下的临时快照）
 *.bak-*

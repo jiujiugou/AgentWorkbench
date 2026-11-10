@@ -10,7 +10,7 @@ public sealed record HarnessCapabilities(bool Loop, bool Llm, bool Context, bool
 
 /// <summary>一次 Harness run 请求。</summary>
 /// <param name="SessionId">会话标识；为空时本次调用使用随机会话（无跨 run 记忆）。</param>
-/// <param name="Input">用户输入原文。知识检索不再由 harness 暗做——模型需要依据时调 <c>search_knowledge</c> 工具，轨迹留名。</param>
+/// <param name="Input">用户输入原文。知识检索不再由 harness 暗做——模型需要依据时调 MCP 检索工具，轨迹留名。</param>
 /// <param name="Instructions">
 /// 本次 run 的系统指令（人格 / 约束，如知识问答的引用规范）。由 <c>IContextAssembler</c>
 /// 装饰在工具环外面注入：只往模型请求前插一条 system 消息，不写进会话历史
