@@ -148,6 +148,10 @@ app.MapHub<AgentHub>("/hubs/agent");
 //
 // /api 与 /hubs 刻意不参与回退：它们的 404 必须如实返回。若被 index.html 盖掉，
 // 调试时看到的是「接口 200 + 一页 HTML」，那是最难查的形态。
+//
+// **必须 AllowAnonymous**：全局 FallbackPolicy 是「默认拒」（见下方 Identity 配置），
+// 不加这句的话，未登录的人连登录页都打不开——`GET /` 直接 401，而前端路由守卫
+// 根本没机会跑起来。SPA 的静态入口本来就是匿名的：权限由 API 那侧判。
 app.MapFallback(async context =>
 {
     if (context.Request.Path.StartsWithSegments("/api") || context.Request.Path.StartsWithSegments("/hubs"))
@@ -169,7 +173,7 @@ app.MapFallback(async context =>
 
     context.Response.ContentType = "text/html; charset=utf-8";
     await context.Response.SendFileAsync(indexPath);
-});
+}).AllowAnonymous();
 
 app.Run();
 
