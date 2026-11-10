@@ -21,11 +21,11 @@ export interface AuthUser {
   tenantName?: string | null
   role: string
   tenantId: string
-  // 以下只有 Python 后端返回。标可选：C# 下这些分支恒不触发，页面不必改
+  // 以下不是 C# 后端返回的字段，是 v1（Python 侧）契约的残留。
+  // 标可选是为了让编译通过，不代表它们有值——用到之前先确认后端真的返回。
   id?: string
   email?: string
   status?: string
-  levelRank?: number
   mustChangePassword?: boolean
 }
 
@@ -99,24 +99,6 @@ export async function login(email: string, password: string): Promise<AuthUser> 
     // 不是「会话过期」，触发全局跳转没有意义（已经在登录页了）。
     throw await toApiError(response)
   }
-  const user = await handle<AuthUser>(response)
-  signedIn = true
-  me = user
-  pending = null
-  return user
-}
-
-export async function acceptInvite(
-  token: string,
-  email: string,
-  password: string,
-): Promise<AuthUser> {
-  const response = await fetch(`/api/auth/invites/${encodeURIComponent(token)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  })
-  if (!response.ok) throw await toApiError(response)
   const user = await handle<AuthUser>(response)
   signedIn = true
   me = user

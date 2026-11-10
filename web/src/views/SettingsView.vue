@@ -203,6 +203,20 @@ async function fetchForCurrent(): Promise<void> {
       />
     </header>
 
+    <!-- 资料库：部署期准备动作，不是日常功能，所以入口在这里而不是一级导航。
+         检索本身是工具，由模型在需要依据时自己调用；用户不需要「进入问答模式」。 -->
+    <section class="panel">
+      <div class="panel-head docs-head">
+        <div>
+          <h2>资料库</h2>
+          <p>上传 PDF / 文本，供模型在需要「依据哪条规则」时检索。这是部署时的准备工作，平时不用打开。</p>
+        </div>
+        <RouterLink to="/documents">
+          <el-button round>管理资料</el-button>
+        </RouterLink>
+      </div>
+    </section>
+
     <!-- 当前模型 -->
     <section class="panel">
       <div class="panel-head">
@@ -427,6 +441,20 @@ async function fetchForCurrent(): Promise<void> {
   margin: 0;
   font-size: 15.5px;
   font-weight: 650;
+}
+
+/* 资料库那一格：副标题只在这一处出现，别为它引入通用类 */
+.docs-head {
+  align-items: flex-start;
+  margin-bottom: 0;
+}
+
+.docs-head p {
+  margin: 5px 0 0;
+  max-width: 46em;
+  color: var(--aw-text-3);
+  font-size: 12.5px;
+  line-height: 1.55;
 }
 
 .panel-actions {

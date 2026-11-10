@@ -1,43 +1,37 @@
 import { handle } from './http'
 
-/** 成员与账号管理（REQ-03 / REQ-25）。角色与等级是两个独立轴。 */
+/**
+ * 成员与账号（2026-11-10 改：直接建号，不走邀请）。
+ *
+ * v1 是「发邀请链接 → 对方自己设密码」。私有化部署里没有邮件通道，
+ * 链接还得有人转发，实际用不起来。现在由管理员建号并当面交付初始口令。
+ *
+ * `levelRank`（账号等级 1–5）随知识库可见性一起移除：它只服务多知识库的
+ * 阅读权限，那套概念已按产品裁决砍掉。角色仍只有 owner / admin / member。
+ */
 export interface Member {
   id: string
-  email: string
-  role: 'admin' | 'member' | string
+  /** 登录名。登录框填的是这个，不是邮箱。 */
+  userName: string
+  displayName: string
+  email: string | null
+  role: 'owner' | 'admin' | 'member' | string
   status: 'active' | 'disabled' | string
   tenantId: string
-  levelRank: number
+  createdAt: string
 }
 
 export interface CreateMemberInput {
-  email: string
+  userName: string
+  displayName: string
+  email?: string | null
   password: string
   role: 'admin' | 'member'
-  levelRank: number
 }
 
 export interface UpdateMemberInput {
+  displayName?: string
   role?: 'admin' | 'member'
-  levelRank?: number
-}
-
-export interface InviteInput {
-  role: 'admin' | 'member'
-  email?: string | null
-}
-
-export interface InviteResult {
-  inviteId: string
-  token: string
-}
-
-export interface PendingInvite {
-  inviteId: string
-  email: string | null
-  role: 'admin' | 'member' | string
-  expiresAt: string
-  createdAt: string
 }
 
 const jsonHeaders = { 'Content-Type': 'application/json' }
@@ -59,28 +53,9 @@ export const membersApi = {
       body: JSON.stringify(input),
     }).then((r) => handle<Member>(r)),
 
-  resetPassword: (id: string, password: string) =>
-    fetch(`/api/members/${id}/reset-password`, {
-      method: 'POST',
-      headers: jsonHeaders,
-      body: JSON.stringify({ password }),
-    }).then((r) => handle<void>(r)),
-
   disable: (id: string) =>
     fetch(`/api/members/${id}/disable`, { method: 'POST' }).then((r) => handle<void>(r)),
 
   enable: (id: string) =>
     fetch(`/api/members/${id}/enable`, { method: 'POST' }).then((r) => handle<void>(r)),
-
-  invite: (input: InviteInput) =>
-    fetch('/api/members/invites', {
-      method: 'POST',
-      headers: jsonHeaders,
-      body: JSON.stringify(input),
-    }).then((r) => handle<InviteResult>(r)),
-
-  listInvites: () => fetch('/api/members/invites').then((r) => handle<PendingInvite[]>(r)),
-
-  revokeInvite: (id: string) =>
-    fetch(`/api/members/invites/${id}`, { method: 'DELETE' }).then((r) => handle<void>(r)),
 }

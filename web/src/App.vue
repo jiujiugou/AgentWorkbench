@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   Bell,
   ChatLineSquare,
-  FolderOpened,
   Menu,
   Plus,
   Setting,
@@ -30,17 +29,19 @@ const composerOpen = ref(false)
 const draft = ref('')
 const user = ref<AuthUser | null>(null)
 
-const isChat = computed(() => route.path.startsWith('/chat'))
+/** 对话页：`/` 与重定向过来的 `/chat`。会话列表只在这一页出现。 */
+const isChat = computed(() => route.path === '/' || route.path.startsWith('/chat'))
 const isPasswordChange = computed(() => route.name === 'change-password')
-const isInvite = computed(() => route.name === 'invite')
 const isAdmin = computed(() => user.value?.role === 'owner' || user.value?.role === 'admin')
 const activeNav = computed(() => {
   if (route.path.startsWith('/admin')) return '/admin'
   if (route.path.startsWith('/settings')) return '/settings'
+  // 资料是设置下的子页，跟着「设置」高亮——它不再是并列的一级功能
+  if (route.path.startsWith('/documents')) return '/settings'
   if (route.path.startsWith('/approvals')) return '/approvals'
   // /actions 与 /actions/:requestId 都高亮同一项：详情是列表的下钻，不是并列页面。
   if (route.path.startsWith('/actions')) return '/actions'
-  if (isChat.value) return '/chat'
+  // 剩下的是 /（对话）与已重定向过来的 /chat
   return '/'
 })
 
@@ -88,7 +89,7 @@ function startNewChat(): void {
   const first = draft.value.trim()
   if (first) agent.pendingQuestion = first
   composerOpen.value = false
-  if (route.path !== '/chat') void router.push('/chat')
+  if (route.path !== '/' && route.path !== '/chat') void router.push('/')
 }
 
 /** 快捷开场：填进输入框而不是直接开跑——人还有机会改。 */
@@ -146,13 +147,13 @@ onUnmounted(() => {
 onMounted(() => {
   void refreshUser()
   // 改密页不恢复业务数据：此刻服务端还没放行，restore() 只会制造一串 403。
-  if (!isPasswordChange.value && !isInvite.value) void agent.restore()
+  if (!isPasswordChange.value) void agent.restore()
   health.start()
 })
 </script>
 
 <template>
-  <RouterView v-if="isPasswordChange || isInvite" />
+  <RouterView v-if="isPasswordChange" />
   <div v-else class="shell">
     <!-- 桌面端：深墨绿图标侧边栏 -->
     <aside class="sidebar">
@@ -161,10 +162,7 @@ onMounted(() => {
       </RouterLink>
 
       <nav class="nav">
-        <RouterLink to="/" class="nav-item" :class="{ active: activeNav === '/' }" title="资料">
-          <el-icon><FolderOpened /></el-icon>
-        </RouterLink>
-        <RouterLink to="/chat" class="nav-item" :class="{ active: activeNav === '/chat' }" title="对话">
+        <RouterLink to="/" class="nav-item" :class="{ active: activeNav === '/' }" title="对话">
           <el-icon><ChatLineSquare /></el-icon>
         </RouterLink>
         <!-- 待审批：模型的写动作挂起后没有这个入口，用户在界面上就永远批准不了（S07 → S08 断链） -->

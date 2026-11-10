@@ -4,8 +4,12 @@ import { cachedUser } from '@/api/auth'
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', name: 'documents', component: () => import('@/views/DocumentsView.vue') },
-    { path: '/chat', name: 'chat', component: () => import('@/views/ChatView.vue') },
+    // 首页是对话，不是资料。产品的主语是「说一句话 → 系统判断该读、该懂还是该改」，
+    // 上传文档只是让检索有东西可查的前置准备，属部署期行为（入口在设置页）。
+    { path: '/', name: 'chat', component: () => import('@/views/ChatView.vue') },
+    // 旧书签与旧链接仍然指向 /chat，重定向而不是报 404。
+    { path: '/chat', redirect: '/' },
+    { path: '/documents', name: 'documents', component: () => import('@/views/DocumentsView.vue') },
     // 审批页不设 meta.admin：列表所有登录用户可见，批准/拒绝由服务端按角色拦。
     // 界面提前收起按钮只是提示，不替代 `[Authorize(Roles="owner")]`。
     { path: '/approvals', name: 'approvals', component: () => import('@/views/ApprovalsView.vue') },
@@ -23,12 +27,6 @@ const router = createRouter({
       name: 'admin',
       component: () => import('@/views/AdminView.vue'),
       meta: { admin: true },
-    },
-    {
-      path: '/invite/:token',
-      name: 'invite',
-      component: () => import('@/views/InviteView.vue'),
-      meta: { public: true },
     },
     {
       path: '/change-password',

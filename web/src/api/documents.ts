@@ -73,7 +73,6 @@ export async function removeDocument(id: string): Promise<void> {
 export function uploadDocument(
   file: File,
   onProgress: (percent: number) => void,
-  kbId?: string | null,
 ): { promise: Promise<DocumentDto>; abort: () => void } {
   const xhr = new XMLHttpRequest()
   const promise = new Promise<DocumentDto>((resolve, reject) => {
@@ -96,7 +95,6 @@ export function uploadDocument(
     xhr.addEventListener('abort', () => reject(new Error('已取消')))
     const form = new FormData()
     form.append('file', file)
-    if (kbId) form.append('kb_id', kbId)
     xhr.send(form)
   })
   return { promise, abort: () => xhr.abort() }
