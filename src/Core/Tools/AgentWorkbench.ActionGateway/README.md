@@ -1,19 +1,6 @@
 # ActionGateway — M1 受控动作内核（底座侧）
 
-- **依据**：`docs/设计/M1-受控动作执行流程设计.md` §2.2 / §2.4 / §4 / §6 / §7。
-- **依赖**：只引用 `Core.Ports`。**不得引用 `Domains`**（§7 门禁 1），不得出现业务词（AC-02）。换域时本工程一行不改（AC-01）。
-
-## 装了什么
-
-| 文件 | 职责 |
-|---|---|
-| `FailClosedActionGateway.cs` | 四道校验：Schema → Permission → BusinessRule → Audit，**严格按序、任一不过即拒绝**。通过只返回 `Status=Validated`，不调用执行体 |
-| `DefaultDenyComponents.cs` | 零配置的默认全拒绝实现；`FailClosedDefaults.Create()` 不提供任何放行默认 |
-| `ActionRunService.cs` | 六步链编排：四道校验 → 挂起审批（仅 `SideEffecting`）→ 幂等领取 → 执行 → 超时只查证 → 收口 |
-| `InMemoryActionRunStore.cs` | run 状态、Checkpoint（只存执行进度）、按 `request_id` 的去重表、终态缓存 |
-| `InMemoryTraceStore.cs` | `ITraceSink` + `IAuditQuery` 的内存实现；写失败即拒绝 |
-| `TraceEvents.cs` | `TraceEvent` 统一构造点；审计五字段由流程各步产出 |
-| `ActionResults.cs` | 底座侧 `ActionResult` 构造助手 |
+- **依赖**：只引用 `Core.Ports`。**不得引用 `Domains`**，不得出现业务词（AC-02）。换域时本工程一行不改（AC-01）。
 
 ## 三条不能破的顺序
 

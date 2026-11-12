@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace AgentWorkbench.Runtime.Tools;
@@ -38,6 +39,12 @@ public interface IToolResultVeto
     AgentRunStop? Inspect(string toolName, string? result);
 }
 
+/// <summary>参数结构校验失败的归类码：与「工具异常」「审批拒绝」分开，回放时能归因。</summary>
+public static class ToolValidationCodes
+{
+    public const string ArgumentValidationFailed = "argument_validation_failed";
+}
+
 /// <summary>一次工具调用的轨迹（迭代号 / 工具名 / 参数 / 结果 / 失败原因）。</summary>
 /// <remarks>
 /// <see cref="Result"/> 与 <see cref="Error"/> 互斥：调用成功时只有 <see cref="Result"/>，
@@ -54,6 +61,7 @@ public sealed class ToolExecutionRun
 {
     private readonly List<ToolCallTrace> _traces = [];
     private readonly List<Exception> _toolFailures = [];
+    private readonly List<string> _unknownCalls = [];
 
     internal ToolExecutionRun(IChatClient client) => Client = client;
 
@@ -62,6 +70,19 @@ public sealed class ToolExecutionRun
 
     /// <summary>实时轨迹视图（执行中可读，用于超时后取回已完成的部分）。</summary>
     public IReadOnlyList<ToolCallTrace> Traces => _traces;
+
+    /// <summary>
+    /// 模型请求过、但不在本次工具清单里的名字。
+    /// </summary>
+    /// <remarks>
+    /// 这些调用<b>不会</b>出现在 <see cref="Traces"/> 里：回填「工具找不到」发生在
+    /// <see cref="FunctionInvokingChatClient"/> 内部，走不到我们的 <c>FunctionInvoker</c>。
+    /// 不单独记下来，事后就查不到「模型曾经请求过一个不存在的工具」——
+    /// 而「谁 / 何时 / 看到什么」必须答得出来。
+    /// </remarks>
+    public IReadOnlyList<string> UnknownCalls => _unknownCalls;
+
+    internal void MarkUnknownCall(string name) => _unknownCalls.Add(name);
 
     /// <summary>
     /// 执行控制判定的提前终止原因（重复调用 / 预算耗尽）；没有提前终止时为 <c>null</c>。
@@ -133,12 +154,23 @@ public sealed class ToolExecutionPipeline : IToolExecutionPipeline
 
     public ToolExecutionRun Create(IChatClient innerClient, ToolExecutionLimits limits)
     {
-        var invoking = new FunctionInvokingChatClient(innerClient, _loggerFactory, _services)
+        // 核对层夹在「真实模型」与「函数调用环」之间：模型响应先过它，再交给 MEA 决定调不调。
+        // 只记录、不改语义——「工具找不到」的回填由 MEA 自己做（TerminateOnUnknownCalls 默认 false），
+        // 这里补的是它做完之后没人留下痕迹的那一笔。
+        ToolExecutionRun? run = null;
+        var logger = _loggerFactory.CreateLogger<ToolExecutionPipeline>();
+        var guard = new ToolCallGuardChatClient(innerClient, name =>
+        {
+            run?.MarkUnknownCall(name);
+            logger.LogWarning("模型请求了不在本次工具清单里的工具：{Tool}", name);
+        });
+
+        var invoking = new FunctionInvokingChatClient(guard, _loggerFactory, _services)
         {
             MaximumIterationsPerRequest = limits.MaxIterations
         };
 
-        var run = new ToolExecutionRun(invoking);
+        run = new ToolExecutionRun(invoking);
         invoking.FunctionInvoker = async (context, token) =>
         {
             var arguments = Serialize(context.Arguments);
@@ -156,6 +188,18 @@ public sealed class ToolExecutionPipeline : IToolExecutionPipeline
                 // 干净收口：这一轮不再回问模型（抛异常会被框架当成「工具失败」喂回模型）。
                 context.Terminate = true;
                 return null;
+            }
+
+            // 参数结构校验：按工具自己声明的形状，在执行体之前挡下缺必填 / 类型不符的调用。
+            // 放在审批之前 —— 畸形参数不必去打扰审批者；挡下后把拒绝码作为结果回填给模型，
+            // 让模型自己改参数或换路，与「被拒」「工具失败」在轨迹里分得开。
+            var validationError = ValidateArguments(context.Function, context.Arguments);
+            if (validationError is not null)
+            {
+                var payload = ValidationPayload(context.Function.Name, validationError);
+                run.CompleteCall(index, Truncate(payload),
+                    error: ToolValidationCodes.ArgumentValidationFailed, fullResult: payload);
+                return payload;
             }
 
             // 第二维（审批）：在白名单「能不能用」之外，再决定「这次调用要不要先问人」。
@@ -188,7 +232,9 @@ public sealed class ToolExecutionPipeline : IToolExecutionPipeline
                     context.Terminate = true;
                 }
 
-                return result;
+                // 进模型的结果与轨迹同源，按同一上界截断；事件仍带完整版（来源面板用）。
+                // 只截轨迹会把全文留在模型上下文里，上界就白设了。
+                return Truncate(text);
             }
             catch (Exception ex)
             {
@@ -261,6 +307,101 @@ public sealed class ToolExecutionPipeline : IToolExecutionPipeline
             ["denied"] = "true",
             ["tool"] = toolName,
             ["reason"] = code
+        });
+
+    /// <summary>
+    /// 执行前按 <c>AIFunction.JsonSchema</c> 校验参数，只判 <c>required</c> 与 <c>type</c> 两个字段。
+    /// 这不是一套 JSON Schema 引擎 —— enum / pattern / 嵌套 / 组合类型仍交给 MEA 的参数绑定，
+    /// 绑定失败按工具异常归类；这里只把最常见的畸形参数在调用前挡下并给出可归因拒绝码。
+    /// </summary>
+    /// <returns>null = 结构可放行；非 null = 拒绝原因。</returns>
+    private static string? ValidateArguments(AIFunction function, AIFunctionArguments arguments)
+    {
+        var schema = function.JsonSchema;
+        if (schema.ValueKind != JsonValueKind.Object ||
+            !schema.TryGetProperty("properties", out var properties) ||
+            properties.ValueKind != JsonValueKind.Object)
+            return null; // 没有可判的结构，交给框架绑定
+
+        if (schema.TryGetProperty("required", out var required) &&
+            required.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in required.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.String)
+                    continue;
+                var name = item.GetString()!;
+                if (!arguments.ContainsKey(name))
+                    return $"缺少必填参数 {name}";
+            }
+        }
+
+        foreach (var property in properties.EnumerateObject())
+        {
+            // 无 type / 联合类型（type 为数组）：不擅自判，交给绑定。
+            if (!property.Value.TryGetProperty("type", out var typeDecl) ||
+                typeDecl.ValueKind != JsonValueKind.String)
+                continue;
+
+            if (!arguments.TryGetValue(property.Name, out var value))
+                continue; // 非必填且未提供
+
+            if (!MatchesDeclaredType(typeDecl.GetString(), value))
+                return $"参数 {property.Name} 应为 {typeDecl.GetString()}，实际为 {Describe(value)}";
+        }
+
+        return null;
+    }
+
+    private static bool MatchesDeclaredType(string? type, object? value)
+    {
+        if (value is JsonElement element)
+        {
+            return type switch
+            {
+                "string" => element.ValueKind == JsonValueKind.String,
+                "integer" => element.ValueKind == JsonValueKind.Number && element.TryGetInt64(out _),
+                "number" => element.ValueKind == JsonValueKind.Number,
+                "boolean" => element.ValueKind is JsonValueKind.True or JsonValueKind.False,
+                "array" => element.ValueKind == JsonValueKind.Array,
+                "object" => element.ValueKind == JsonValueKind.Object,
+                "null" => element.ValueKind == JsonValueKind.Null,
+                _ => true
+            };
+        }
+
+        if (value is null)
+            return type is "null";
+
+        return type switch
+        {
+            "string" => value is string,
+            "integer" => value is byte or sbyte or short or ushort or int or uint or long or ulong,
+            "number" => value is byte or sbyte or short or ushort or int or uint or long or ulong
+                or float or double or decimal,
+            "boolean" => value is bool,
+            "array" => value is System.Collections.IEnumerable && value is not string,
+            "object" => value is System.Collections.IDictionary,
+            "null" => false,
+            _ => true
+        };
+    }
+
+    private static string Describe(object? value)
+        => value switch
+        {
+            null => "null",
+            JsonElement element => element.ValueKind.ToString(),
+            _ => value.GetType().Name
+        };
+
+    private static string ValidationPayload(string toolName, string reason)
+        => JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["invalid_arguments"] = "true",
+            ["tool"] = toolName,
+            ["reason"] = ToolValidationCodes.ArgumentValidationFailed,
+            ["detail"] = reason
         });
 
     /// <summary>序列化工具参数，并按参数名排序 —— 键序稳定，重复调用的指纹才可比。</summary>

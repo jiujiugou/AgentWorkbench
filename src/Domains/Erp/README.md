@@ -1,15 +1,26 @@
-# Domains/Erp — 第一动作域（M1 假实现）
+# Domains/Erp — 第一动作域
 
-- **依据**：`docs/设计/M1-受控动作执行流程设计.md` §5。全部业务语义集中在本工程。
-- **依赖**：只允许引用 `Core.Ports`；`Core` 下任何项目不得引用本工程（AC-01 门禁）。
+> 校准基线：`b4d5f2c`。文件与接口清单以代码为准，本文只写判断与边界。
 
-| 文件 | 职责 |
-|---|---|
-| `ErpActionSpecs.cs` | 4 个 `ActionSpec` 实例（`erp.query/draft/submit/cancel`）+ 注册表 |
-| `ErpPolicies.cs` | 假 Schema 校验、假 PDP、假业务判据（金额档位 + 条款快照）、审批闸 |
-| `InMemoryFakeErp.cs` | 四原语内存实现；按 `request_id` 去重；超时只查证不重放 |
-| `ErpActionSet.cs` | `IActionSet` 组合，组合根唯一注入点 |
+## 这一格是什么
 
-**验收问题对得上**：「PO-2026-1108 这张 4.8 万的备件单能批吗」→ 金额 48000 ≤ 50000 档位，`ErpBusinessRule` 放行并给出 `clause-3` 快照；`SideEffecting=true` 触发挂起审批；`Submit` 生成唯一单号。
+**全部业务语义都住在这里，底座一行都不认识。** 单据名、字段、金额档位、审批角色、状态机
+都是本域的判断内容，不是底座机制。换一个 ERP 产品，换掉的是整个目录，
+而 `src/Core` 的 diff 必须为空（AC-01）。
 
-**刻意没做**：真 ERPNext、真实权限四维、真实制度文档检索 —— 都是 M2/M3 范围。
+## 红线
+
+1. 只引用 `Core.Ports`；`Core` 下任何项目不得引用本域（门禁在 `DomainSwapAc01Tests`）。
+2. `ActionSpec` 的参数对底座是不透明 JSON。**底座问，但不理解**。
+3. **语义要来自真实产品，不是手抄。** 手写的 `InputSchemaJson` 会跟 ERP 版本漂移，
+   而且漂移时不报错——校验照旧通过，模型照旧按旧字段生成参数。这是本域最危险的一类静默错误。
+
+## 已知边界（不是完成态）
+
+写动作在 M2 之前由代码显式禁用。放开的前提是**先有真 ERPNext 实例、并核查目标 ERP 的幂等能力**，
+不是先有适配器代码：只读适配器至今一次都没连过真 ERPNext，手抄的四原语规格也还没有对照物。
+
+## 怎么验
+
+换域演练：`DomainSwapAc01Tests`（第二套假动作集跑通且 `src/Core` 源码哈希前后不变）。
+真连验证：`python scripts/erp_live_probe.py --verify`，无实例时**不要手写夹具**。

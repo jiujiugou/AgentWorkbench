@@ -1,13 +1,23 @@
 # Domains/FakeActionSet — 第二套假动作集（AC-01 换域载体）
 
-- **用途**：M1 设计 §5.3 的 AC-01「换域后底座 diff 为空」演练载体。组合根把第一动作域的 `IActionSet` 换成 `FakeActionSet`，`src/Core` 一行不改，即可证明底座业务无关。
-- **字段与 Erp 全不同**：使用 `lab_id / slot_hours / attendees`、时长与人数档位、`LB-2026-XXXX` 预约单号、审批人「实验室管理员·李」；与第一动作域（Erp）的业务字段、策略、判据、题库无任何交集。
-- **依赖**：只 `ProjectReference` 到 `Core.Ports`（`..\..\Core\Ports\AgentWorkbench.Ports.csproj`），零 NuGet 包，不引用 ActionGateway、其它 Core 工程或 Erp 工程。
-- **接口**：实现与 Erp 同一组 `Core.Ports` 接口（`IActionSet` / `IActionSpecRegistry` / `ISchemaValidator` / `IPermissionQuery` / `IBusinessRule` / `IApprovalGate` / `IActionExecutor`），命名空间 `AgentWorkbench.LabBooking`，主类 `FakeActionSet`。
+> 校准基线：`b4d5f2c`。文件与接口清单以代码为准，本文只写判断与边界。
 
-| 文件 | 职责 |
-|---|---|
-| `LabActionSpecs.cs` | 4 个 `ActionSpec` 实例（`lab.query/draft/submit/cancel`）+ 注册表 |
-| `LabPolicies.cs` | 假 Schema 校验、假 PDP、假业务规则（时长 / 人数判据 + 条款快照）、审批闸 |
-| `InMemoryFakeLab.cs` | 四原语内存实现；按 `request_id` 去重；超时只查证不重放 |
-| `FakeActionSet.cs` | `IActionSet` 组合，组合根唯一替换点 |
+## 这一格为什么存在
+
+**它是判据 AC-01 的唯一实证装置，不是产品功能。** 组合根把 `IActionSet` 从第一动作域换成它，
+`src/Core` 一行不改也能跑通，才证明得出「换域底座 diff 为空」。
+只靠读代码说「底座与业务无关」是自证，这一格提供的是**会变红的反证**。
+
+**字段必须与第一动作域毫无交集**（实验室预约 vs 采购单）：一旦两边共用字段、策略或题库，
+换域测试就只是在同一套业务语义里换了名字，AC-01 会假绿。这是设计约束，不是随手起的名字。
+
+## 红线
+
+1. 只 `ProjectReference` 到 `Core.Ports`，零 NuGet 包；不得引用其它 Core 工程或 Erp 工程。
+2. 实现与 Erp **同一组** `Core.Ports` 接口——换的是实现，不是契约。契约一变，AC-01 就不成立。
+3. 不得为了让测试好过而缩小第二动作集的能力面；四个原语都要能跑通。
+
+## 怎么验
+
+`DomainSwapAc01Tests`：换域前后 `src/Core` 源码哈希快照必须相同；
+负控是把第二动作集某个原语的 `Primitive` 改错，测试必须红。

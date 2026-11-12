@@ -24,8 +24,10 @@
 
 - 契约是 `ISessionStore.GetOrCreateAsync(sessionId, factory)` + `ISessionStore.SaveAsync(...)`。
   命中就返回已有会话（落库版会反序列化），没命中就调用 `factory` 建一个新的，再按 `sessionId` 存下来。
+
 - `ISessionFactory` 把「建 / 序列化 / 反序列化」抽象出来，由 `AgentHarness` 用当次 run 的 agent 实现
   （`AgentSessionFactory`）。存储实现因此不需要认识具体的模型客户端。
+
 - 两个实现：
   - `SessionStore`（本模块，进程内 `ConcurrentDictionary`）：重启即丢，适合单测 / 精简环境。
   - `SqliteSessionStore`（`Memory.Persistence`）：会话序列化后落 `agent_sessions` 表，重启后同 `sessionId` 能续上。
@@ -39,14 +41,18 @@
 
 - 契约：`ISessionRunGate.TryAcquireAsync(sessionId)`。抢到返回句柄（`DisposeAsync` 即释放），
   已被占用返回 `null`。
+
 - 语义是**拒绝，不是排队**：排队没有上限，第二句话可能几分钟后才被处理，用户早已忘了上下文。
-- 落点在 `AgentHarnessService` 的**两个入口**，不在 Hub —— Hub、`/api/harness/run`、以后的定时任务都走
-  Harness，放 Hub 只补了一处。
+- 落点在 `AgentHarnessService` 的**两个入口**，不在 Hub —— 所有起 run 的入口都汇到 Harness，
+  放 Hub 只补一处。
+
 - 抢不到的表现：`RunAsync` 返回 `RunId=0` + `AgentRunCode.SessionBusy`（不落轨迹，这次不算一次 run）；
   `StreamAsync` 产出单个 `Failed` 事件。**都不抛异常**——抛了会被 Hub 的 catch 当成「服务出错」，
   和「这条会话正在回答」混在一起。
+
 - 进程崩溃时锁随进程消失，**不会留僵尸会话**；这是它相对数据库租约的唯一优势，也是它只在单进程成立的代价。
   跨进程 / 跨机要 L2（`session_leases` + `fence`），见 `docs/core/runtime.md` §7.6。
+
 - `AgentHub.Generations`（键是 `ConnectionId`）是另一道闸，**只做连接级防抖、保 `Stop` 可用**，
   不承担会话互斥；两者不重叠也不能互相替代。
 
@@ -77,6 +83,7 @@ MAF 的 `AgentSession` 本身不带 id，这个键是唯一来源。
 - **2026-11-09 起快照里没有历史了**：历史由 `SqliteChatHistoryProvider` 逐条写 `chat_messages`，
   `StateBag` 只剩 `aw.session_id`（编排层写入的会话标识）。
   序列化 `AgentSession` 得到的就是「其余键」——现在只有一个 id。
+
 - 序列化仍走 MAF 官方的 `AIAgent.SerializeSessionAsync` / `DeserializeSessionAsync`。
 - ⚠️ 调用时 `JsonSerializerOptions` 必须传 `null`：传自定义实例不带 MAF 的 source-generated 元数据，
   Serialize / Deserialize 会抛 `NotSupportedException`。见 `AgentSessionFactory` 注释。
@@ -87,9 +94,11 @@ MAF 的 `AgentSession` 本身不带 id，这个键是唯一来源。
   **只进出结构化数据**（`MemoryItem`），绝不返回拼好的 prompt 文本，也不决定注入策略。
 - **隔离维度是作用域**（`MemoryScope` = `type` + `id`）：`session` / `user` / `agent` / `global`。
   召回只发生在本作用域内，外加可选的 `global` 兜底，不会串到别人的记忆里。
+
 - **覆盖维度是 key**：同 `(scope, key)` 的写入是覆盖（保留原 id 与使用统计），没有 key 则每次新增。
 - **保留期**：`MemoryWrite.Retention` 或 `MemoryOptions.LongTermRetentionDays` 决定 `expires_at`；
   过期的行召回时看不见，并由后台服务删除。
+
 - 写入/召回的入口（MVP）是 agent 工具：`remember` / `recall`（在 `Memory.Persistence` 注册）。
 
 ### 记忆工具的作用域从哪来
@@ -211,31 +220,29 @@ Context 不查库、不引 `Memory`；历史只有一个策略点（Memory 存�
 - 会话对象：`Runtime/SessionStoreTests.cs` F4.1–F4.4——同 id 命中、TTL 过期、LRU 淘汰、写回刷新访问时间。
 - 历史落库：`Runtime/ChatHistoryPersistenceTests.cs` C1–C5——并发不丢、顺序、会话隔离、
   无 sessionId 不落库、空批次 no-op。C1 的负控：把追加改回「删后插」，C1/C2 必红。
+
 - provider 与 MAF 的契约：`Runtime/HistoryProviderProbeTests.cs` H1–H2——一次 run 的历史含完整工具往返；
   单条消息序列化不丢 `functionCall`。
+
 - 两条路径的形状：`Runtime/HistoryDivergenceTests.cs` X1–X4——带工具的一轮条数不同、
   失败轮界面有孤问而模型零条、删除会话后模型历史仍在、注入的 system 指令不进历史。
   这四条是**事实锁定，不是功能验收，也不是缺陷清单**：X1/X4 是两个职责本来就不同的正常结果；
   X2/X3 对应两个尚未定义的边界条件。见 `docs/core/runtime.md` §7.1 / §7.3 第 1 条。
+
 - 会话互斥：`Runtime/SessionRunGateTests.cs` G1–G5——同会话第二个拿不到、不同会话可并行、
   重复释放不影响后来者、两个入口都回 `session_busy`。负控：去掉 `_released` 保护 → G3 红。
+
 - 预期红（规格未实现，不是失败）：`Runtime/SessionContractTests.cs` F4.7——工具注册默认值。
 
-以下条目**当前没有任何测试**。它们原先写在 `tests/AgentWorkbench.UnitTests/Memory/`，
-而该项目在工作区不存在（现存三个测试项目中，`ArchitectureTests` 也只剩 `obj/`、源码为空）。
-`grep` 可证：`LongTermMemoryStore`、`MemoryRetentionService`、`RememberTool` 在 `tests/` 源码里零引用
-（只出现在编译产物里）。
+以下条目**没有行为测试**。它们原先写在已不存在的 `UnitTests` 项目里；
+现在 `tests/` 里只剩源码文本断言（`SessionContractTests` 中的两行），没有正例 / 负控。
 
 - 会话重启续接（原表述：销毁 store + agent、复用同一库后同 `sessionId` 的历史续上）
   —— 注：改成落库历史后，这条的正确形态是「`chat_messages` 里在，反序列化出来的会话里没有」，与旧表述不同。
+
 - 长期记忆正例 / 负控（作用域隔离、`(scope,key)` 覆盖、保留期、超长拒绝）。
 - 保留服务清理（过期会话行与过期记忆行）。
 - 组合根 `Replace` 断言、`LongTermEnabled=false` 不注册工具。
 
 尚未覆盖：真·跨进程重启（验收脚本未落地）、记忆的自动召回（阶段 3）、历史表的保留期与删除、
 **跨进程 / 多实例的会话互斥（L2 数据库租约，未实现）**。
-
-## 依赖
-
-本模块只引用 `Shared`。落库实现（`AgentWorkbench.Memory.Persistence`）实测引用四项：
-`Runtime.Session`、`Persistence`、`Shared`、`Tools.Abstractions`。

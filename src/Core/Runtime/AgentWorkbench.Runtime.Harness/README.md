@@ -35,7 +35,7 @@ ResolveSessionId(请求的 SessionId)                    会话标识（缺省�
 **会话互斥是这条流水线的第一格，不是最后一步。** 同一 `sessionId` 同时只允许一个 run：
 `RunAsync` 返回 `Code=session_busy, RunId=0`（0 = 没开始跑、没落轨迹），
 `StreamAsync` 产出**一个 Failed 事件**就结束。闸在 Harness 而不是 Hub，
-因为 Hub / `/api/harness/run` / Workflow 三个入口都走这里。
+因为所有起 run 的入口都汇到 Harness，放 Hub 只补一处。
 覆盖范围只有单进程，跨进程要数据库租约——见 `docs/core/runtime.md` §7.6。
 
 **这道闸同时保护会话快照的写回。** `ISessionStore.SaveAsync` 全仓只在
@@ -51,8 +51,10 @@ ResolveSessionId(请求的 SessionId)                    会话标识（缺省�
 
 - **级别**（`Auto` / `Ask` / `Deny`）由 `Safety` 的 `IToolApprovalPolicy` 按配置决定，
   管道自己从 DI 取 —— harness 一行都不碰。
+
 - **通道**（`Ask` 时问谁）由调用方按 run 提供：`HarnessRunRequest.Approver`（`IToolApprover`）。
   harness 只把它透传进 `ToolExecutionLimits`。为 `null` 时任何 `Ask` 一律按拒绝处理（fail-closed）。
+
 - 被拒的工具不执行，归类码（`approval_policy_denied` / `approval_user_denied` / `approval_unavailable`）
   随工具步骤落进**同一本账**，被拒也不算 `tool_error`（没有异常冒出环）。
 
@@ -62,6 +64,7 @@ ResolveSessionId(请求的 SessionId)                    会话标识（缺省�
 - **每轮只把本轮输入装进消息**（`new ChatMessage(ChatRole.User, userText)`），上文记忆依赖
   `AgentSession` 里的 `InMemoryChatHistoryProvider`。会话本身由 `ISessionStore` 决定存哪：
   内存版程序重启即丢，装 `Memory.Persistence`（`AddNitroMemoryPersistence`）后落 `agent_sessions` 表，重启可续。
+
 - run 结束（含失败 / 取消 / 超时）会 best-effort `SaveAsync`，落库失败不影响本次 run 的结局。
 - run 开始时把 `IMemoryScopeAccessor` 设为 `MemoryScope.Session(sessionId)`：模型调 `remember` / `recall`
   时才会落在「这个会话」名下。让编排层设作用域（而不是让工具参数指定）是隐私边界，见 ADR-0003。
@@ -113,6 +116,7 @@ ResolveSessionId(请求的 SessionId)                    会话标识（缺省�
   `FunctionInvokingChatClient` **外面**再包一层函数调用环，于是 `ToolExecutionPipeline` 的守卫与
   轨迹采集全被绕过：实测症状是连续同参调用不再判 `loop_detected`、工具异常不再归类 `tool_error`，
   全部退化成 `succeeded`。`IContextAssembler.Wrap` 继承了这条约束，注入点一个节点没动。
+
 - 指令进的是**模型请求**而不是 `run.Messages`：会话历史由 `ChatHistoryProvider` 按输入消息记录，
   装饰器在它下游，所以指令不会随每轮对话在历史里累积。
 
@@ -124,11 +128,10 @@ ResolveSessionId(请求的 SessionId)                    会话标识（缺省�
 | --- | --- | --- | --- |
 | run 不能恢复 | 中途失败只能整条重跑，长任务白烧 token | 没有 resume 入口，也没有断点快照 | 先定断点语义（配合幂等 P2-2）再实现 |
 | 会话重启即丢 | 同一个 `sessionId` 重启后接不上上文 | `Memory.Persistence` 已落库（P1-3）；内存版仍进程内 | 装 `AddNitroMemoryPersistence`（已具备） |
-| 同一 `sessionId` 的并发 run | 两个 run 共用一个会话，消息可能串 | 无锁、无排队 | 明确「同会话串行」或按 run 隔离会话 |
-| 历史无限长 | 上下文窗口撑爆 | 没有裁剪（`Context` 未实现） | token 预算压缩 |
+| 历史无限长 | 上下文窗口撑爆 | `Context` 有 `TrimHistory`，但 Harness 不传 `History`，**裁剪实际未接线** | 先写「超过 N 条时模型只见 N 条」的可红断言，再接线 |
 | 执行记录不能按条件查 | 只能一条一条按 id 翻 | `IExecutionTraceStore` 只有 `Save` / `Get` | P3-3 查询面 |
 | 对话与轨迹不关联 | 从一次聊天跳不到它的 run | `agent_runs` 没有 `conversation_id` | 加关联列 |
-| 消费方只读 `Text` | 半成品被当结论（`iteration_limit` 等路径） | Workflow 的 agent 步骤如此 | 按 `Status` 分流，非 `succeeded` 即步骤失败 |
+| 消费方只读 `Text` | 半成品被当结论（`iteration_limit` 等路径） | 原 Workflow agent 步骤（模块已删），当前是否仍有此问题需重新核实 | 按 `Status` 分流，非 `succeeded` 即步骤失败 |
 
 ---
 
@@ -155,30 +158,17 @@ ResolveSessionId(请求的 SessionId)                    会话标识（缺省�
 
 判定型用例必须正例能绿、负控能红；能由脚本判定的禁止用 AI 判。
 
-目前覆盖到的（`tests/AgentWorkbench.UnitTests/Harness/`）：
+验收命令与红绿以 `dotnet test tests/AgentWorkbench.ApplicationTests` 实测为准；
+本文不列测试文件名、用例号与条数（会漂）。
 
-- 环内提前终止：连续同工具同参数 → `loop_detected`；**负控**：关掉检测 → 跑满 `MaxIterations`。
-- 工具连续失败到上限 → `failed` + `tool_error`，每一步带失败原因；**负控**：只改一个故障旋钮，结果跟着变。
-- 失败 / 取消 / 超时路径都调用了 `SaveAsync`，且状态与归类码正确。
-- run 级超时与单次请求超时被归类成不同的码。
-
-流式出口（`tests/AgentWorkbench.Evaluation.AgentTask/HarnessStreaming/`）：
-
-- 增量分片拼接等于完整答复；工具完成事件带工具名与迭代号；终态唯一且在末尾、带 `RunId`。
 - **同源对齐**：同一脚本走两条出口，账本的终态 / 迭代数 / 工具序列 / 工具调用次数必须逐项相同。
 - **刻意的不对称**：工具事件带完整结果，账本存截断结果——断言同时锁两侧，改单边即红。
 - **负控**：模型侧崩溃时事件流里不允许出现 `Completed`（伪造终态）；判据自身也有负控（缺终态 / 终态不在末尾 / 终态重复三种坏形状都必须抛）。
 
-审批透传（`tests/AgentWorkbench.Evaluation.AgentTask/HarnessApproval/`）：
+审批透传：
 
 - 请求里的 `IToolApprover` **真的走到管道**（问了几次、问的是哪个工具都断言了）——防「契约加了没人用」。
 - 批准 → 工具执行；拒绝 → 工具**零执行**且归类码写进**账本**，整轮仍是 `succeeded`。
 - 不带 approver 的 `Ask` 必须 fail-closed。
 
 还没有的：真·跨进程重启会话延续（验收脚本未落地；`Memory` 侧已有进程内等价用例）、恢复后不重复副作用（P2-2）、按状态分流的消费口径。
-
-## 依赖
-
-ModelRuntime、ToolExecution、AgentLoop、Context、Memory、Observability、Providers、
-Knowledge.Abstractions、Shared。
-

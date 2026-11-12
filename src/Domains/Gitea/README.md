@@ -13,20 +13,10 @@
 - 只引用 `Core.Ports`，零 NuGet 包、零 DI/Options 包。
 - **加入本工程时 `src/Core` 的 diff 必须为 0**（AC-01）。契约收敛属于独立的前置动作，
   不能伪装成「接域时改了底座」。
+
 - 配置缺失 → 拒绝且**零 HTTP**，不回落任何内存假实现。
 - `AllowWrites=false`（默认）→ 写能力在目录里可见，但执行返回 `not_supported_in_m2` 且零 HTTP。
   M3 由组合根显式打开。
-
-## 文件
-
-| 文件 | 职责 |
-|---|---|
-| `GiteaActionSpecs.cs` | 业务能力目录（**按业务对象命名**，原语降级为属性） |
-| `GiteaOptions.cs` | 连接参数，plain record |
-| `IGiteaTransport.cs` / `HttpGiteaTransport.cs` | 方案第 2 步的 Connector：认证、重试、超时、失败分类 |
-| `GiteaAdapter.cs` | `IActionExecutor`：请求映射、状态映射、响应白名单投影 |
-| `GiteaPolicies.cs` | Schema / PDP / 业务规则 / 审批闸（四个注入口） |
-| `GiteaActionSet.cs` | 组合注入点 |
 
 ## 与 Erp 域的三点差别（都是刻意的）
 
@@ -49,8 +39,10 @@
 
 - `GiteaResponse` 不携带响应头，transport 层拿不到 `Authorization` 之外的敏感头，
   TraceEvent 更拿不到。
+
 - 成功数据按白名单投影（`kind/number/state/created_at/...`），不把原始响应整体写入审计：
   实测 `GET /api/v1/user` 返回 `email`。
+
 - 401 = 凭据问题，403 = scope 不足，404 = 不存在**或无权看到其存在**（实测两者 body 字节级相同，
   故合并为 `not_found_or_forbidden`）。
 

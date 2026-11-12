@@ -20,8 +20,10 @@
 
 - 循环本体不是本模块的。它在 MEA 的 `FunctionInvokingChatClient` 里，由 `ToolExecution` 模块装配
   （见那份 README 的「一次调用怎么落地」）。
+
 - 对外只有一个契约 `IAgentLoop`，四个成员：`MaxIterations`、`TimeoutSeconds`、`CreateGuard(usage)`、
   `ExecuteAsync<T>(action, ct)`。前两个回答「允许循环几次、多久」，第三个给这一次 run 发一个环内守卫，第四个圈住整轮。
+
 - 谁在问：`AgentHarness` 的 `RunAsync`。它把 `MaxIterations` 交给工具模块当工具环预算，
   用 `TimeoutSeconds` 圈住整轮，并在开跑前 `CreateGuard`（把模型用量的读数接进去）。
 
@@ -30,8 +32,10 @@
 - 默认 6 轮，配置节 `Harness:Loop:MaxIterations`。
 - 这个数字不在这儿生效：`AgentHarness` 把它读出来，作为 `ToolExecutionLimits(MaxIterations)` 传给工具模块，
   最终落到 MEA 的 `MaximumIterationsPerRequest`。本模块只负责把它如实报出去。
+
 - 实测过（脚本化模型，预算 2）：一共 3 次模型请求 = 2 轮工具调用 + 1 轮收口；最后一轮框架会把 `tools`
   清空，逼模型必须用文本收尾，然后**正常返回**。
+
 - 跑满不等于答完：正常返回不等于答完了。守卫在整轮返回后再问一次（`InspectCompletion`）：
   最后一次工具调用的轮次已经顶到 `MaxIterations - 1`，说明模型还想再要一轮而框架已经不给工具了 ——
   这就是「被截断」，标 `iteration_limit`；模型自己提前改用文本收尾则标 `succeeded`。
@@ -42,8 +46,10 @@
 - 默认 30 秒，配置节 `Harness:Loop:TimeoutSeconds`。
 - 实现是 linked CTS + `CancelAfter(TimeoutSeconds)`：调用方自己的令牌会被链进来，
   所以「调用方取消」和「本模块超时」都能触发，二者在 catch 里靠 `cancellationToken.IsCancellationRequested` 区分。
+
 - 超时统一转成 `AgentRunTimeoutException`（继承 `TimeoutException`，消息里带上秒数），
   好和「单次模型请求太久」（模型交互模块抛的 `TimeoutException`）区分开。
+
 - 想精确区分这两种超时，得先 `catch (AgentRunTimeoutException)`；泛 `catch (TimeoutException)` 会把两种一起吞掉。
 - 取消是原样冒泡的：调用方主动取消时抛 `OperationCanceledException`，本模块不转译、不吞。
 
@@ -64,6 +70,7 @@
 
 - 环内、**工具调用真正执行之前**：`IAgentRunGuard.InspectToolCall` 由工具模块在函数调用钩子里调用；
   返回非空就跳过这次调用、把原因记在轨迹里，并让框架干净收口（不是抛异常 —— 抛异常会被框架当成「工具失败」喂回模型）。
+
 - 这一点很关键：重复调用和 token 消耗的信息只有到环内、工具调用发出时才有；事后追认等于钱已经烧了。
 - 判定必须是**真停**：停下来的理由会一路带到 `AgentHarness`，落进 `ExecutionTrace`。
 
@@ -71,10 +78,13 @@
 
 - 状态（`agent_runs.status`，≤16 字符）回答「以什么状态结束」：`succeeded` / `iteration_limit` / `loop_detected` /
   `budget_exceeded` / `timeout` / `cancelled` / `failed`。
+
 - 归类码（`agent_runs.error_code`）回答「为什么」：`loop_detected` / `budget_exceeded` / `iteration_limit` /
   `run_timeout` / `model_timeout` / `cancelled` / `model_unavailable` / `tool_error` / `unhandled_error`。
+
 - 词表与守卫契约在 `Shared/Execution/`：`AgentRunStatus`、`AgentRunCode`、`AgentRunStop`、
   `ToolCallObservation`、`IAgentRunGuard`、`AgentUsage` / `IAgentUsageSource`。
+
 - 「判」在本模块，「归类落库」由编排层（AgentHarness）做 —— 只有一串人话的失败，调用方没法决定重试还是降级。
 
 ### 还是没有的
@@ -127,26 +137,10 @@
 
 判定型的用例必须**正例能绿、负控能红**；能靠脚本判定的，禁止用 AI 来判。
 
-目前覆盖到的：
-
-- `tests/AgentWorkbench.UnitTests/Loop/AgentLoopTests.cs`（3 条）：正常返回（动作返回什么就传出来什么，
-  `MaxIterations` / `TimeoutSeconds` 如实暴露）；超时（抛 `AgentRunTimeoutException`，秒数对得上）；
-  取消（原样抛 `OperationCanceledException`，不被误判成超时）。
-- `tests/AgentWorkbench.UnitTests/Loop/AgentRunGuardTests.cs`（10 条）：守卫本体 ——
-  循环检测（连续同工具同参数到阈值即停；**负控**：关检测 → 永不停；非连续重复不停；同工具换参数不算重复）、
-  token 预算（超预算即停；**负控**：预算关掉或没有用量来源 → 永不停；口径只算本 run 增量，前一次 run 的消耗不算）、
-  收尾分类（最后一轮还在要工具 → `iteration_limit`；**负控**：模型提前收尾、或一次工具都没调，都不算跑满）。
-- `tests/AgentWorkbench.UnitTests/Harness/AgentHarnessExecutionControlTests.cs`（12 条）：端到端到落库 ——
-  重复调用 → `loop_detected`（被拦的那次也留轨迹）；**负控**：关检测 → 跑满 `MaxIterations` 标 `iteration_limit`；
-  超预算 → `budget_exceeded`；**负控**：关预算 → 跑满标 `iteration_limit`；跑满 → `iteration_limit`（不是 `succeeded`）；
-  模型收尾 → `succeeded` 无归类码；取消 → `cancelled` 且取消真的穿进工具内部；
-  连续工具失败 → `tool_error`；run 墙钟超时 → `run_timeout`；未配模型 → `model_unavailable`。
+验收命令与红绿以 `dotnet test tests/AgentWorkbench.ApplicationTests` 实测为准；
+本文不列测试文件名、用例号与条数（会漂）。
 
 还没覆盖的（对应总验收表 B2 / B6）：
 
 - 迭代预算的轮数对账（预算 2 → 恰好 2 轮）目前只在循环检测 / 收尾分类的用例里间接覆盖，没有独立用例。
 - 取消穿透只在编排层验过；单个工具「收到取消也不理」（第三方阻塞调用）时怎么强制隔离仍未做。
-
-## 依赖
-
-Shared。

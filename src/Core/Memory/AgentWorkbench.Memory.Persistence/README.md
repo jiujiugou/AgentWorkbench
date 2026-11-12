@@ -13,6 +13,7 @@
 - 本模块负责：只追加、按自增 `id` 读回、单条消息序列化不丢 `functionCall`；不覆盖、不裁剪、不删除。
 - 不负责：契约（应在 `Runtime.Session`）、注入形态与预算（`Runtime.Context`）、界面显示、
   `system` 指令（注入发生在 provider 下游，不落库——见 `docs/core/runtime.md` §7.3 第 9 条）。
+
 - 改动的动机、三段归属与连锁问题见 `docs/core/runtime.md` §7；**会话快照的并发写入归 §7.6 管**，
   加新 provider 前先看那节的「L1 同时保护 `agent_sessions`」，不要当成独立缺陷。
 
@@ -26,17 +27,21 @@
   `finally`，被 `ISessionRunGate` 的 `await using` 包住，同一 `sessionId` 不会有两个写入者。
   剩余风险（L2 未实现的跨进程、未来绕过 Harness 的后台写入者）归 `docs/core/runtime.md` §7.6；
   真要修到多实例，是在**这里**给 `SaveAsync` 加 `version` + `UPDATE ... WHERE version=?`（CAS）。
+
 - `SqliteChatHistoryProvider`：`ChatHistoryProvider` 的落库实现。每次模型调用前按 `sessionId`
   从 `chat_messages` 读回历史，run 结束把本轮新消息追加进去。`sessionId` 从
   `session.StateBag[AgentSessionKeys.SessionId]` 取（MAF 的会话对象不带 id）。
+
 - `SqliteChatMessageStore`：`chat_messages` 的读写（**EF Core**，`IDbContextFactory<AppDbContext>`，
   与 `ConversationRepository` 同一套；建表仍归 FluentMigrator）。只追加、按自增 `id` 升序读回，
   单条消息用 `AIJsonUtilities.DefaultOptions` 序列化（保住 `functionCall` / `functionResult`）。
   实体映射在 `Persistence/ChatMessageRecord.cs` + `AppDbContext.ChatMessages`。
+
 - `SqliteLongTermMemoryStore`：长期记忆的作用域隔离 / key 覆盖 / 保留期语义。
 - `SqliteSessionStateRepository` / `SqliteMemoryItemRepository`：两张表的读写（Dapper）。
 - `Tools/RememberTool`、`Tools/RecallTool`：agent 工具入口（`IAgentToolProvider`），作用域取自
   `IMemoryScopeAccessor`，模型只能选「本作用域 / 全局」。
+
 - `MemoryRetentionService`：`BackgroundService`，定期删过期会话行与过保留期的记忆行。
 - `AddNitroMemoryPersistence(...)`：注册上述实现，并用 `services.Replace` 覆盖 `AddNitroMemory`
   的内存版 `ISessionStore`，以及 `AddNitroContext` 注册的内存版 `ChatHistoryProvider`。
@@ -130,7 +135,3 @@ builder.Services.AddNitroMemoryPersistence(builder.Configuration); // 换成 SQL
 7. **不要开 `RequirePerServiceCallChatHistoryPersistence`**。实测（`HistoryProviderProbeTests.H1`）
    一次 run 结束时工具调用与工具结果都已在历史里；开那个开关只会让 `FunctionInvokingChatClient`
    把对话当成服务端管理、清掉自己累积的历史，改变守卫与轨迹行为，收益为零。
-
-## 依赖
-
-Memory、Persistence、ToolExecution、Shared。

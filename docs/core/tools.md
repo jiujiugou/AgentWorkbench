@@ -112,6 +112,7 @@ requestId = SHA256( conversationId | clientMessageId | actionKey | 规范化参�
 
 ```
 dotnet build AgentWorkbench.slnx --no-restore --nologo
+dotnet test tests/AgentWorkbench.CoreTests/AgentWorkbench.CoreTests.csproj --no-restore --nologo
 dotnet test tests/AgentWorkbench.ApplicationTests/AgentWorkbench.ApplicationTests.csproj --no-restore --nologo
 ```
 

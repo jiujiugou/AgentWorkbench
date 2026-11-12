@@ -68,6 +68,7 @@ ChatView (SignalR)
 
 ```
 dotnet build AgentWorkbench.slnx --no-restore --nologo
+dotnet test tests/AgentWorkbench.CoreTests/AgentWorkbench.CoreTests.csproj --no-restore --no-build --nologo
 dotnet test tests/AgentWorkbench.ApplicationTests/AgentWorkbench.ApplicationTests.csproj --no-restore --no-build --nologo
 cd web; npm run build
 ```
@@ -174,9 +175,9 @@ cd web; npm run build
 ### 7.5 怎么验
 
 ```
-dotnet test tests/AgentWorkbench.ApplicationTests/AgentWorkbench.ApplicationTests.csproj --no-restore --filter "FullyQualifiedName~ChatHistoryPersistenceTests"
-dotnet test tests/AgentWorkbench.ApplicationTests/AgentWorkbench.ApplicationTests.csproj --no-restore --filter "FullyQualifiedName~HistoryProviderProbeTests"
-dotnet test tests/AgentWorkbench.ApplicationTests/AgentWorkbench.ApplicationTests.csproj --no-restore --filter "FullyQualifiedName~HistoryDivergenceTests"
+dotnet test tests/AgentWorkbench.CoreTests/AgentWorkbench.CoreTests.csproj --no-restore --filter "FullyQualifiedName~ChatHistoryPersistenceTests"
+dotnet test tests/AgentWorkbench.CoreTests/AgentWorkbench.CoreTests.csproj --no-restore --filter "FullyQualifiedName~HistoryProviderProbeTests"
+dotnet test tests/AgentWorkbench.CoreTests/AgentWorkbench.CoreTests.csproj --no-restore --filter "FullyQualifiedName~HistoryDivergenceTests"
 dotnet test tests/AgentWorkbench.ApplicationTests/AgentWorkbench.ApplicationTests.csproj --no-restore --filter "FullyQualifiedName~SessionRunGateTests"
 ```
 

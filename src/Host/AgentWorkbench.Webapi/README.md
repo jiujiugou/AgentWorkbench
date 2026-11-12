@@ -2,20 +2,6 @@
 
 组合根模块：宿主 `Program.cs`、Controllers 与 SignalR Hub。
 
-## 功能
-
-| 文件 | 说明 |
-| --- | --- |
-| `Program.cs` | 组合根：模块注册（`AddNitroPersistence/Providers/ModelRuntime/Context/ToolExecution/BuiltinTools/Conversation/Knowledge/Documents/Memory/MemoryPersistence/Observability/AgentLoop/AgentHarness/Actions`）、Serilog、64MB 上传上限、启动即迁移 + 种子默认供应商与演示身份、静态文件 + SPA、CORS、映射 Controllers 与 Hub |
-| `Controllers/HealthController.cs` | 健康检查 |
-| `Controllers/DocumentsController.cs` | P0 文档：上传 / 列表 / 详情 / 页 / 块 / 重解析 / 删除 / 下载原始 PDF |
-| `Controllers/KnowledgeController.cs` | P1 知识库：健康 / 索引 / 检索 / 带引用问答 |
-| `Controllers/SettingsController.cs` | 供应商与模型 CRUD / 激活 / 拉取模型 / 连通测试 |
-| `Controllers/ConversationsController.cs` | 会话列表 / 新建 / 消息 / 删除 |
-| `Controllers/HarnessController.cs` | Agent Harness 只读：健康 / 运行详情（起 run 的 HTTP 入口已移除，见下节） |
-| `Controllers/ActionsController.cs` | 受控动作：提交 / 待审批 / 批准 / 拒绝 / 详情 / 审计 / 历史列表 |
-| `Hubs/AgentHub.cs` | SignalR 对话：`Send`（普通对话）、`Ask`（RAG 问答）、`Stop`（停止生成）；事件 `ReceiveConversation/ReceiveDelta/ReceiveTool/ReceiveSources/ReceiveRefusal/ReceiveDone/ReceiveCitations/ReceiveStopped/Error` |
-
 ## 界面投影（本模块独有的职责）
 
 `messages`（`conversations` 子表）是**宿主投影，不是底座能力，也不是模型记忆**。
@@ -25,8 +11,10 @@
 
 - **性质**：可裁剪的展示层职责。换 CLI / 定时任务 / 无聊天窗的嵌入调用，它就不存在；
   拿掉它底座照常跑，只是刷新看不到历史。所以**归 Host，不归 Core**。
+
 - `Core/Foundation/Persistence` 里的 `ConversationRepository` 只是被借用的通用表读写机制，
   不认识 `messageId`、不认识「刷新」、不认识流式与前端展示结构。**代码在 Core ≠ 职责归 Core**。
+
 - 它和 `chat_messages`（模型上下文）**没有汇合点，也不做一致性承诺**。由此剩下的两个未定边界
   （失败轮要不要留痕、删会话时模型上下文跟不跟着清）见 `docs/core/runtime.md` §7.3 第 1 条。
 
@@ -41,9 +29,11 @@
 
 - `Hubs/AgentHub.cs`：`ChatRequest.ClientMessageId` 必填。判空在 `Generations.TryAdd` **之前**——
   缺了不建会话、不落 user 消息、不探活、不起 run、不建身份作用域。
+
 - `Controllers/ActionsController.cs`：`ActionSubmitBody.ClientMessageId` 必填，缺了返回 400 +
   `client_message_id_required`。提交体**不再收 `RequestId` / `IdempotencyKey`**（客户端自报最终判重键
   等于把判重权交出去）；请求号由 Host 用 `InputIdentity.Derive` 算，无会话入口用归属 id 当隔离维度。
+
 - `Actions/ActionSubjectProvider.cs`：`Begin` 的会话与消息标识改为必填，作用域内身份必非空，
   工具环里的 `IActionOriginProvider` 因而拿得到「这是哪一次输入」。
 
@@ -69,15 +59,3 @@ H1/H3 锁「两条入口缺身份零副作用」，H2/H8 锁「身份真的进�
 H5 锁「换一次输入仍是新请求」（防误杀真实需求），H6 锁键序 / 参数语义，H7 锁提交体形状，
 H11 锁「产品后端不得再暴露 HTTP 起 run 入口」。
 负控：删掉任一入口判空 → H1/H3 红；把 `Derive` 改回随机 → H4/H6 红。
-
-## 依赖
-
-全部模块（组合根是唯一允许依赖所有模块的地方）：Shared、Domain、Persistence、Documents、Knowledge、
-ModelRuntime、ToolExecution、AgentLoop、Context、Memory、Memory.Persistence、Observability、Conversation、
-AgentHarness、Ports、ActionGateway、Erp、FakeActionSet、Gitea。
-反向依赖**目前只由 csproj 保证**：`tests/AgentWorkbench.ArchitectureTests` 源码为空，
-旧文里写的 `LayeringTests.Modules_should_not_depend_on_webapi` 不存在，改引用时不会有任何东西变红，
-需人工确认。
-
-> 注册顺序有要求：先 `AddNitroMemory` 再 `AddNitroMemoryPersistence`，后者用 `services.Replace`
-> 把内存版 `ISessionStore` 换成落库版。写反了会静默用回内存版（重启即丢）。

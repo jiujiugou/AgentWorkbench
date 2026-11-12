@@ -10,7 +10,6 @@ using Microsoft.AspNetCore.Mvc;
 using PortsActionResult = AgentWorkbench.Ports.ActionResult;
 
 /// <summary>
-/// M1 受控动作的最小宿主闭环（M1 设计 §2.2 步骤 1 / 步骤 4）：
 /// 提交 → 四道校验 → 挂起等人工 → 同意/拒绝 → 执行 → 终态 + 审计反查。
 ///
 /// 归属只信 Claim：Subject 取当前登录用户，客户端传不了别人的身份（同 CurrentUser 的约定）。

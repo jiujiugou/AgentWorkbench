@@ -21,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\AgentWorkbench.TestKit\AgentWorkbench.TestKit.csproj" />
     <ProjectReference Include="..\..\src\Core\Foundation\AgentWorkbench.Shared\AgentWorkbench.Shared.csproj" />
     <ProjectReference Include="..\..\src\Core\Ports\AgentWorkbench.Ports.csproj" />
     <ProjectReference Include="..\..\src\Core\Tools\AgentWorkbench.ActionGateway\AgentWorkbench.ActionGateway.csproj" />

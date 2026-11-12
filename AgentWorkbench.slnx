@@ -45,5 +45,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/AgentWorkbench.ApplicationTests/AgentWorkbench.ApplicationTests.csproj" />
+    <Project Path="tests/AgentWorkbench.CoreTests/AgentWorkbench.CoreTests.csproj" />
+    <Project Path="tests/AgentWorkbench.TestKit/AgentWorkbench.TestKit.csproj" />
   </Folder>
 </Solution>

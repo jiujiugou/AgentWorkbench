@@ -1,17 +1,24 @@
 # AgentWorkbench.Knowledge.Abstractions
 
-知识库契约模块（P1）：定义引擎、Embedding、重排等扩展点，供上层与实现方依赖，不含具体实现。
+> 校准基线：`b4d5f2c`。本文只写边界；文件与成员以代码为准。
 
-## 功能
+## 这一格是什么
 
-| 文件 | 说明 |
-| --- | --- |
-| `IKnowledgeEngine.cs` | 知识引擎契约：能力位（前端据此决定按钮是否可用）+ 健康状态 |
-| `KnowledgeConstants.cs` | 知识库常量 |
-| `Embedding/IEmbeddingProvider.cs` | 文本向量化统一接口；含未配置时的空实现（调用即抛，供上层优雅降级为纯全文检索） |
-| `Retrieval/IReranker.cs` | 重排抽象：对融合后的候选重排（P1 默认关，占位为 `NullReranker`） |
-| `Retrieval/RetrievalHit.cs` | 一条检索命中：来源 + 正文 + 各路分数（用于调试面板与引用） |
+底座知识层的**契约**，不含实现：引擎能力位、embedding 扩展点、一条检索命中的形状。
+上层与实现方都依赖它，因此**这里不许出现业务词，也不许依赖任何具体实现项目**。
 
-## 依赖
+`RetrievalHit` 是跨语言边界的那条线：Python MCP server 返回的 hits 由 C# 反序列化成它，
+来源面板与引用校验读同一份，`[n]` 编号才不会错位。
 
-Domain、Shared。
+## 红线
+
+1. 只放契约，不放实现、不放判定逻辑（判定在 `Knowledge.Local`）。
+2. 换动作域时本模块不动；出现 ERP / 单据类名即为越界。
+3. **字段形状是跨进程契约**：改 `RetrievalHit` 必须在同一次提交里同步 Python server 的输出，
+   否则表现为「来源悄悄少一块」，不报错。
+4. 只放还有消费者的接口；没有消费者的扩展点直接删，不留占位实现。
+
+## 怎么验
+
+`DomainSwapAc01Tests` 的 AC-02 禁词扫描覆盖本目录；
+文件清单用 `find src/Core/Knowledge/AgentWorkbench.Knowledge.Abstractions -name '*.cs'`。

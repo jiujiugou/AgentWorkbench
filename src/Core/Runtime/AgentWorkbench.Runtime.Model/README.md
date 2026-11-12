@@ -29,19 +29,13 @@
 
 `Harness:ModelRuntime`：`RequestTimeoutSeconds`（0=不限）/ `MaxRetries=2` / `RetryBaseDelayMilliseconds=200` / `MaxConcurrentRequests`（0=不限）。
 
-## 消费者
-
-| 消费者 | 用法 |
-| --- | --- |
-| Conversation `ChatService` / `StructuredChatService` / `ChatClientProvider` | `_runtime.Wrap(_factory.GetClient(endpoint))` |
-| AgentHarness `AgentHarnessService` | 工具环内层客户端先经 `Wrap` 再交给 `ToolExecutionPipeline` |
-
 ## 依赖
 
 Shared。
 
 <!--
 不负责（边界）
+
 - 端点选择：调哪家、哪个模型 → Providers（IChatClientFactory）。
 - run 级预算 / 迭代上限 / 整轮墙钟超时 → AgentLoop。
 - 上下文组装、检索片段拼接、按窗口裁剪历史 → Context；会话状态（sessionId → 历史）→ Memory。
@@ -49,6 +43,7 @@ Shared。
 - 供应商 native 协议适配 → Providers；本模块只消费统一后的 MEA 类型。
 
 现状与偏差（下列与上面「负责的功能」不一致，尚未修复）
+
 - 并发闸门实际失效：Wrap 在各调用方都是「每请求调一次」，而 SemaphoreSlim 是 ModelRuntimeChatClient 的实例字段 → 每个请求各自拿满许可，跨请求永不阻塞。要生效需把闸门提到单例层，或缓存包装结果。现有单测 Wrap_IsIdempotent 之所以绿，是因为测试内手动 wrap 两次，生产路径每次 inner client 都不同，幂等分支不会走到。
 - 单次请求超时默认关闭：RequestTimeoutSeconds 默认 0，且 appsettings.json 中没有 Harness:ModelRuntime 节。实际兜底只剩 AgentLoop 的 run 级 30s（仅 Harness 路径），Conversation 直连路径没有兜底。
 - 流式重试无测试：现有单测四条全在非流式路径上，「流式只在零增量时重试」属未验证声明。

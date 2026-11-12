@@ -16,6 +16,10 @@
 
 收拢前，「什么进模型请求」散在三处，规则各不相同：
 
+> 下表是 11-07 收拢上下文时的**历史对比**，不是现行清单：后两条路径所属的实现
+> （`ChatService.BuildMessages`、Workflow `AgentStepExecutor`）已删除，保留它只为说明
+> 「当时为什么必须收成一个组装点」。现行调用点以 `IContextAssembler` 的实际引用为准。
+
 | 位置 | 原来的做法 | 问题 |
 |------|-----------|------|
 | `Runtime.Harness` | `new ChatMessage(User, input)`，历史交给 `InMemoryChatHistoryProvider` | 只有一条路，没有任何地方能统一加片段 |
@@ -29,7 +33,7 @@
 ## 二、分层
 
 ```
-调用方（Harness / ChatService / Workflow）
+调用方（以 IContextAssembler 的实际引用为准）
         │  传入 ContextRequest（纯数据，不含存储）
         ▼
 Runtime.Context     ← 只依赖 Shared + Microsoft.Extensions.AI / MAF

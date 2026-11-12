@@ -18,6 +18,7 @@
 
 - FluentMigrator，扫描本程序集的 `Migrations`，编号 `M0xx` 递增；启动时 `InitializeDatabase()`
   在建好 app、收请求之前 `MigrateUp()`（见 Webapi `Program.cs`）。
+
 - `Dapper.DefaultTypeMap.MatchNamesWithUnderscores = true`，所以列名用 snake_case。
 
 现有表与迁移：
@@ -93,18 +94,10 @@
 
 目前覆盖到的：
 
-- 架构测试（分层与无环）—— 即「依赖方向没走反」。
-- `tests/AgentWorkbench.UnitTests/Memory/TempDatabase.cs`：在临时库上跑**真实 FluentMigrator 迁移**，
-  已被 `Memory` 的落库用例（`SqliteSessionStore` / `SqliteLongTermMemoryStore` / 保留服务）复用。
-  它事实上就是本模块需要的 SQLite 测试夹具，只是目前寄居在 `Memory` 用例下。
+- 依赖方向与无环：`DomainSwapAc01Tests`（在 `ApplicationTests` 内，仍在跑）。
 
 应该补上的：
 
 - 正例：空库跑一遍全部迁移 → 表齐全 → 仓储写入后能按 id 读回。
 - 负控：`Down()` 之后再 `Up()` 必须幂等成功（证明迁移可回滚）。
 - 负控：写到不存在的 `conversation_id` 必须因外键失败，而不是静默写入孤儿行。
-
-## 依赖
-
-Domain、Shared。
-

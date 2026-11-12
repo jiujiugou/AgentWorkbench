@@ -21,6 +21,7 @@
 - `ExecutionTrace`：`SessionId` / `Status` / `ErrorCode` / `Iterations` / `Model` / `LatencyMs` /
   `Error` / `Steps`；`ExecutionStep`：`Iteration` / `Kind` / `Tool` / `Arguments` / `Result` / `Error`。
   `Error` 只有工具失败步才非空，**「失败」和「返回空」分得开**。
+
 - 两个字段各回答一个问题：`Status` 说「以什么状态结束的」（`succeeded` / `iteration_limit` /
   `loop_detected` / `budget_exceeded` / `timeout` / `cancelled` / `failed`），
   `ErrorCode` 说「为什么」（`model_unavailable` / `tool_error` / `run_timeout` / `model_timeout` /
@@ -31,6 +32,7 @@
 
 - `SaveAsync(trace)` → 返回 `runId`，写 `agent_runs`（M014，`error_code` 由 M022 加）与 `agent_steps`
   （M015，`error` 由 M021 加）。
+
 - **成功、失败、取消、超时四条路径都落库**，由 `AgentHarness` 调用；失败 / 取消路径用
   `CancellationToken.None` 写，不因为调用方已取消就丢记录。
 
@@ -90,8 +92,3 @@
 - 正例：`SaveAsync` 之后 `GetAsync` 能拿回同样的状态、归类码与逐步痕迹。
 - 负控：`GetAsync` 一个不存在的 runId 必须返回 `null`。
 - 负控：按错误码查询时，不存在的错误码必须返回空集（等 P3-3 的查询面做出来）。
-
-## 依赖
-
-Persistence、Domain、Shared。
-

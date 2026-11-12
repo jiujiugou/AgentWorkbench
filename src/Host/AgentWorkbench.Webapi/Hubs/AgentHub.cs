@@ -107,6 +107,15 @@ public sealed class AgentHub : Hub
             return;
         }
 
+        // 空文本不能只靠前端拦：绕过前端直连 Hub 时，空串会一路走到建会话、
+        // 落一条空 user 消息并起一次 run。放在占连接闸之前：拒绝时不占槽位、
+        // 不需要 finally 清理，也不产生终态。
+        if (string.IsNullOrWhiteSpace(request.Text))
+        {
+            await SendErrorAsync("输入为空：请输入内容后再发送。");
+            return;
+        }
+
         // 放开并行调用后 Stop 才能插队进来，代价是同连接可以同时发起两次 Send；
         // 这里用 TryAdd 挡掉第二条，否则后到的会覆盖前一条的 CTS，导致前一条再也停不掉。
         //

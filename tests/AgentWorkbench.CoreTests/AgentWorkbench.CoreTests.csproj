@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- 内核模块级测试：只依赖 src/Core 下的项目。
+       这里**不得**出现 Host / Domains / Webapi 的引用——内核一旦需要知道业务域或宿主，
+       就说明归属判错了（docs/归属判据.md 第 1、2 条）。这条约束由项目引用本身表达，
+       比写在文档里可靠：加一条域引用，架构上立刻说不通。
+
+       边界：运行期流程的逐格验收（S01–S10）**不在这里**，在 ApplicationTests；
+       这里放的是模块自己的行为。共用测试件在 AgentWorkbench.TestKit。
+
+       目录**镜像 src/Core**，一个测试目录对应一个项目，不另起分类名：
+         Runtime/Tools        ↔ src/Core/Runtime/AgentWorkbench.Runtime.Tools
+         Runtime/Context      ↔ src/Core/Runtime/AgentWorkbench.Runtime.Context
+         Memory/Persistence   ↔ src/Core/Memory/AgentWorkbench.Memory.Persistence
+       新增测试时按被测项目在 src/Core 的位置放——位置本身就说明了它在测谁。 -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtools</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Moq" Version="4.20.72" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Agents.AI.Workflows" Version="1.23.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AgentWorkbench.TestKit\AgentWorkbench.TestKit.csproj" />
+    <ProjectReference Include="..\..\src\Core\Foundation\AgentWorkbench.Shared\AgentWorkbench.Shared.csproj" />
+    <ProjectReference Include="..\..\src\Core\Ports\AgentWorkbench.Ports.csproj" />
+    <ProjectReference Include="..\..\src\Core\Foundation\AgentWorkbench.Persistence\AgentWorkbench.Persistence.csproj" />
+    <ProjectReference Include="..\..\src\Core\Memory\AgentWorkbench.Memory.Persistence\AgentWorkbench.Memory.Persistence.csproj" />
+    <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Loop\AgentWorkbench.Runtime.Loop.csproj" />
+    <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Context\AgentWorkbench.Runtime.Context.csproj" />
+    <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Model\AgentWorkbench.Runtime.Model.csproj" />
+    <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Session\AgentWorkbench.Runtime.Session.csproj" />
+    <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Tools\AgentWorkbench.Runtime.Tools.csproj" />
+    <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Harness\AgentWorkbench.Runtime.Harness.csproj" />
+    <ProjectReference Include="..\..\src\Core\Tools\AgentWorkbench.Tools.Abstractions\AgentWorkbench.Tools.Abstractions.csproj" />
+  </ItemGroup>
+</Project>
