@@ -118,11 +118,14 @@ public sealed class ContextBoundaryTests
         Assert.True(CountOccurrences(sample, "AmountLimit") > 0);
     }
 
-    // [F3.8] 注入点是 IChatClient 装饰器，非 ChatClientAgentOptions.AIContextProviders
-    // 负控：改挂 provider（代码里新增 AIContextProviders = [...] 或作为 Agent 选项属性使用）
-    //       → 「代码行零命中 AIContextProviders」会红；挂了会让守卫与轨迹被绕过。
+    // [F3.8] 注入的三条线（2026-11-14 Context 重构后重写；旧版钉的是 `IChatClient` 装饰器 + `_context.Wrap`，
+    // 那两样已被删除——指令形态与历史都有框架等价物，按「绝对不造轮子」不再自写装饰器）。
+    // 1) 不挂 AIContextProviders：它会绕过工具环守卫（设计使然，不是 bug）；
+    // 2) 不自写 ChatClient 装饰器：`ContextInjectingChatClient` 不该长回来；
+    // 3) 指令赋值只有一处：两处赋值会让「run 指令」和「每轮指令」互相覆盖。
+    // 负控：加回 provider / 重新引入装饰器 / 多写一处 `Instructions =` → 本条红。
     [Fact]
-    public void F38_InjectionUsesChatClientDecorator_NotAIContextProviders()
+    public void F38_指令走ChatOptions_不挂AIContextProviders_不自写装饰器()
     {
         var root = FindRepoRoot();
         var sources = ReadSourceFiles(root, ContextDir, HarnessDir);
@@ -133,11 +136,17 @@ public sealed class ContextBoundaryTests
         var code = string.Join("\n", sources.Select(StripComments));
         Assert.Equal(0, CountOccurrences(code, "AIContextProviders"));
 
-        // 正面对照：真实链路走装饰器 + 原样使用我们装配的 client（不另包函数调用环）
-        var all = string.Join("\n", sources);
-        Assert.True(CountOccurrences(all, "ContextInjectingChatClient") > 0);      // 装饰器存在
-        Assert.True(CountOccurrences(all, "UseProvidedChatClientAsIs = true") > 0); // 不另包环
-        Assert.True(CountOccurrences(all, "_context.Wrap") > 0);                    // 注入点 = Wrap
+        // 装饰器与 Wrap 都已删除：它们出现在代码行里就说明有人把旧形态抄回来了。
+        Assert.Equal(0, CountOccurrences(code, "ContextInjectingChatClient"));
+        Assert.Equal(0, CountOccurrences(code, "_context.Wrap"));
+
+        // 单一注入点：ChatOptions.Instructions 的赋值只允许出现一次。
+        // 只数「行首就是 Instructions =」的语句——record 构造参数里的 `Instructions = null`
+        // 是默认值，不是注入点，混进来会让这条断言数错。
+        var assignments = code.Split('\n')
+            .Select(l => l.Trim())
+            .Count(l => l.StartsWith("Instructions =", StringComparison.Ordinal));
+        Assert.Equal(1, assignments);
 
         // 反例对照：同一套扫描器能抓到「改挂 provider」的代码
         // （负控：若 StripComments / 扫描器恒返回 0，这条会红 —— 证明零命中不是恒真）

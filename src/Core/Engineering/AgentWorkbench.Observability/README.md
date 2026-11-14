@@ -1,6 +1,12 @@
 # 可观测与评估模块（Observability）
 
-这个模块只干一件事：**把「这次 run 到底干了什么」如实落库，并能按 runId 原样读回来**。
+这个模块只定义两样东西：**一次 run 的轨迹长什么样**（`ExecutionTrace` / `ExecutionStep`），
+以及**写出去与读回来的契约**（`IExecutionTraceStore`）。**落库不在这里。**
+
+实现住在 `Foundation/AgentWorkbench.Persistence/Traces/`（`ExecutionTraceStore` + DI 注册）——
+`agent_runs` / `agent_steps` 是存储选型，属于应用侧；契约属于内核。
+所以本模块的编译期依赖只有 `Shared`（终态与归类码词表），**不引 Persistence / Domain / EF Core / DI / Logging**。
+方向是 `Persistence → Observability`，反过来就错了。
 
 它只存不算：终态和归类码怎么判定是 `AgentHarness` 的事，每一步怎么采集是 `ToolExecution` 的事，
 指标口径还没落地（当前只有模型用量计数在 `ModelRuntime`）。
@@ -44,9 +50,12 @@
 
 ### 接口
 
-| 接口 | 成员 | 实现 | 消费者 |
+| 接口 | 成员 | 实现（在哪） | 消费者 |
 | --- | --- | --- | --- |
-| `IExecutionTraceStore` | `SaveAsync`、`GetAsync` | `ExecutionTraceStore` | `AgentHarness.RunAsync` / `GetRunAsync` |
+| `IExecutionTraceStore` | `SaveAsync`、`GetAsync`、`QueryAsync` | `ExecutionTraceStore` — **`Persistence/Traces/`** | `AgentHarness.RunAsync` / `GetRunAsync` |
+
+DI 注册也在持久化层（`TraceStoreServiceCollectionExtensions.AddNitroObservability`），
+方法名沿用旧名是为了组合根不用改；替换存储的落点在调用方，不在内核。
 
 ---
 

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using AgentWorkbench.Documents;
 using AgentWorkbench.Domain;
 using AgentWorkbench.Knowledge.Abstractions;
+using AgentWorkbench.Shared;
 using AgentWorkbench.Shared.Options;
 using AgentWorkbench.Persistence;
 using AgentWorkbench.Webapi.Problems;

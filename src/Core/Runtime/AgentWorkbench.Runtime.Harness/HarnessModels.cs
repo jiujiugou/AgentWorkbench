@@ -12,8 +12,8 @@ public sealed record HarnessCapabilities(bool Loop, bool Llm, bool Context, bool
 /// <param name="SessionId">会话标识；为空时本次调用使用随机会话（无跨 run 记忆）。</param>
 /// <param name="Input">用户输入原文。知识检索不再由 harness 暗做——模型需要依据时调 MCP 检索工具，轨迹留名。</param>
 /// <param name="Instructions">
-/// 本次 run 的系统指令（人格 / 约束，如知识问答的引用规范）。由 <c>IContextAssembler</c>
-/// 装饰在工具环外面注入：只往模型请求前插一条 system 消息，不写进会话历史
+/// 本次 run 的系统指令（人格 / 约束，如知识问答的引用规范）。由 <c>IRequestContextComposer</c>
+/// 合成后放进 MAF 的 <c>ChatOptions.Instructions</c>：每轮随模型请求下发，不写进会话历史
 /// （否则同一指令会随每轮对话重复累积）。<b>不要改用 Agent 的 AIContextProviders</b>——
 /// 那会让 MEA 在我们装配的函数调用环外再包一层，绕过守卫与轨迹采集。
 /// </param>
@@ -31,14 +31,16 @@ public sealed record HarnessRunRequest(
 /// <param name="Arguments">工具调用参数的序列化文本。</param>
 /// <param name="Result">工具返回值或（截断后的）最终答复文本。</param>
 /// <param name="Error">异常类型+消息；仅工具步可能非空。</param>
+/// <param name="Truncated">该步文本是否被截断过（记录是回放用的，不是全文归档）。</param>
 /// <remarks><see cref="Error"/> 仅工具步可能非空：调用失败时记异常类型与消息，便于回放时区分「失败」与「空结果」。</remarks>
 public sealed record HarnessStep(
-    int Iteration, string Kind, string? Tool, string? Arguments, string? Result, string? Error = null);
+    int Iteration, string Kind, string? Tool, string? Arguments, string? Result, string? Error = null,
+    bool Truncated = false);
 
 /// <summary>
 /// 一次 Harness run 结果。
 /// </summary>
-/// <param name="RunId">本次 run 的轨迹标识，可用于 <see cref="IAgentHarness.GetRunAsync"/> 回放。</param>
+/// <param name="RunId">本次 run 的轨迹标识，可用于 <see cref="AgentWorkbench.Observability.IExecutionTraceReader.GetAsync"/> 回放。</param>
 /// <param name="SessionId">实际使用的会话标识（请求未带时此处为生成的随机值）。</param>
 /// <param name="Text">模型最终答复文本（提前终止时可能为空）。</param>
 /// <param name="Iterations">实际迭代轮数。</param>

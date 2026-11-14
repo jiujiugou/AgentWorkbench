@@ -124,7 +124,8 @@ public sealed class HistoryDivergenceTests
     private static ChatClientAgent BuildAgent(ChatHistoryProvider provider, ScriptedChatClient llm)
         => BuildAgent(provider, (IChatClient)new FunctionInvokingChatClient(llm), withTools: true);
 
-    private static ChatClientAgent BuildAgent(ChatHistoryProvider provider, IChatClient pipeline, bool withTools)
+    private static ChatClientAgent BuildAgent(
+        ChatHistoryProvider provider, IChatClient pipeline, bool withTools, string? instructions = null)
         => new(pipeline, new ChatClientAgentOptions
         {
             UseProvidedChatClientAsIs = true,
@@ -133,31 +134,10 @@ public sealed class HistoryDivergenceTests
             {
                 Tools = withTools
                     ? [AIFunctionFactory.Create(new LookupTool().LookupOrder, "LookupOrder")]
-                    : []
+                    : [],
+                Instructions = instructions
             }
         });
-
-    /// <summary>
-    /// 复刻生产里 <c>IContextAssembler.Wrap</c> 的形状：在 Agent 内部、provider 下游插一条 system 消息。
-    /// 生产类 <c>ContextInjectingChatClient</c> 是 internal，测试里按同一形状写一份。
-    /// </summary>
-    private sealed class SystemInjector(IChatClient inner, string instructions) : IChatClient
-    {
-        public Task<ChatResponse> GetResponseAsync(
-            IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken ct = default)
-            => inner.GetResponseAsync(With(messages), options, ct);
-
-        public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-            IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken ct = default)
-            => inner.GetStreamingResponseAsync(With(messages), options, ct);
-
-        public object? GetService(Type serviceType, object? serviceKey = null) => inner.GetService(serviceType, serviceKey);
-
-        public void Dispose() => inner.Dispose();
-
-        private IEnumerable<ChatMessage> With(IEnumerable<ChatMessage> messages)
-            => [new ChatMessage(ChatRole.System, instructions), .. messages];
-    }
 
     private static async Task<AgentSession> BindSessionAsync(ChatClientAgent agent, string sessionId)
     {
@@ -253,11 +233,11 @@ public sealed class HistoryDivergenceTests
         Assert.NotEmpty(await db.Store.LoadAsync(conversation.Id));
     }
 
-    // [X4] 注入的 system 指令不落历史：模型看到了，历史里没有。
-    // 生产的 `IContextAssembler.Wrap` 就装在 provider 下游（ContextInjectingChatClient 的注释明写
-    // 「指令不随每轮对话在历史里累积」）。后果：光看 chat_messages 复原不出「模型当时看到了什么」。
+    // [X4] MAF 原生 ChatOptions.Instructions：模型请求里带着，会话历史里没有。
+    // 这是「模型看到了什么」的关键证据：指令随请求选项下发，不落 chat_messages，
+    // 所以光看落库历史复原不出「模型当时收到了什么」（负控：把指令塞进 Messages → model.Count 变 3）。
     [Fact]
-    public async Task X4_注入的system指令进模型请求但不进历史()
+    public async Task X4_指令随请求下发但不进会话历史()
     {
         await using var db = await NewFixtureAsync();
         var provider = new SqliteChatHistoryProvider(db.Store, NullLogger<SqliteChatHistoryProvider>.Instance);
@@ -266,17 +246,19 @@ public sealed class HistoryDivergenceTests
         var llm = new ScriptedChatClient().Reply("答复");
         var agent = BuildAgent(
             provider,
-            new SystemInjector(new FunctionInvokingChatClient(llm), "你是 ERP 采购助手"),
-            withTools: false);
+            new FunctionInvokingChatClient(llm),
+            withTools: false,
+            instructions: "你是 ERP 采购助手");
 
         var session = await BindSessionAsync(agent, conversation.Id);
         await agent.RunAsync("第一句", session);
 
         var model = await db.Store.LoadAsync(conversation.Id);
 
-        // 模型确实收到了 system 指令……
-        Assert.Contains(llm.LastRequest, m => m.Role == ChatRole.System);
-        // ……但历史里一条都没有。
+        // 模型确实收到了指令——随 ChatOptions 下发，不是历史里的一条 system 消息。
+        Assert.Equal("你是 ERP 采购助手", llm.LastOptions?.Instructions);
+        Assert.DoesNotContain(llm.LastRequest, m => m.Role == ChatRole.System);
+        // 落库历史里一条 system 都没有，仍是 user + assistant 两条。
         Assert.DoesNotContain(model, m => m.Role == ChatRole.System);
         Assert.Equal(2, model.Count);
     }

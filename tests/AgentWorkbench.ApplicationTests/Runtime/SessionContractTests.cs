@@ -38,7 +38,7 @@ public sealed class SessionContractTests
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
-            var parts = new List<string> { dir.FullName, "src", "Core" };
+            var parts = new List<string> { dir.FullName, "src" };
             parts.AddRange(relativeParts);
             var candidate = Path.Combine(parts.ToArray());
             if (File.Exists(candidate))
@@ -90,7 +90,7 @@ public sealed class SessionContractTests
         Assert.Equal(control.CachedIds, armA.CachedIds);
 
         // ② 落库臂结构断言：降级分支存在，且「解析 → 异常 → 留痕(日志) → 删行 → 新建」顺序正确
-        var source = ReadSource("Memory", "AgentWorkbench.Memory.Persistence", "SqliteSessionStore.cs");
+        var source = ReadSource("Implementations", "AgentWorkbench.Memory.Persistence", "SqliteSessionStore.cs");
         Assert.Contains("JsonDocument.Parse(record.StateJson)", source);   // 解析快照
         Assert.Contains("document.RootElement.Clone()", source);           // Clone 独立于被释放的 document
         Assert.Contains("factory.DeserializeAsync(", source);               // 走 ISessionFactory 反序列化
@@ -184,7 +184,7 @@ public sealed class SessionContractTests
         Assert.Equal(2, mismatchFactory.CreateCount);
 
         // ② 落库臂结构断言：同一接口、同一 options/time、同一 ISessionFactory 的序列化 / 反序列化
-        var source = ReadSource("Memory", "AgentWorkbench.Memory.Persistence", "SqliteSessionStore.cs");
+        var source = ReadSource("Implementations", "AgentWorkbench.Memory.Persistence", "SqliteSessionStore.cs");
         Assert.Contains("class SqliteSessionStore : ISessionStore", source);
         Assert.Contains("ISessionStateRepository _repository", source);
         Assert.Contains("IOptions<MemoryOptions> options", source);
@@ -263,7 +263,7 @@ public sealed class SessionContractTests
     [Fact]
     public void F47_OptionsSource_DefaultMustBeFalse()
     {
-        var source = ReadSource("Runtime", "AgentWorkbench.Runtime.Session", "MemoryOptions.cs");
+        var source = ReadSource("Core", "Runtime", "AgentWorkbench.Runtime.Session", "MemoryOptions.cs");
         Assert.Contains("LongTermEnabled { get; set; } = false;", source);   // 当前 = true → 红
     }
 
@@ -274,7 +274,7 @@ public sealed class SessionContractTests
     public void F47_ToolRegistration_FallbackMustBeFalse()
     {
         var source = ReadSource(
-            "Memory", "AgentWorkbench.Memory.Persistence", "MemoryPersistenceServiceCollectionExtensions.cs");
+            "Implementations", "AgentWorkbench.Memory.Persistence", "MemoryPersistenceServiceCollectionExtensions.cs");
 
         // 绿断言：确认定位到的确实是「按开关注册 remember/recall 工具」的那段代码
         Assert.Contains("if (LongTermEnabled(configuration))", source);

@@ -54,7 +54,8 @@ public sealed class AgentRunGuard : IAgentRunGuard
             return null;
 
         return new AgentRunStop(AgentRunStatus.IterationLimit, AgentRunCode.IterationLimit,
-            $"已跑满迭代预算（{_options.MaxIterations} 轮工具调用），模型被强制收口");
+            $"已跑满迭代预算（{_options.MaxIterations} 轮工具调用），模型被强制收口",
+            new RunStopDetail("iteration_budget", _lastIteration + 1, _options.MaxIterations));
     }
 
     private AgentRunStop? DetectLoop(ToolCallObservation call)
@@ -76,7 +77,8 @@ public sealed class AgentRunGuard : IAgentRunGuard
             return null;
 
         return new AgentRunStop(AgentRunStatus.LoopDetected, AgentRunCode.LoopDetected,
-            $"模型连续 {_repeats} 次以相同参数重复调用工具 {call.Name}，判定为循环，已终止");
+            $"模型连续 {_repeats} 次以相同参数重复调用工具 {call.Name}，判定为循环，已终止",
+            new RunStopDetail("repeated_tool_calls", _repeats, _options.MaxRepeatedToolCalls, call.Name));
     }
 
     private AgentRunStop? DetectBudgetOverage()
@@ -89,6 +91,7 @@ public sealed class AgentRunGuard : IAgentRunGuard
             return null;
 
         return new AgentRunStop(AgentRunStatus.BudgetExceeded, AgentRunCode.BudgetExceeded,
-            $"token 预算耗尽（已用 {used}，上限 {_options.MaxTokensPerRun}），已终止");
+            $"token 预算耗尽（已用 {used}，上限 {_options.MaxTokensPerRun}），已终止",
+            new RunStopDetail("token_budget", used, _options.MaxTokensPerRun));
     }
 }

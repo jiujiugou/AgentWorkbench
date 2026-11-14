@@ -8,17 +8,29 @@ namespace AgentWorkbench.Observability;
 /// <param name="Limit">最多返回多少条；结果按 runId 倒序（最近优先）。</param>
 public sealed record ExecutionTraceQuery(string? SessionId = null, string? Status = null, int Limit = 50);
 
-/// <summary>执行轨迹的持久化与回放（M014 agent_runs / M015 agent_steps）。</summary>
+/// <summary>
+/// 轨迹写出口（M014 agent_runs / M015 agent_steps）。**内核只依赖这一个口。**
+/// </summary>
 /// <remarks>
-/// <see cref="GetAsync"/> 与 <see cref="QueryAsync"/> 是「轨迹被读」的唯一两条入口：
-/// 前者供回放单条（前端回放面板 / 回归测试），后者供按会话或终态检索一批。
-/// 两者都必须被运行时或测试消费——只写不读的轨迹是死数据，等于没记。
+/// 为什么读写要分家：内核从不读自己的记录做决策，一旦它能读，判定就与存储耦成一个环——
+/// 换存储要改判定，改判定会动存储。分成两个接口后，「不读」是编译期事实，不是注释约定。
+/// <para>写失败会抛出，是否容忍由调用方决定（Harness 的选择是「只记 Warning，不掩盖原始异常」）。</para>
 /// </remarks>
-public interface IExecutionTraceStore
+public interface IExecutionTraceWriter
 {
-    /// <summary>落库一次执行轨迹，返回 runId。写入失败会抛出（由调用方决定是否容忍）。</summary>
+    /// <summary>落库一次执行轨迹，返回 runId。</summary>
     Task<long> SaveAsync(ExecutionTrace trace, CancellationToken cancellationToken = default);
+}
 
+/// <summary>
+/// 轨迹读口：按 runId 回放、按会话 / 终态检索一批。属应用层用途（回放面板、排障、报表），
+/// 内核不注入它。
+/// </summary>
+/// <remarks>
+/// 两条入口必须被真实消费者使用（现在只有 Host 的回放端点）——只写不读的轨迹是死数据。
+/// </remarks>
+public interface IExecutionTraceReader
+{
     /// <summary>按 runId 回放轨迹；不存在返回 <c>null</c>。</summary>
     Task<ExecutionTrace?> GetAsync(long runId, CancellationToken cancellationToken = default);
 
@@ -29,3 +41,11 @@ public interface IExecutionTraceStore
     Task<IReadOnlyList<ExecutionTrace>> QueryAsync(
         ExecutionTraceQuery query, CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// 读写合体的存储实现接口：方便「一次注册、两种用途」，也让存储实现只需写一个类。
+/// </summary>
+/// <remarks>
+/// 内核<b>不许</b>注入这个类型（它把读也带了回来）；需要写就注入 <see cref="IExecutionTraceWriter"/>。
+/// </remarks>
+public interface IExecutionTraceStore : IExecutionTraceWriter, IExecutionTraceReader;

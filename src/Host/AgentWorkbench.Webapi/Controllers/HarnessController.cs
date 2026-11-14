@@ -1,3 +1,4 @@
+using AgentWorkbench.Observability;
 using AgentWorkbench.Runtime.Harness;
 using Microsoft.AspNetCore.Mvc;
 
@@ -23,8 +24,13 @@ namespace AgentWorkbench.Webapi.Controllers;
 public sealed class HarnessController : ControllerBase
 {
     private readonly IAgentHarness _harness;
+    private readonly IExecutionTraceReader _traces;
 
-    public HarnessController(IAgentHarness harness) => _harness = harness;
+    public HarnessController(IAgentHarness harness, IExecutionTraceReader traces)
+    {
+        _harness = harness;
+        _traces = traces;
+    }
 
     /// <summary>能力位：loop / llm / context / memory 是否就绪，以及当前可见的工具清单。</summary>
     [HttpGet("health")]
@@ -32,10 +38,14 @@ public sealed class HarnessController : ControllerBase
         => Ok(await _harness.GetCapabilitiesAsync(cancellationToken));
 
     /// <summary>按 run id 读单次运行结果（状态、迭代数、耗时、步骤）。</summary>
+    /// <remarks>
+    /// 走读口（<see cref="IExecutionTraceReader"/>）而不是 Harness 门面：回放是应用层用途，
+    /// 内核只依赖写口。路由与响应形状保持不变。
+    /// </remarks>
     [HttpGet("runs/{id:long}")]
     public async Task<IActionResult> Get(long id, CancellationToken cancellationToken)
     {
-        var result = await _harness.GetRunAsync(id, cancellationToken);
-        return result is null ? NotFound() : Ok(result);
+        var trace = await _traces.GetAsync(id, cancellationToken);
+        return trace is null ? NotFound() : Ok(HarnessTraceMapping.ToResult(id, trace));
     }
 }

@@ -3,6 +3,10 @@ namespace AgentWorkbench.Runtime.Session;
 /// <summary>
 /// 记忆配置。配置路径沿用 <c>Harness:Memory</c>，与既有 appsettings 兼容。
 /// </summary>
+/// <remarks>
+/// 「哪个键决定哪件事」见 <c>docs/core/状态与记忆.md</c>。
+/// 默认值以本文件为准——文档里那张表可能滞后；改这里的默认值或新增键时，顺手同步那份文档。
+/// </remarks>
 public sealed class MemoryOptions
 {
     public const string SectionName = "Harness:Memory";

@@ -3,7 +3,7 @@
 这个模块只干一件事：**把模型交互 / 工具调用 / 执行控制 / 上下文 / 记忆 / 可观测装配成一条流水线，
 一次 run 走一遍，并把这次 run 的结局归类**。
 
-它**自身不实现任何一项能力**：迭代循环本体由 MAF 承担，超时与预算在 `AgentLoop`，工具在 `ToolExecution`，
+它**自身不实现任何一项能力**：迭代循环本体由 `Microsoft.Extensions.AI` 的 `FunctionInvokingChatClient` 承担，超时与预算在 `Loop/`（已并入本项目），工具在 `ToolExecution`，
 上下文在 `Context`，会话在 `Runtime.Session`，痕迹在 `Observability`。
 
 **本模块也不拥有三段历史中的任何一段**：它只在 `PrepareRunAsync` 把 `aw.session_id` 写进 `StateBag`、
@@ -109,16 +109,21 @@ ResolveSessionId(请求的 SessionId)                    会话标识（缺省�
 生产侧吞掉全部异常并转成 `Failed`，消费者侧永不因生产侧故障而中断读取；
 消费者提前退出（`break` / 取消）时仍会等生产侧收尾——落轨迹与写回会话不能被跳过。
 
-指令（人格 / 引用规范）与参考片段走 `IContextAssembler.Wrap` —— 一个装饰在**工具环外面**的模型客户端，
-转发前只往消息前插一条 `system`（组装、截断与预算都在 `Runtime.Context`）。两条硬约束：
+请求装配走 `IRequestContextComposer.Compose`：它只产出「消息 + 合成后的指令」，
+注入形态直接用 MAF 原生的 `ChatOptions.Instructions`（`BuildAgent` 里设一次），
+历史交给 `ChatHistoryProvider`。本仓不再自写 `IChatClient` 装饰器。两条硬约束：
 
 - **不能用 MEA 的 `AIContextProviders`**。只在 Agent 上挂 provider，MEA 会在我们自己装配的
   `FunctionInvokingChatClient` **外面**再包一层函数调用环，于是 `ToolExecutionPipeline` 的守卫与
   轨迹采集全被绕过：实测症状是连续同参调用不再判 `loop_detected`、工具异常不再归类 `tool_error`，
-  全部退化成 `succeeded`。`IContextAssembler.Wrap` 继承了这条约束，注入点一个节点没动。
+  全部退化成 `succeeded`。结构门禁 `F38` 把「不挂 provider、不自写装饰器」钉住。
 
-- 指令进的是**模型请求**而不是 `run.Messages`：会话历史由 `ChatHistoryProvider` 按输入消息记录，
-  装饰器在它下游，所以指令不会随每轮对话在历史里累积。
+- **指令只设一次**。MAF 合并 agent 级 / run 级 `ChatOptions` 时，两级 `Instructions` 是换行拼接
+  而非覆盖；若 `RunAsync` / `RunStreamingAsync` 的 run 级 options 也带上，同一句指令会重复进每轮
+  请求（实测 `A\nA`）。`F38` 同时把「`Instructions = ` 只在 BuildAgent 出现一次」钉住。
+
+- 指令进的是**模型请求选项**而不是会话历史：`ChatHistoryProvider` 只按输入消息记录，
+  所以指令不会随每轮对话在历史里累积。
 
 ---
 
@@ -128,7 +133,7 @@ ResolveSessionId(请求的 SessionId)                    会话标识（缺省�
 | --- | --- | --- | --- |
 | run 不能恢复 | 中途失败只能整条重跑，长任务白烧 token | 没有 resume 入口，也没有断点快照 | 先定断点语义（配合幂等 P2-2）再实现 |
 | 会话重启即丢 | 同一个 `sessionId` 重启后接不上上文 | `Memory.Persistence` 已落库（P1-3）；内存版仍进程内 | 装 `AddNitroMemoryPersistence`（已具备） |
-| 历史无限长 | 上下文窗口撑爆 | `Context` 有 `TrimHistory`，但 Harness 不传 `History`，**裁剪实际未接线** | 先写「超过 N 条时模型只见 N 条」的可红断言，再接线 |
+| 历史无限长 | 上下文窗口撑爆 | 历史改由 MAF `ChatHistoryProvider` 托管；`MaxHistoryMessages` 只作用于调用方自传的 `ContextRequest.History`，**默认链路上不生效**（框架无统一条数开关） | 先写「超过 N 条时模型只见 N 条」的可红断言，再决定用 provider 过滤扩展点还是本仓补 |
 | 执行记录不能按条件查 | 只能一条一条按 id 翻 | `IExecutionTraceStore` 只有 `Save` / `Get` | P3-3 查询面 |
 | 对话与轨迹不关联 | 从一次聊天跳不到它的 run | `agent_runs` 没有 `conversation_id` | 加关联列 |
 | 消费方只读 `Text` | 半成品被当结论（`iteration_limit` 等路径） | 原 Workflow agent 步骤（模块已删），当前是否仍有此问题需重新核实 | 按 `Status` 分流，非 `succeeded` 即步骤失败 |

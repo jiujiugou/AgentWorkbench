@@ -29,16 +29,16 @@
     <ProjectReference Include="..\..\src\Domains\Erp\AgentWorkbench.Erp.csproj" />
     <ProjectReference Include="..\..\src\Domains\FakeActionSet\AgentWorkbench.FakeActionSet.csproj" />
     <ProjectReference Include="..\..\src\Domains\Gitea\AgentWorkbench.Gitea.csproj" />
-    <ProjectReference Include="..\..\src\Core\Foundation\AgentWorkbench.Domain\AgentWorkbench.Domain.csproj" />
-    <ProjectReference Include="..\..\src\Core\Foundation\AgentWorkbench.Persistence\AgentWorkbench.Persistence.csproj" />
-    <ProjectReference Include="..\..\src\Core\Memory\AgentWorkbench.Memory.Persistence\AgentWorkbench.Memory.Persistence.csproj" />
+    <ProjectReference Include="..\..\src\Implementations\AgentWorkbench.Domain\AgentWorkbench.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Implementations\AgentWorkbench.Persistence\AgentWorkbench.Persistence.csproj" />
+    <ProjectReference Include="..\..\src\Implementations\AgentWorkbench.Memory.Persistence\AgentWorkbench.Memory.Persistence.csproj" />
     <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Loop\AgentWorkbench.Runtime.Loop.csproj" />
     <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Context\AgentWorkbench.Runtime.Context.csproj" />
     <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Session\AgentWorkbench.Runtime.Session.csproj" />
     <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Tools\AgentWorkbench.Runtime.Tools.csproj" />
     <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Harness\AgentWorkbench.Runtime.Harness.csproj" />
-    <ProjectReference Include="..\..\src\Core\Knowledge\AgentWorkbench.Documents\AgentWorkbench.Documents.csproj" />
-    <ProjectReference Include="..\..\src\Core\Knowledge\AgentWorkbench.Knowledge.Local\AgentWorkbench.Knowledge.Local.csproj" />
+    <ProjectReference Include="..\..\src\Implementations\AgentWorkbench.Documents\AgentWorkbench.Documents.csproj" />
+    <ProjectReference Include="..\..\src\Implementations\AgentWorkbench.Knowledge.Local\AgentWorkbench.Knowledge.Local.csproj" />
     <ProjectReference Include="..\..\src\Host\AgentWorkbench.Webapi\AgentWorkbench.Webapi.csproj" />
   </ItemGroup>
 </Project>

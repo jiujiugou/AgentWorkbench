@@ -32,6 +32,9 @@ public sealed class ScriptedChatClient : IChatClient
         ? Array.Empty<ChatMessage>()
         : _requests[^1];
 
+    /// <summary>最后一次请求收到的选项快照，用于断言指令是不是随 <c>ChatOptions.Instructions</c> 下发。</summary>
+    public ChatOptions? LastOptions { get; private set; }
+
     /// <summary>脚本用尽后的兜底文本；默认给一段文本，避免测试里出现永不结束的函数环。</summary>
     public string FallbackText { get; set; } = "脚本用尽";
 
@@ -95,6 +98,7 @@ public sealed class ScriptedChatClient : IChatClient
     {
         _callCount++;
         _requests.Add(messages.ToList());
+        LastOptions = options;
 
         if (_steps.Count == 0)
             return Task.FromResult(Text(FallbackText));
@@ -119,6 +123,7 @@ public sealed class ScriptedChatClient : IChatClient
     {
         _callCount++;
         _requests.Add(messages.ToList());
+        LastOptions = options;
 
         var response = _steps.Count == 0
             ? Text(FallbackText)

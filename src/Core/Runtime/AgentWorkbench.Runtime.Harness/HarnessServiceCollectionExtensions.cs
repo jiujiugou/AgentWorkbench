@@ -13,8 +13,8 @@ public static class HarnessServiceCollectionExtensions
     public static IServiceCollection AddNitroAgentHarness(
         this IServiceCollection services, IConfiguration configuration)
     {
-        // 上下文能力位（Harness:Context）由 Runtime.Context 的 AddNitroContext 注册；
-        // 本模块只拿 IContextAssembler，不再自己持有配置。
+        // 请求装配能力位（Harness:Context）由 Runtime.Context 的 AddNitroContext 注册；
+        // 本模块只拿 IRequestContextComposer，不再自己持有配置。
         services.AddSingleton<IAgentHarness, AgentHarnessService>();
         return services;
     }

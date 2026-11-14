@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.VectorData.SqliteVec" Version="1.0.2-preview" />
+    <PackageReference Include="Dapper" Version="2.1.89" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.AI" Version="10.10.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.14" />
+    <PackageReference Include="OllamaSharp" Version="5.5.0" />
+    <PackageReference Include="Polly.Core" Version="8.9.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AgentWorkbench.Domain\AgentWorkbench.Domain.csproj" />
+    <ProjectReference Include="..\..\Core\Knowledge\AgentWorkbench.Knowledge.Abstractions\AgentWorkbench.Knowledge.Abstractions.csproj" />
+    <ProjectReference Include="..\AgentWorkbench.Persistence\AgentWorkbench.Persistence.csproj" />
+    <ProjectReference Include="..\..\Core\Foundation\AgentWorkbench.Shared\AgentWorkbench.Shared.csproj" />
+    <ProjectReference Include="..\..\Core\Runtime\AgentWorkbench.Runtime.Tools\AgentWorkbench.Runtime.Tools.csproj" />
+  </ItemGroup>
+</Project>

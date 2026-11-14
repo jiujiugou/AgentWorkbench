@@ -5,8 +5,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <!-- 契约层只引底座：曾引 Domain，只为拿 DocumentStatus 词表，已把词表移到 Shared。
+       契约拖进表结构，等于把存储实现钉进了底座。 -->
   <ItemGroup>
-    <ProjectReference Include="..\..\Foundation\AgentWorkbench.Domain\AgentWorkbench.Domain.csproj" />
     <ProjectReference Include="..\..\Foundation\AgentWorkbench.Shared\AgentWorkbench.Shared.csproj" />
   </ItemGroup>
 </Project>

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- 架构门禁：零生产项目引用，只读 csproj 里的 ProjectReference。
+       为什么刻意不引用任何 src 项目：门禁一旦与被测对象在同一个编译单元里，
+       生产代码编译失败时门禁也跑不了，结构约束就失去独立性。
+       范围只限「模块引用不出错」：路径存在、无自引/重复/环、依赖方向铁律，
+       以及「底座的引用闭包不许出底座」（实现层与事后装置不能被底座拖进来）。
+       TOML 登记、业务禁词、文档触达、slnx 挂载都不在这里。 -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtools</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -14,20 +14,19 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Core\Knowledge\AgentWorkbench.Documents\AgentWorkbench.Documents.csproj" />
-    <ProjectReference Include="..\..\Core\Knowledge\AgentWorkbench.Knowledge.Local\AgentWorkbench.Knowledge.Local.csproj" />
-    <ProjectReference Include="..\..\Core\Knowledge\AgentWorkbench.Knowledge.Support\AgentWorkbench.Knowledge.Support.csproj" />
+    <ProjectReference Include="..\..\Implementations\AgentWorkbench.Documents\AgentWorkbench.Documents.csproj" />
+    <ProjectReference Include="..\..\Implementations\AgentWorkbench.Knowledge.Local\AgentWorkbench.Knowledge.Local.csproj" />
     <ProjectReference Include="..\..\Core\Runtime\AgentWorkbench.Runtime.Harness\AgentWorkbench.Runtime.Harness.csproj" />
     <ProjectReference Include="..\..\Core\Runtime\AgentWorkbench.Runtime.Context\AgentWorkbench.Runtime.Context.csproj" />
-    <ProjectReference Include="..\..\Core\Foundation\AgentWorkbench.Persistence\AgentWorkbench.Persistence.csproj" />
-    <ProjectReference Include="..\..\Core\Foundation\AgentWorkbench.Domain\AgentWorkbench.Domain.csproj" />
+    <ProjectReference Include="..\..\Implementations\AgentWorkbench.Persistence\AgentWorkbench.Persistence.csproj" />
+    <ProjectReference Include="..\..\Implementations\AgentWorkbench.Domain\AgentWorkbench.Domain.csproj" />
     <ProjectReference Include="..\..\Core\Foundation\AgentWorkbench.Shared\AgentWorkbench.Shared.csproj" />
     <ProjectReference Include="..\..\Core\Runtime\AgentWorkbench.Runtime.Model\AgentWorkbench.Runtime.Model.csproj" />
     <ProjectReference Include="..\..\Core\Runtime\AgentWorkbench.Runtime.Tools\AgentWorkbench.Runtime.Tools.csproj" />
     <ProjectReference Include="..\..\Core\Tools\AgentWorkbench.Tools.Builtin\AgentWorkbench.Tools.Builtin.csproj" />
     <ProjectReference Include="..\..\Core\Tools\AgentWorkbench.Tools.Mcp\AgentWorkbench.Tools.Mcp.csproj" />
     <ProjectReference Include="..\..\Core\Runtime\AgentWorkbench.Runtime.Session\AgentWorkbench.Runtime.Session.csproj" />
-    <ProjectReference Include="..\..\Core\Memory\AgentWorkbench.Memory.Persistence\AgentWorkbench.Memory.Persistence.csproj" />
+    <ProjectReference Include="..\..\Implementations\AgentWorkbench.Memory.Persistence\AgentWorkbench.Memory.Persistence.csproj" />
     <ProjectReference Include="..\..\Core\Engineering\AgentWorkbench.Observability\AgentWorkbench.Observability.csproj" />
     <ProjectReference Include="..\..\Core\Runtime\AgentWorkbench.Runtime.Loop\AgentWorkbench.Runtime.Loop.csproj" />
     <!-- M1：组合根唯一允许同时引用底座端口与动作域的地方（M1 设计 §7）。 -->

@@ -23,8 +23,9 @@ public sealed class DocsHygieneTests
     /// <summary>自带生命周期或模板，不套用状态位纪律。</summary>
     private static readonly string[] ExcludedDirs =
     [
-        "docs/adr",   // 一个决策一篇，写完不改
-        "docs/plans", // 自带模板，文件名即日期
+        "docs/adr",      // 一个决策一篇，写完不改
+        "docs/plans",    // 自带模板，文件名即日期
+        "docs/机制层",    // scripts/maf_scan.py 机械生成，无状态位；重跑覆盖
     ];
 
     private static readonly Regex MdLink = new(@"\]\(([^)\s]+)\)", RegexOptions.Compiled);

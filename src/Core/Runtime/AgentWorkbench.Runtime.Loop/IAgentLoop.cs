@@ -2,7 +2,7 @@ namespace AgentWorkbench.Runtime.Loop;
 
 /// <summary>
 /// 执行控制：为一次 Agent 运行提供预算（最大迭代 / 总耗时）与「带超时执行」的包装。
-/// 迭代循环本体由 Microsoft Agent Framework 的 FunctionInvokingChatClient 承担，
+/// 迭代循环本体由 Microsoft.Extensions.AI 的 FunctionInvokingChatClient 承担，
 /// 本模块负责「允许循环多久、允许循环几次」，并在超时后抛出统一的 <see cref="TimeoutException"/>。
 /// </summary>
 public interface IAgentLoop

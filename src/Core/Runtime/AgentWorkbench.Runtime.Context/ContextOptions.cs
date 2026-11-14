@@ -1,18 +1,16 @@
 namespace AgentWorkbench.Runtime.Context;
 
 /// <summary>
-/// 上下文组装配置。配置路径沿用 <c>Harness:Context</c>，与既有 appsettings 兼容。
+/// 请求装配配置。配置路径沿用 <c>Harness:Context</c>，与既有 appsettings 兼容。
 /// </summary>
+/// <remarks>
+/// 只有一个开关。历史条数归 MAF 的 <c>ChatHistoryProvider</c>（框架无统一条数开关），
+/// 片段字符预算要等片段注入真正接进 run 时再加回来——现在加就是死配置。
+/// </remarks>
 public sealed class ContextOptions
 {
     public const string SectionName = "Harness:Context";
 
-    /// <summary>是否启用上下文增强（片段注入 + 指令注入）。关闭后只发用户本轮输入。</summary>
+    /// <summary>是否启用请求装配（指令注入）。关闭后 <c>ContextPlan.Instructions</c> 恒为 <c>null</c>。</summary>
     public bool Enabled { get; set; } = true;
-
-    /// <summary>保留的历史消息条数（取最近 N 条）；<c>&lt;= 0</c> 表示不截断。</summary>
-    public int MaxHistoryMessages { get; set; } = 20;
-
-    /// <summary>注入片段的总字符上限；超出按顺序截断。<c>&lt;= 0</c> 表示不截断。</summary>
-    public int MaxFragmentChars { get; set; } = 6000;
 }

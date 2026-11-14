@@ -1,4 +1,3 @@
-using AgentWorkbench.Persistence;
 using AgentWorkbench.Shared.Options;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,28 +37,6 @@ public static class ProvidersServiceCollectionExtensions
         return services;
     }
 
-    /// <summary>首次运行：把环境变量 / appsettings 中的模型配置种子为一条激活供应商。</summary>
-    /// <remarks>
-    /// 幂等：只要数据库里已存在任意一条供应商，或配置尚未就绪（BaseUrl / ApiKey / Model 有缺），就直接返回，
-    /// 因此可以放心在启动流程里无条件调用。种子的作用是让「首次启动」开箱即可对话；
-    /// 之后用户可在「设置」页新增 / 切换供应商，配置节退居为兜底。
-    /// </remarks>
-    public static async Task SeedDefaultProviderAsync(this IServiceProvider services)
-    {
-        // 仓储是 Scoped 的，从根容器取服务必须自建 scope；using 同时界定了连接与作用域的释放边界。
-        using var scope = services.CreateScope();
-        var repository = scope.ServiceProvider.GetRequiredService<IProviderRepository>();
-        var options = scope.ServiceProvider.GetRequiredService<IOptions<ProviderOptions>>().Value;
-
-        // 已有供应商 或 配置不完整 → 不种子（前者尊重用户已有数据，后者避免种出一条不可用的供应商）。
-        if ((await repository.ListProvidersAsync()).Count != 0 || !options.IsConfigured)
-            return;
-
-        // 名称带「（来自配置）」后缀，便于用户辨认它是自动生成的、可以安全删除。
-        var seed = await repository.CreateProviderAsync("默认（来自配置）", options.BaseUrl, options.ApiKey);
-        await repository.ActivateProviderAsync(seed.Id);
-        // 模型可选：配置里没写模型时只种供应商，模型名仍可走 ResolveAsync 的回退链补齐。
-        if (!string.IsNullOrWhiteSpace(options.Model))
-            await repository.AddModelAsync(seed.Id, options.Model, null);
-    }
+    // 首次启动的种子（写库）不在这里：它属于数据库初始化，已移到持久化层的
+    // ProviderSeedingExtensions。放在本模块会让内核重新编译期依赖存储，端口化就白做了。
 }

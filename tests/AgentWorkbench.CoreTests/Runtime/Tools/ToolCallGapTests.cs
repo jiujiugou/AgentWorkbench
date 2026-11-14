@@ -8,11 +8,12 @@ using Xunit;
 
 namespace AgentWorkbench.CoreTests.Runtime.Tools;
 
-// 只验框架没给、要自己补的两格：结果进模型前的上界、调用前按结构拦下畸形参数。
-// 两格当前均未实现，红是正确信号；每条先给绿对照，防止断言恒真。
+// 只验框架没给、本仓补的三格：结果进模型前的上界、调用前按结构拦下畸形参数、
+// 以及工具异常仍被转成结果消息回填（复验，不新写实现）。三条均已落地且全绿。
+// 每条先给绿对照，防止断言恒真；改坏对应实现会让断言转红。
 public class ToolCallGapTests
 {
-    // 负控：把 ToolExecutionPipeline 的 `return result;` 改成 `return Truncate(text);` 后转绿。
+    // 负控：把 ToolExecutionPipeline 的 `return Truncate(text);` 改回 `return result;` → 本条红。
     [Fact]
     public async Task 结果进模型前有内容上界_轨迹截断作绿对照()
     {

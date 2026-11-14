@@ -4,8 +4,6 @@
   </Folder>
   <Folder Name="/src/Core/Foundation/">
     <Project Path="src/Core/Foundation/AgentWorkbench.Shared/AgentWorkbench.Shared.csproj" />
-    <Project Path="src/Core/Foundation/AgentWorkbench.Domain/AgentWorkbench.Domain.csproj" />
-    <Project Path="src/Core/Foundation/AgentWorkbench.Persistence/AgentWorkbench.Persistence.csproj" />
   </Folder>
   <Folder Name="/src/Core/Runtime/">
     <Project Path="src/Core/Runtime/AgentWorkbench.Runtime.Harness/AgentWorkbench.Runtime.Harness.csproj" />
@@ -23,17 +21,18 @@
   </Folder>
   <Folder Name="/src/Core/Knowledge/">
     <Project Path="src/Core/Knowledge/AgentWorkbench.Knowledge.Abstractions/AgentWorkbench.Knowledge.Abstractions.csproj" />
-    <Project Path="src/Core/Knowledge/AgentWorkbench.Knowledge.Local/AgentWorkbench.Knowledge.Local.csproj" />
-    <Project Path="src/Core/Knowledge/AgentWorkbench.Knowledge.Support/AgentWorkbench.Knowledge.Support.csproj" />
-    <Project Path="src/Core/Knowledge/AgentWorkbench.Documents/AgentWorkbench.Documents.csproj" />
-  </Folder>
-  <Folder Name="/src/Core/Memory/">
-    <Project Path="src/Core/Memory/AgentWorkbench.Memory.Persistence/AgentWorkbench.Memory.Persistence.csproj" />
   </Folder>
   <Folder Name="/src/" />
   <Folder Name="/src/Core/" />
   <Folder Name="/src/Core/Engineering/">
     <Project Path="src/Core/Engineering/AgentWorkbench.Observability/AgentWorkbench.Observability.csproj" />
+  </Folder>
+  <Folder Name="/src/Implementations/">
+    <Project Path="src/Implementations/AgentWorkbench.Persistence/AgentWorkbench.Persistence.csproj" />
+    <Project Path="src/Implementations/AgentWorkbench.Domain/AgentWorkbench.Domain.csproj" />
+    <Project Path="src/Implementations/AgentWorkbench.Memory.Persistence/AgentWorkbench.Memory.Persistence.csproj" />
+    <Project Path="src/Implementations/AgentWorkbench.Knowledge.Local/AgentWorkbench.Knowledge.Local.csproj" />
+    <Project Path="src/Implementations/AgentWorkbench.Documents/AgentWorkbench.Documents.csproj" />
   </Folder>
   <Folder Name="/src/Domains/">
     <Project Path="src/Domains/Erp/AgentWorkbench.Erp.csproj" />
@@ -44,8 +43,10 @@
     <Project Path="src/Host/AgentWorkbench.Webapi/AgentWorkbench.Webapi.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/AgentWorkbench.ArchitectureTests/AgentWorkbench.ArchitectureTests.csproj" />
     <Project Path="tests/AgentWorkbench.ApplicationTests/AgentWorkbench.ApplicationTests.csproj" />
     <Project Path="tests/AgentWorkbench.CoreTests/AgentWorkbench.CoreTests.csproj" />
     <Project Path="tests/AgentWorkbench.TestKit/AgentWorkbench.TestKit.csproj" />
+    <Project Path="tests/AgentWorkbench.Evaluation/AgentWorkbench.Evaluation.csproj" />
   </Folder>
 </Solution>

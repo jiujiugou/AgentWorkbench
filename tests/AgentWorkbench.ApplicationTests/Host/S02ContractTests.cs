@@ -38,7 +38,7 @@ public sealed class S02ContractTests
         var (hub, harness, conversations, scope, caller) =
             BuildHub("conn-s02-01", new ClaimsPrincipal(new ClaimsIdentity()));
 
-        await hub.Send(new ChatRequest(null, "查一下 PO-1", null, "m-s02-01"));
+        await hub.Send(new ChatRequest(null, "查一下 PO-1", "m-s02-01"));
 
         AssertErrorOnce(caller);
         AssertNoSideEffects(harness, conversations, scope);
@@ -51,7 +51,7 @@ public sealed class S02ContractTests
         var (hub, harness, conversations, scope, _) = BuildHub("conn-s02-02");
         ArrangeRun(harness, conversations, "conv-s02-02");
 
-        await hub.Send(new ChatRequest(null, "查一下 PO-1", null, "m-s02-02"));
+        await hub.Send(new ChatRequest(null, "查一下 PO-1", "m-s02-02"));
 
         scope.Verify(s => s.Begin("wang", It.IsAny<string>(), It.IsAny<string>()), Times.Once);
     }
@@ -65,7 +65,7 @@ public sealed class S02ContractTests
         ArrangeRun(harness, conversations, "conv-s02-03");
 
         // 故意传一个别人的会话 id：归属校验若被跳过，这里就会被当成真会话
-        await hub.Send(new ChatRequest("attacker-conv", "查一下 PO-1", null, "m-s02-03"));
+        await hub.Send(new ChatRequest("attacker-conv", "查一下 PO-1", "m-s02-03"));
 
         conversations.Verify(c => c.GetOrCreateAsync("attacker-conv", "tenant-1", "user-1"), Times.Once);
         // 真正起作用的是仓储返回的那个会话，不是请求里那个
@@ -80,7 +80,7 @@ public sealed class S02ContractTests
         var (hub, harness, conversations, scope, _) = BuildHub("conn-s02-04");
         ArrangeRun(harness, conversations, "conv-s02-04");
 
-        await hub.Send(new ChatRequest(null, "查一下 PO-1", null, messageId));
+        await hub.Send(new ChatRequest(null, "查一下 PO-1", messageId));
 
         scope.Verify(s => s.Begin("wang", "conv-s02-04", messageId), Times.Once);
     }
@@ -108,7 +108,7 @@ public sealed class S02ContractTests
         harness.Setup(h => h.GetCapabilitiesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new HarnessCapabilities(true, false, true, true, []));
 
-        await hub.Send(new ChatRequest(null, "查一下 PO-1", null, "m-s02-06"));
+        await hub.Send(new ChatRequest(null, "查一下 PO-1", "m-s02-06"));
 
         AssertErrorOnce(caller);
         harness.Verify(h => h.GetCapabilitiesAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -129,7 +129,7 @@ public sealed class S02ContractTests
         harness.Setup(h => h.StreamAsync(It.IsAny<HarnessRunRequest>(), It.IsAny<CancellationToken>()))
             .Returns(StreamThenCancel());
 
-        await hub.Send(new ChatRequest(null, "查一下 PO-1", null, "m-s02-07"));
+        await hub.Send(new ChatRequest(null, "查一下 PO-1", "m-s02-07"));
 
         // 已经发生的副作用必须还在
         conversations.Verify(c => c.GetOrCreateAsync(
@@ -167,9 +167,9 @@ public sealed class S02ContractTests
         harness.Setup(h => h.StreamAsync(It.IsAny<HarnessRunRequest>(), It.IsAny<CancellationToken>()))
             .Returns((HarnessRunRequest _, CancellationToken ct) => HoldAsync(gate.Task, ct));
 
-        var first = hub.Send(new ChatRequest(null, "第一句", null, "m-s02-08a"));
+        var first = hub.Send(new ChatRequest(null, "第一句", "m-s02-08a"));
         await entered.Task;   // 第一句已经占住连接闸（探活发生在占闸之后）
-        await hub.Send(new ChatRequest(null, "第二句", null, "m-s02-08b"));
+        await hub.Send(new ChatRequest(null, "第二句", "m-s02-08b"));
 
         harness.Verify(h => h.StreamAsync(It.IsAny<HarnessRunRequest>(), It.IsAny<CancellationToken>()), Times.Once);
         AssertErrorOnce(caller);

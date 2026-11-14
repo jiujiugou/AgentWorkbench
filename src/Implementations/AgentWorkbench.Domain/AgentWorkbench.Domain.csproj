@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- 注意名字：这里是「持久化实体的形状」（数据库行 → 对象），不是业务领域模型。
+       8 个文件全是纯属性容器，零方法；被 Persistence / Knowledge.* / Documents / Webapi 引用，
+       Runtime 六模块零引用。跨边界的词表（如 DocumentStatus）不进这里，归 Shared。
+       名字保留是历史原因：改名 C# 命名空间会波及 5 个项目的全部 using，收益只是名字准确。 -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>持久化实体（表结构），不是业务模型</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\Foundation\AgentWorkbench.Shared\AgentWorkbench.Shared.csproj" />
+  </ItemGroup>
+</Project>

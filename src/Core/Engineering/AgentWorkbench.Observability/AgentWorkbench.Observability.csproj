@@ -5,14 +5,14 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <!--
+    刻意零包依赖：本模块是内核侧的「轨迹数据 + 写出契约」。
+    依赖约束（改之前先读 docs/core/轨迹与观测.md 附录 C）：
+      允许 → Shared（终态 / 归类码词表）
+      禁止 → Persistence / Domain / EF Core / DI / Logging
+    落库实现住在 Persistence/Traces，由持久化层去实现本模块的接口，方向不可反过来。
+  -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\Foundation\AgentWorkbench.Domain\AgentWorkbench.Domain.csproj" />
-    <ProjectReference Include="..\..\Foundation\AgentWorkbench.Persistence\AgentWorkbench.Persistence.csproj" />
     <ProjectReference Include="..\..\Foundation\AgentWorkbench.Shared\AgentWorkbench.Shared.csproj" />
   </ItemGroup>
 </Project>

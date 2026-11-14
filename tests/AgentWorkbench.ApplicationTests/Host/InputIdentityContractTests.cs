@@ -43,7 +43,7 @@ public sealed class InputIdentityContractTests
     {
         var (hub, harness, conversations, scope, caller) = BuildHub("conn-h1");
 
-        await hub.Send(new ChatRequest(null, "给 S001 下 500 个 M6 螺栓", null, string.Empty));
+        await hub.Send(new ChatRequest(null, "给 S001 下 500 个 M6 螺栓", string.Empty));
 
         caller.Verify(
             c => c.SendCoreAsync("Error", It.IsAny<object?[]>(), It.IsAny<CancellationToken>()),
@@ -75,7 +75,7 @@ public sealed class InputIdentityContractTests
         harness.Setup(h => h.StreamAsync(It.IsAny<HarnessRunRequest>(), It.IsAny<CancellationToken>()))
             .Throws(new InvalidOperationException("probe-stop-after-begin"));
 
-        await hub.Send(new ChatRequest(null, "查一下 PO-1", null, "m-h2"));
+        await hub.Send(new ChatRequest(null, "查一下 PO-1", "m-h2"));
 
         scope.Verify(
             s => s.Begin(It.IsAny<string?>(), "conv-1", "m-h2"),

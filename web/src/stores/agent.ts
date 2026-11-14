@@ -478,7 +478,7 @@ export const useAgentStore = defineStore('agent', () => {
       await connection.value!.invoke('Send', {
         conversationId: conversationId.value,
         text: content,
-        history: [],
+        // 历史不随请求传：由服务端 ChatHistoryProvider 从会话存储恢复。
         // 本次输入的唯一标识：每次点击发送生成新值，后端用它派生动作请求号。
         // 当前没有自动重发；若引入断线补发，复用同一次输入的这个值只是必要条件之一——
         // 服务端还必须先有输入级去重（action_idempotency 只护动作、不护整段 run），

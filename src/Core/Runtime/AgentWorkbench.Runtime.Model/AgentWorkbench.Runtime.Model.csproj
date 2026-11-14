@@ -19,7 +19,5 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Foundation\AgentWorkbench.Shared\AgentWorkbench.Shared.csproj" />
-    <ProjectReference Include="..\..\Foundation\AgentWorkbench.Domain\AgentWorkbench.Domain.csproj" />
-    <ProjectReference Include="..\..\Foundation\AgentWorkbench.Persistence\AgentWorkbench.Persistence.csproj" />
   </ItemGroup>
 </Project>

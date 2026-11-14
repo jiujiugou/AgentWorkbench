@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.ClientModel;
 using AgentWorkbench.Shared.Options;
-using AgentWorkbench.Persistence;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -41,7 +40,7 @@ public interface IChatClientFactory
     /// <param name="modelOverride">
     /// 调用方指定的模型名；为 <c>null</c> / 空白时，按「该供应商的默认模型 → 该供应商的第一个模型 → 配置节默认模型」依次回退。
     /// </param>
-    /// <param name="cancellationToken">取消令牌，透传给仓储查询。</param>
+    /// <param name="cancellationToken">取消令牌，透传给 <see cref="IModelEndpointSource"/> 实现。</param>
     /// <returns>
     /// 解析出的端点；数据库与配置都不可用时返回 <c>null</c> —— 由调用方决定如何提示「模型未配置」，
     /// 「未配置」因此是一个可查询的正常状态，而不是异常。
@@ -78,19 +77,19 @@ public sealed class ChatClientFactory : IChatClientFactory
     /// </remarks>
     private static readonly ConcurrentDictionary<string, IChatClient> Clients = new();
 
-    private readonly IProviderRepository _providers;
+    private readonly IModelEndpointSource _source;
     private readonly ProviderOptions _fallback;
     private readonly ILogger<ChatClientFactory> _logger;
 
     /// <summary>
     /// 构造函数。
     /// </summary>
-    /// <param name="providers">数据库侧的供应商 / 模型仓储（第一优先级来源）。</param>
-    /// <param name="fallback">数据库为空时的兜底配置（第二优先级来源）。</param>
+    /// <param name="source">内核端口：只回答「数据库侧当前激活的是谁」，实现在 Persistence。</param>
+    /// <param name="fallback">端口无结果时的兜底配置（第二优先级来源）。</param>
     /// <param name="logger">日志。</param>
-    public ChatClientFactory(IProviderRepository providers, IOptions<ProviderOptions> fallback, ILogger<ChatClientFactory> logger)
+    public ChatClientFactory(IModelEndpointSource source, IOptions<ProviderOptions> fallback, ILogger<ChatClientFactory> logger)
     {
-        _providers = providers;
+        _source = source;
         _fallback = fallback.Value;
         _logger = logger;
     }
@@ -102,8 +101,10 @@ public sealed class ChatClientFactory : IChatClientFactory
         using var scope = _logger.BeginScope(new Dictionary<string, object> { ["Operation"] = "ResolveEndpoint" });
         var sw = Stopwatch.StartNew();
 
-        // 第一优先级：数据库中处于激活状态的供应商（用户在「设置」页选中的那条）。
-        var active = await _providers.GetActiveProviderAsync();
+        // 第一优先级：数据库侧激活的供应商（用户在「设置」页选中的那条）。
+        // 端口只给事实；模型名四级回退、配置兜底与「都没配 → null」都留在内核，
+        // 因为 Harness 的 model_unavailable 归类与探活都依赖那个 null 语义。
+        var active = await _source.GetActiveAsync(cancellationToken);
         if (active is not null && !string.IsNullOrWhiteSpace(active.BaseUrl))
         {
             // 模型名回退链，逐级降级直到取到非空模型名：
@@ -113,15 +114,15 @@ public sealed class ChatClientFactory : IChatClientFactory
             //   4) 配置节里的默认模型
             var model = modelOverride;
             if (string.IsNullOrWhiteSpace(model))
-                model = (await _providers.GetDefaultModelAsync(active.Id))?.Model;
+                model = active.DefaultModel;
             if (string.IsNullOrWhiteSpace(model))
-                model = (await _providers.ListModelsAsync(active.Id)).FirstOrDefault()?.Model;
+                model = active.Models.FirstOrDefault();
             if (string.IsNullOrWhiteSpace(model))
                 model = _fallback.Model;
 
             // model! 非空断言：走到这里 model 至少已由 _fallback.Model 兜底，而该配置项带非空默认值。
-            var endpoint = new ChatEndpoint(active.Id, active.BaseUrl, active.ApiKey, model!);
-            _logger.LogInformation("Resolved endpoint from active provider {ProviderId} model {Model} in {ElapsedMs}ms", active.Id, model, sw.ElapsedMilliseconds);
+            var endpoint = new ChatEndpoint(active.ProviderId, active.BaseUrl, active.ApiKey, model!);
+            _logger.LogInformation("Resolved endpoint from active provider {ProviderId} model {Model} in {ElapsedMs}ms", active.ProviderId, model, sw.ElapsedMilliseconds);
             return endpoint;
         }
 

@@ -1,0 +1,838 @@
+# agent-parts.toml — 一次 run 的六个动作 → 准许跨的编译单元
+#
+# 【状态】骨架样例。目前没有任何工具读它。按「文档只做解释」的判别线，
+#         它此刻是解释性示例，不是约束；只有读取者 + 断言 + R0 自证落地后才是约束。
+#         别把「已经写成 toml」当成「已经约束住」。
+# 【范围】只登记「一次有独立证据的决定」，不登记框架能力全貌。全貌留给
+#         src/Core/Runtime/AgentWorkbench.Runtime.Tools/功能调用功能查询.md（28 行 A–G + H 组）
+#         ② 的能力对照表原在 docs/core/循环驱动功能查询.md，已不在工作区（未提交文件，
+#         删后无痕）；框架类型级清单见 docs/机制层/MAF机制层扫描.md。这些都是查漏用的解释，不进门禁。
+# 【事实源】代码 + 测试输出。本表是声明；与代码冲突时以代码为准，且门禁应报红。
+# 【已填 ④ / ① / ③ / ⑤ / ⑥】① 已于 2026-11-13 用 MAF 原生装法重写并收口（being-replaced 撤销）；
+#         ⑤ 于同日补入并补齐行为测试：18 条新用例覆盖长期记忆 / 保留清理 / 作用域，
+#         现剩 2 条 partial（LongTermEnabled 默认值未按规格改、多实例互斥未建）；
+#         ⑥ 于同日进表并收口：记录形状 + 读写分口 + 五条出口搬运，10 条能力全部 wired，
+#         16 条用例全绿（停因结构化 / 用量 / 截断标志 / 完整性 / 准备阶段 / 读口拆分 / 落库往返），
+#         配套落库 M033（七列 + agent_steps.truncated）。
+#         ② 于 2026-11-14 最后进表：装配决定收在 Runtime.Harness/LoopAssembly，FICC 四项显式化，
+#         4 条能力（3 wired + 1 unit-only，后者是「装配约定缺行为证据」的如实登记）。六格至此全部进表。
+
+[meta]
+version = 1
+# 形状：part = 一个动作；allow = 只准跨这几个编译单元（许可，不是现状清单）
+#       max_anchors = 度数上限，超了必须改表 —— 改表是一次带理由的提交
+#       capability = 一次能被单独证伪的决定；doc = 该格的部件负责文档（解释，不是事实源）
+# tests 与 evidence 必须分开：
+#   tests    = 登记即须存在的测试文件/方法，可以红、可以跳过（Py 仓 verification 表形状）
+#   evidence = 绿了才算证明，只在收尾时填
+# status 取值：wired（缺省）/ unit-only / partial（判据先于实现）/ retired / being-replaced（part 级）
+# impl 精确到「模块」或「模块/类型」：模块级决定写模块名即可，扫源码文本，
+#       不依赖反射（Runtime.Tools 里有 internal 类型）。
+# 断言（尚未实现，照 Py 仓 tests/test_gates.py 的形状）：
+#   ① capability.impl 的模块必须在该 part.allow 内 —— 跨格越界即红
+#   ② evidence 里的测试必须真实存在，且真触达 impl
+#   ③ 有 impl 没 evidence / 有 evidence 没 impl —— 都红（双向互证）
+#   ④ R0 自证：伪造一条越界或断链，检查器必须变红
+#   ⑤ status 只允许上表取值；partial 必须写 claim / negative / remaining，unit-only 缺口属人工复核
+#   ⑥ 方法约定（正例能绿、负控能红；能脚本判定的禁止用 AI 判）来自 docs/core/请求装配.md 第六节
+#   ⑦ [[part.retired_decision]] 只是历史留痕，不参与 evidence 校验；改动旧决定必须新开 capability
+
+[[part]]
+id = "tool-execution"
+label = "④ 工具执行"
+max_anchors = 3
+allow = [
+  "AgentWorkbench.Runtime.Tools",  # 执行管道、参数校验、未知工具留痕
+  "AgentWorkbench.Tools.Builtin",  # 工具实现（登记成 AITool）
+  "AgentWorkbench.Tools.Mcp",      # 本地 / MCP 来源抹平
+]
+# 故意不出表：Runtime.Harness（工具清单挂请求，归 ①+②）、
+#             AgentWorkbench.ActionGateway（业务策略与权限，边界外，不是 ④ 的编译单元）
+# 注意：allow 是上限，不要求每项都有 capability；但 capability.impl 必须落在 allow 内。
+
+[[part.capability]]
+id = "result-upper-bound"
+summary = "结果进模型前有内容上界（框架不给，本仓补）"
+impl = "AgentWorkbench.Runtime.Tools/ToolExecutionPipeline"
+evidence = [
+  "AgentWorkbench.CoreTests.Runtime.Tools.ToolCallGapTests.结果进模型前有内容上界_轨迹截断作绿对照",
+]
+# 负控已做：回填改回 `return result` 会红。
+# 重开条件：MEA 自带「进模型前」裁剪且经同样负控复验，可删此条。
+
+[[part.capability]]
+id = "argument-schema-guard"
+summary = "调用前按 schema 挡下畸形参数并回填可归因拒绝码，零执行"
+impl = "AgentWorkbench.Runtime.Tools/ToolExecutionPipeline"
+evidence = [
+  "AgentWorkbench.CoreTests.Runtime.Tools.ToolCallGapTests.畸形参数在调用前被挡下并回填可归因拒绝码_合法参数作绿对照",
+]
+# 负控已做：关掉 ValidateArguments 会红。
+# 重开条件：仅当拒绝码语义被动作域契约接管（M1）才改此条。
+
+[[part.capability]]
+id = "exception-backfill-recheck"
+summary = "替换 FunctionInvoker 后，工具异常仍被转成结果消息回填、不炸整轮"
+impl = "AgentWorkbench.Runtime.Tools/ToolExecutionPipeline"
+evidence = [
+  "AgentWorkbench.CoreTests.Runtime.Tools.ToolCallGapTests.工具异常仍被转成结果消息回填且不炸整轮_正常工具作绿对照",
+]
+# 只复验、不新写实现。负控：拿掉 FunctionInvokingChatClient 包装会红。
+# 重开条件：换 MEA 大版本或改循环装配后必须重跑本条。
+
+[[part.capability]]
+id = "unknown-tool-trace"
+summary = "未知工具名不执行，但整轮结束要留痕（自写观察层，不改框架回填语义）"
+impl = "AgentWorkbench.Runtime.Tools/ToolCallGuardChatClient"
+evidence = [
+  "AgentWorkbench.ApplicationTests.Runtime.S04ContractTests.S04_03_模型请求清单外的工具时不执行任何工具",
+  "AgentWorkbench.ApplicationTests.Runtime.S04ContractTests.S04_05_清单外的工具调用被记录下来",
+]
+# 负控已做：删掉 ToolCallGuardChatClient 包装 / 删掉 Report 会红。
+# 重开条件：若改挂 TerminateOnUnknownCalls=true，须先证明模型仍能看到错误。
+
+# ── ④ 有意不接、但当前没有独立负控 → 只留决定，不进门禁 ──────────
+# 这几条来自「功能调用功能查询.md」的「不需要」列。它们最容易被「顺手接上」
+# 悄悄改回来（会绕过守卫与轨迹），是下一步最该补负控的地方。
+# 现在写在这里只是决定留痕；等有证据了再升成 capability。
+#   AdditionalTools（第 9 行）              重开条件：审计能证明额外工具对模型不可见
+#   ApprovalRequiredAIFunction（第 25 行）   重开条件：自写三态 + fail-closed 被动作域契约取代
+#   FunctionInvocationDelegatingAgent（28）  重开条件：证明换它不绕过工具环守卫与轨迹
+
+# ───────────────────────────────────────────────────────────────
+# ① 请求 / 上下文装配
+# 与 ④ 不同：① 几乎没有「框架不给、本仓补的实现」，主体是
+# 「框架给了扩展点，本仓选了一种注入形态，并刻意偏离框架默认」。
+# ───────────────────────────────────────────────────────────────
+
+[[part]]
+id = "request-assembly"
+label = "① 请求 / 上下文装配"
+doc = "docs/core/请求装配.md"        # 部件负责文档；本文是声明，两者人工对齐，互不生成
+# 2026-11-13 收口：MAF 原生装法已落地，being-replaced 撤销。
+# 替换前登记的重开条件（真实 ToolExecutionPipeline 装配下复验守卫与轨迹）仍有一半未闭合：
+# 见下方 maf-injection-equivalence.remaining 的端到端装配级负控。
+max_anchors = 2
+allow = [
+  "AgentWorkbench.Runtime.Context",  # Compose → ContextPlan（消息形态 / 预算 / 合成）
+  "AgentWorkbench.Runtime.Harness",  # BuildAgent 把 Instructions 放进 ChatOptions（唯一注入点）
+]
+# 来源：文档第三节「三处分工」→ allow / max_anchors；文档第二节「不归本格」→ 负向判据：
+#       Runtime.Session、Memory.Persistence、Runtime.Model、ActionGateway、Runtime.Tools 不许进 allow。
+# 文档第四节三个配置键（Enabled / MaxHistoryMessages / MaxFragmentChars）不进本表：数字会漂、代码推得出。
+# 文档第五/六节的方法约定（正例绿、负控红、加能力要做三件事）见 [meta] 断言 ⑥，不重复登记。
+# ① 跨两模块的硬证据：F38 同时扫 ContextDir + HarnessDir，要求两边都不出现
+#   AIContextProviders / ContextInjectingChatClient / IContextAssembler，并正面对照
+#   Instructions = instructions / UseProvidedChatClientAsIs / _context.Compose / CreateChatHistoryProvider。
+# 故意不出表：Runtime.Context.csproj 只 ProjectReference Shared；
+#             Runtime.Session / Memory.Persistence 是运行时 DI 覆盖历史 provider，不是 ① 的编译落点；
+#             Shared 是通用底座，不算 ① 的跨界。
+
+# ── 已退休的决定（历史留痕，不进门禁，见 [meta] 断言 ⑦）──────────────
+# 这些条目的 evidence 指向已被删除或改写的测试/类型，保留只为「为什么曾经这么决定、
+# 哪些证据随替换作废」。改动旧决定不复活条目，而是新开 capability。
+[[part.retired_decision]]
+id = "assemble-three-parts"
+was = "组装产出「历史 + 本轮输入 / 指令 / 片段」三段"
+evidence_was = "ContextAssemblerTests.F31_Assemble_ProducesThreeParts_AndMessagesCarryNoSystem"
+reason = "ContextAssembler 删除；现行由 ContextComposerTests.F31 + 请求装配.cs 覆盖"
+
+[[part.retired_decision]]
+id = "instruction-per-request"
+was = "run 级指令每轮进模型请求，且不写进会话历史"
+evidence_was = "ContextAssemblerTests.F34_Instruction_InjectedIntoRequestOnce_AndNeverIntoHistory"
+reason = "ContextInjectingChatClient 删除；改由 ChatOptions.Instructions 实现，见 maf-injection-equivalence"
+
+[[part.retired_decision]]
+id = "disabled-zero-injection"
+was = "禁用态零注入，且能力位不是假绿"
+evidence_was = "ContextAssemblerTests.F35_DisabledState_ZeroInjection_AndCapabilityBitIsNotFakeGreen"
+reason = "原 F35 是预期红（能力位回显 Enabled 属假绿）；换装法后指令/历史真接线，新 F35 转绿且断言语义改变"
+
+[[part.retired_decision]]
+id = "no-injection-identity"
+was = "无注入时 Wrap 原样返回 inner 实例（不空包一层）"
+evidence_was = "ContextAssemblerTests.F36_NoInjection_ReturnsSameInnerInstance"
+reason = "Wrap 已删除；现行「不空包」表现为 Instructions=null，见 ContextComposerTests.F36"
+
+[[part.retired_decision]]
+id = "history-fragment-budget"
+was = "历史按条数保新、片段按字符预算按序截断（status=unit-only）"
+evidence_was = "ContextAssemblerTests.F32 / F33"
+reason = "两半都删：历史归 MAF provider（框架无条数开关）；片段预算没有生产调用方，2026-11-13 随 F32/F33 一起删除，能力待 M2 重建"
+
+[[part.retired_decision]]
+id = "decorator-not-aicontextprovider"
+was = "上下文注入走 IChatClient 装饰器，不挂 AIContextProviders；且不另包函数调用环"
+evidence_was = "ContextBoundaryTests.F38_InjectionUsesChatClientDecorator_NotAIContextProviders"
+reason = "方向反转：装饰器这一半删除，改用框架原生 ChatOptions.Instructions；「不挂 provider / 不另包环」这一半由 no-second-function-loop 继承"
+
+[[part.capability]]
+id = "maf-injection-equivalence"
+summary = "换成 MAF 原生装法后：指令每轮随请求下发且不进历史、本轮输入独立成 user、工具往返留在历史、不另包函数环"
+impl = "AgentWorkbench.Runtime.Harness/AgentHarnessService"
+evidence = [
+  "AgentWorkbench.CoreTests.Runtime.请求装配.指令每轮都在模型请求里_且不写进会话历史",
+  "AgentWorkbench.CoreTests.Runtime.请求装配.没有指令时请求里不出现system消息_空包对照",
+  "AgentWorkbench.CoreTests.Runtime.请求装配.本轮输入独立成一条user消息_不与历史拼接",
+  "AgentWorkbench.CoreTests.Runtime.请求装配.工具往返完整留在会话历史_守卫与轨迹不丢",
+  "AgentWorkbench.CoreTests.Runtime.请求装配.UseProvidedChatClientAsIs时工具环不另包一层_两轮模型请求",
+  "AgentWorkbench.CoreTests.Runtime.请求装配.生产装配形状_run级带Temperature时指令不丢也不重复",
+]
+# 装配形状：FunctionInvokingChatClient → ChatClientAgent(UseProvidedChatClientAsIs=true,
+#           InMemoryChatHistoryProvider, ChatOptions.Instructions/Tools)。刻意不碰本仓旧自写类。
+# remaining：真实 ToolExecutionPipeline（含 ToolCallGuardChatClient）下的端到端负控仍未补——
+#           ③ 的 loop_detected、④ 的 tool_error/轨迹 现在只有单测证据，抓不到绕过守卫。
+#           这是 2026-11-13 替换尚未 100% 闭合的部分，别把它读成「已全验」。
+# 重开条件：换 MEA 大版本、或改工具环装配后必须重跑本组。
+
+[[part.capability]]
+id = "instruction-assigned-once"
+summary = "指令只在 agent 级 ChatOptions 设一次；run 级 options 只带 Temperature，不得再带 Instructions"
+impl = "AgentWorkbench.Runtime.Harness/AgentHarnessService"
+evidence = [
+  "AgentWorkbench.ApplicationTests.Runtime.ContextBoundaryTests.F38_指令走ChatOptionsInstructions_不自写装饰器也不挂Provider",
+  "AgentWorkbench.CoreTests.Runtime.请求装配.生产装配形状_run级带Temperature时指令不丢也不重复",
+]
+# 实测坑：MAF 合并 agent 级 / run 级 ChatOptions 时，两级 Instructions 是换行拼接而非覆盖，
+#         两处都设会让同一句指令变成 "A\nA" 重复进每轮请求。反例对照写在那条判据里。
+# 负控：在任一 run 级 options 补 Instructions → F38 计数掉到 1，红。
+# 重开条件：MAF 改成「run 级覆盖」语义后须重判此条与 BuildAgent 注释。
+
+[[part.capability]]
+id = "no-second-function-loop"
+summary = "不挂 AIContextProviders、不自写 IChatClient 装饰器，保住 ③④ 的守卫与轨迹"
+impl = "AgentWorkbench.Runtime.Harness/AgentHarnessService"
+evidence = [
+  "AgentWorkbench.ApplicationTests.Runtime.ContextBoundaryTests.F38_指令走ChatOptionsInstructions_不自写装饰器也不挂Provider",
+  "AgentWorkbench.ApplicationTests.Runtime.LoopStructureTests.Harness_不得二次包裹函数调用环",
+]
+# 挂 provider 会让 MEA 在 FunctionInvokingChatClient 外再包一层环：
+# 实测同参重复不再判 loop_detected、工具异常不再归类 tool_error。
+# 这是旧 decorator-not-aicontextprovider 里「不挂 / 不另包」那一半的继承者（另一半已反转）。
+# 重开条件：MAF 大版本升级后须在真实 ToolExecutionPipeline 装配下重跑探针，证明不多包环、
+#           不绕过守卫与轨迹，才允许改这条。
+
+[[part.capability]]
+id = "no-business-words"
+summary = "Context 模块不读库、不检索、零业务词（AC-02）"
+impl = "AgentWorkbench.Runtime.Context"
+evidence = [
+  "AgentWorkbench.ApplicationTests.Runtime.ContextBoundaryTests.F37_ContextModule_ContainsNoBusinessWords",
+]
+# 负控已做：注入 PurchaseOrder / 供应商 会红；扫描器恒返回 0 也会红。
+# 与注入实现无关，MAF 重写后保留。
+
+# ① 已知但不进表（无独立证据 / 属别格）：
+#   UseKnowledge 暗路已拆（Harness 注释写明「全仓零测试覆盖」）→ 无证据，不登记
+#   CreateChatHistoryProvider 只是转交 DI provider，实证在 HistoryProviderProbeTests H1/H2 → 归 ⑤
+#   三条组装路收成一条（Runtime.Context/README.md 的历史对比）→ 历史说明，不是现行决定
+
+# ── 仍是缺口的判据（documented gap，不伪装成 wired）──────────────
+[[part.capability]]
+id = "context-budget-in-maf"
+status = "partial"
+claim = "参考片段能进模型请求，且受明确字符上界约束"
+negative = "超长片段注入时，模型请求里的文本必须被截断；不截断会让上界形同虚设"
+remaining = """能力**完全没建立**，不是「有代码没接线」。
+  2026-11-13 已删除 ContextRequest.Fragments / ContextFragment / TrimFragments / MaxFragmentChars
+  —— 生产零调用方（HarnessRunRequest 无 Fragments 字段），属死代码。
+  历史条数不再登记：已归 MAF ChatHistoryProvider，框架只给过滤扩展点、没有统一条数开关。
+  重建要做三件事：HarnessRunRequest 加 Fragments → 本格做字符预算 → 端到端可红断言；
+  对应 docs/core/请求装配.md 第六节。"""
+tests = []
+
+[[part.capability]]
+id = "context-visible-evidence"
+status = "partial"
+claim = "能独立回答「模型这一轮实际收到了什么」，可回放、不依赖模型自述"
+negative = "把注入内容删掉后仍返回同样证据的装置是恒真的；必须有实际请求快照"
+remaining = """待建测试：录制每次请求的 messages + ChatOptions 全量快照。
+  现只有局部证据：请求装配.cs 的 RecordingChatClient（最小装配）、
+  HistoryDivergenceTests.X4（ChatOptions.Instructions 随请求下发、不落 chat_messages）。
+  对应 docs/core/请求装配.md 第六节与 Agent部件全景与查漏清单 §一.2。"""
+tests = []
+
+# ───────────────────────────────────────────────────────────────
+# ③ 终止与预算
+# 部件文档：docs/core/终止与预算.md（由 Runtime.Loop/README.md 移入）
+# 与 ①④ 不同：这一格几乎全是「框架不给、本仓自己判」的判定内容。
+# ───────────────────────────────────────────────────────────────
+
+[[part]]
+id = "termination-budget"
+label = "③ 终止与预算"
+max_anchors = 3
+allow = [
+  "AgentWorkbench.Runtime.Loop",    # 阈值与判定（纯类，零 AI 依赖）
+  "AgentWorkbench.Runtime.Harness", # 装配与传递：ToolExecutionLimits / CreateGuard / 圈整轮
+  "AgentWorkbench.Runtime.Tools",   # 环内执行点：FunctionInvoker 调 InspectToolCall、置 Terminate
+]
+# 三处分工见部件文档「三、三处分工」。allow 是许可上限，不要求每项都有 capability；
+# 同一模块被多格允许（Harness / Tools 也出现在别的 part）正是多对多，不是重复登记。
+
+[[part.capability]]
+id = "iteration-limit-not-success"
+summary = "跑满迭代标 iteration_limit，不记成成功；未跑满收口不得误判截断"
+impl = "AgentWorkbench.Runtime.Loop/AgentRunGuard"
+evidence = [
+  "AgentWorkbench.CoreTests.Runtime.Loop.AgentRunGuardTests.跑满迭代_必须记_iteration_limit",
+  "AgentWorkbench.CoreTests.Runtime.Loop.AgentRunGuardTests.未跑满就收口_不得判为截断",
+  "AgentWorkbench.CoreTests.Runtime.Loop.AgentRunGuardTests.一次工具都没调用_谈不上一轮跑满",
+  "AgentWorkbench.CoreTests.Runtime.Loop.LoopGapTests.三种终止判定的状态与归类码一一配对且都不是成功",
+]
+# 框架只给 MaximumIterationsPerRequest 开关，「跑满算不算答完」是本仓判定内容。
+
+[[part.capability]]
+id = "real-cancellation-and-timeout-split"
+summary = "超时是真取消（令牌链进动作），调用方取消与本模块超时分开归类"
+impl = "AgentWorkbench.Runtime.Loop/AgentLoopService"
+evidence = [
+  "AgentWorkbench.CoreTests.Runtime.Loop.LoopGapTests.超时是真取消_动作内部能观察到令牌被取消",
+  "AgentWorkbench.CoreTests.Runtime.Loop.LoopGapTests.调用方取消也穿透_动作同样能观察到",
+  "AgentWorkbench.CoreTests.Runtime.Loop.AgentLoopServiceTests.整轮超时_抛_AgentRunTimeoutException",
+  "AgentWorkbench.CoreTests.Runtime.Loop.AgentLoopServiceTests.调用方取消_不得被归类成超时",
+  "AgentWorkbench.CoreTests.Runtime.Loop.AgentLoopServiceTests.两种超时_归类码不能合并",
+]
+# 重开条件：换超时实现前须证明令牌仍穿透到正在跑的动作，且两类取消不并码。
+
+[[part.capability]]
+id = "consecutive-repeat-detection"
+summary = "连续同参重复达阈值即停；参数按名排序可比，中间夹别的调用重新计数，0 = 关闭"
+impl = "AgentWorkbench.Runtime.Loop/AgentRunGuard"
+evidence = [
+  "AgentWorkbench.CoreTests.Runtime.Loop.AgentRunGuardTests.连续同参第三次_在发出前就停",
+  "AgentWorkbench.CoreTests.Runtime.Loop.AgentRunGuardTests.中间夹了别的调用_重复计数重来",
+  "AgentWorkbench.CoreTests.Runtime.Loop.AgentRunGuardTests.重复检测关闭时不判循环",
+]
+
+[[part.capability]]
+id = "token-budget-per-run"
+summary = "按本 run 起点快照取用量增量，超限即停；0 = 不限"
+impl = "AgentWorkbench.Runtime.Loop/AgentRunGuard"
+evidence = [
+  "AgentWorkbench.CoreTests.Runtime.Loop.AgentRunGuardTests.token预算_按本run起点快照计算",
+  "AgentWorkbench.CoreTests.Runtime.Loop.AgentRunGuardTests.token预算为0_不判",
+]
+# 框架无等价物（六部件图 ③ 标「缺」的那格）。
+
+[[part.capability]]
+id = "terminal-taxonomy"
+summary = "终态状态与归类码结构化，状态码满足落库长度约束，停下来不许记成功"
+impl = "AgentWorkbench.Runtime.Loop"
+evidence = [
+  "AgentWorkbench.CoreTests.Runtime.Loop.LoopGapTests.终态状态码满足落库约束_不超过16字符",
+  "AgentWorkbench.CoreTests.Runtime.Loop.LoopGapTests.三种终止判定的状态与归类码一一配对且都不是成功",
+]
+
+[[part.capability]]
+id = "guard-created-per-run"
+summary = "每次 Create 生成独立守卫，预算属性从配置透出"
+impl = "AgentWorkbench.Runtime.Loop/AgentLoopService"
+evidence = [
+  "AgentWorkbench.CoreTests.Runtime.Loop.AgentLoopServiceTests.预算属性从配置透出_且每次_create_独立守卫",
+]
+
+# ③ 已知缺口（部件文档第六节）：以下三条当前没有独立证据，只留痕、不进门禁。
+#   预算 2 → 恰好 2 轮的对账        接线条件：补一条端到端轮数对账测试
+#   工具收到取消也不理时的强制隔离  接线条件：补一条隔离测试
+#   并发 run 的 token 口径          接线条件：先定并发口径（现依赖进程级计数器，串行才准）
+# 环内执行点 Runtime.Tools/FunctionInvoker 的「发出前拦截、命中即 Terminate 不抛异常」
+# 目前只有 guard 侧单测，没有装配级证据，故不登记为 capability。
+
+# ───────────────────────────────────────────────────────────────
+# ⑤ 状态与记忆
+# 部件文档：docs/core/状态与记忆.md
+# 本格特殊：框架给了五族能力，但只有「会话状态 / 序列化 / 历史读写基座」能直接用；
+#           压缩与自动记忆注入都挂在 AIContextProviders 上，撞 ① 的红线（F38），故「不能用」。
+#           三分类全表见部件文档 1.2，冲突详情见 1.3。
+# ───────────────────────────────────────────────────────────────
+
+[[part]]
+id = "state-memory"
+label = "⑤ 状态与记忆"
+doc = "docs/core/状态与记忆.md"
+max_anchors = 3
+allow = [
+  "AgentWorkbench.Runtime.Session",     # 契约 + 内存实现：ISessionStore / ISessionFactory / ISessionRunGate / ILongTermMemoryStore / IMemoryScopeAccessor
+  "AgentWorkbench.Memory.Persistence",  # SQLite 落库 + remember/recall 工具 + 保留服务 + 组合根 Replace
+  "AgentWorkbench.Runtime.Harness",     # 接线：StateBag 写 sessionId / Begin(scope) / 写回
+]
+# 三处分工见部件文档第三节。跨三模块，比 ① 的 2 更宽——这一格天生横跨「契约 / 落库 / 接线」。
+# 故意不出表：Runtime.Model（记忆不调模型）、Knowledge.*（检索是另一套）、
+#             Host（界面消息列表与会话归属校验不在本格）。
+
+[[part.capability]]
+id = "session-store-contract"
+summary = "按 sessionId 取回/新建会话并写回；损坏快照降级不抛；内存版与落库版同契约"
+impl = "AgentWorkbench.Runtime.Session/ISessionStore"
+evidence = [
+  "AgentWorkbench.ApplicationTests.Runtime.SessionContractTests.F45_CorruptSnapshot_Degrades_WithoutThrowing",
+  "AgentWorkbench.ApplicationTests.Runtime.SessionContractTests.F46_TwoArms_SameContract",
+]
+# 证据强度有限，别读成「落库版已验」：ApplicationTests 未引 Memory.Persistence，
+#   落库臂只做源码结构断言，SqliteSessionStore 没有真跑过（测试文件头自述这一退化）。
+#   要真验两臂，得给测试项目加 ProjectReference，用内存 ISessionStateRepository 替身构造。
+# 偏差登记：MAF 有同构抽象 AgentSessionStore（方法自带 AIAgent、key 带 Partitions），
+#   本仓自造 ISessionStore + ISessionFactory 两层，代价是租户/用户只能拼进 sessionId 字符串。
+# 重开条件：换装为 AgentSessionStore 后本条退役，F45/F46 按新契约重写。
+
+[[part.capability]]
+id = "history-append-only"
+summary = "历史只追加不覆盖：并发不丢、按序读回、空批次 no-op、无 sessionId 不落库"
+impl = "AgentWorkbench.Memory.Persistence/SqliteChatHistoryProvider"
+evidence = [
+  "AgentWorkbench.CoreTests.Memory.Persistence.ChatHistoryPersistenceTests.C1_两个run并发推进同一会话_两轮消息都保留",
+  "AgentWorkbench.CoreTests.Memory.Persistence.ChatHistoryPersistenceTests.C2_历史按追加顺序读回",
+  "AgentWorkbench.CoreTests.Memory.Persistence.ChatHistoryPersistenceTests.C4_没有会话标识时不落库也不报错",
+  "AgentWorkbench.CoreTests.Memory.Persistence.ChatHistoryPersistenceTests.C5_追加空批次是noop",
+]
+# 为什么这里没有 C3：会话隔离是另一条决定，单独登记，不混成一条。
+# 重开条件：将来要裁剪历史，用框架 Compaction，不要自写按条数切（会拆散 tool-call/result 配对）。
+
+[[part.capability]]
+id = "history-session-isolation"
+summary = "不同会话的历史互不可见；sessionId 只从 StateBag 读，不进 provider 实例字段"
+impl = "AgentWorkbench.Memory.Persistence/SqliteChatHistoryProvider"
+evidence = [
+  "AgentWorkbench.CoreTests.Memory.Persistence.ChatHistoryPersistenceTests.C3_不同会话的历史互不可见",
+]
+# provider 注册为单例、服务所有会话；把 sessionId 存进字段必然串号。
+# 负控未做：删掉 ResolveSessionId 的 StateBag 读、改成实例字段，C3 是否变红取决于用例是否并发——
+#   当前 C3 是串行两会话，可能抓不到。补并发负控前，本条的证据只算「隔离成立」，不算「字段化会红」。
+
+[[part.capability]]
+id = "history-tool-roundtrip"
+summary = "一次带工具的 run，历史里含完整工具往返；单条消息往返不丢 functionCall"
+impl = "AgentWorkbench.Memory.Persistence/SqliteChatHistoryProvider"
+evidence = [
+  "AgentWorkbench.CoreTests.Memory.Persistence.HistoryProviderProbeTests.H1_一次带工具的run_历史里包含完整往返",
+  "AgentWorkbench.CoreTests.Memory.Persistence.HistoryProviderProbeTests.H2_单条消息可按默认选项往返_functionCall不丢",
+]
+# 这两条同时是「不开 RequirePerServiceCallChatHistoryPersistence」的依据：
+# 实测一次 run 结束时工具调用与结果都已在历史里，开那个开关只会改变 FunctionInvokingChatClient 行为。
+
+[[part.capability]]
+id = "session-run-gate"
+summary = "同一 sessionId 同时只允许一个 run；抢不到回 session_busy，两个入口一致"
+impl = "AgentWorkbench.Runtime.Session/SessionRunGate"
+evidence = [
+  "AgentWorkbench.ApplicationTests.Runtime.SessionRunGateTests.G1_同一会话只能有一个持有者_释放后可重抢",
+  "AgentWorkbench.ApplicationTests.Runtime.SessionRunGateTests.G2_不同会话可以同时持有",
+  "AgentWorkbench.ApplicationTests.Runtime.SessionRunGateTests.G3_重复释放不影响后来的持有者",
+  "AgentWorkbench.ApplicationTests.Runtime.SessionRunGateTests.G4_会话被占用时_run返回session_busy而不执行",
+  "AgentWorkbench.ApplicationTests.Runtime.SessionRunGateTests.G5_会话被占用时_流式入口只产出一个session_busy事件",
+]
+# 语义是「拒绝」不是「排队」。MAF 的 GetSessionLock 是 loop 内 pending messages 串行化，
+# 不阻挡第二个 run 进入，不能当业务闸（见本节末「不能用」）。
+# 只在单进程成立；上多实例前必须做数据库租约 + fence，不许用进程内锁冒充。
+
+[[part.capability]]
+id = "two-history-sources"
+summary = "模型历史与界面消息是两个源：条数不同、失败轮界面有孤问而模型零条、删会话不连带删模型历史"
+impl = "AgentWorkbench.Memory.Persistence/SqliteChatHistoryProvider"
+evidence = [
+  "AgentWorkbench.CoreTests.Memory.Persistence.HistoryDivergenceTests.X1_一轮带工具的对话_两个源条数不同且工具只在一个源里",
+  "AgentWorkbench.CoreTests.Memory.Persistence.HistoryDivergenceTests.X2_失败的run_界面留下孤立提问_模型历史里没有答复",
+  "AgentWorkbench.CoreTests.Memory.Persistence.HistoryDivergenceTests.X3_删除会话_界面历史消失_模型历史留下",
+]
+# 这不是功能验收，是事实锁定：防止有人把两个源合并成一张表。
+# 重开条件：若统一成一个源，必须先证明「删会话」与「审计保留」两个诉求能同时满足。
+
+[[part.capability]]
+id = "memory-scope-ambient"
+summary = "记忆作用域按 run 绑定在 AsyncLocal 上：可嵌套、幂等释放、并发 run 互不串"
+impl = "AgentWorkbench.Runtime.Session/AsyncLocalMemoryScopeAccessor"
+evidence = [
+  "AgentWorkbench.CoreTests.Runtime.Session.MemoryScopeAccessorTests.S1_Begin期间有值_释放后回到null",
+  "AgentWorkbench.CoreTests.Runtime.Session.MemoryScopeAccessorTests.S2_嵌套按栈恢复",
+  "AgentWorkbench.CoreTests.Runtime.Session.MemoryScopeAccessorTests.S3_重复Dispose不破坏外层",
+  "AgentWorkbench.CoreTests.Runtime.Session.MemoryScopeAccessorTests.S4_并发run的作用域互不串",
+]
+# 这是「模型不能指定 scope_id」的实现基础（文档决定 4、红线 5）：
+# 作用域由编排层按当前 run 设置，模型只能选「本作用域 / 全局」。
+# 负控已做：把 AsyncLocal 换成私有字段 → S4 两次结果都变成同一个 id，红。
+
+[[part.capability]]
+id = "longterm-structured-item"
+summary = "结构化记忆：覆盖键 / 作用域隔离 / global 开关 / 保留期 / 超长拒绝 / 遗忘 / 排序 / 取库上限 / 使用次数回写"
+impl = "AgentWorkbench.Memory.Persistence/SqliteLongTermMemoryStore"
+evidence = [
+  "AgentWorkbench.CoreTests.Memory.Persistence.LongTermMemoryTests.L1_同作用域同覆盖键写两次_只留一条且标识与使用次数沿用",
+  "AgentWorkbench.CoreTests.Memory.Persistence.LongTermMemoryTests.L2_不带覆盖键的写入_每次都新增一条",
+  "AgentWorkbench.CoreTests.Memory.Persistence.LongTermMemoryTests.L3_跨会话召回不串数据",
+  "AgentWorkbench.CoreTests.Memory.Persistence.LongTermMemoryTests.L4_全局记忆可被任意作用域召回_关掉开关就看不到",
+  "AgentWorkbench.CoreTests.Memory.Persistence.LongTermMemoryTests.L5_超过字符上限直接拒绝_边界值可写",
+  "AgentWorkbench.CoreTests.Memory.Persistence.LongTermMemoryTests.L6_空白内容拒绝",
+  "AgentWorkbench.CoreTests.Memory.Persistence.LongTermMemoryTests.L7_过保留期的记忆不再被召回",
+  "AgentWorkbench.CoreTests.Memory.Persistence.LongTermMemoryTests.L8_显式遗忘一条_再忘一次返回false",
+  "AgentWorkbench.CoreTests.Memory.Persistence.LongTermMemoryTests.L9_召回按重要性降序",
+  "AgentWorkbench.CoreTests.Memory.Persistence.LongTermMemoryTests.L10_候选上限真的截断取库条数",
+  "AgentWorkbench.CoreTests.Memory.Persistence.LongTermMemoryTests.L11_召回回写使用次数与最后使用时间",
+]
+# 负控已做（抽样两条）：去掉 scope 过滤 → L3 红；删超长检查 → L5 红。
+# 环境坑（第一次写测试时踩到）：建库后不设 Dapper.DefaultTypeMap.MatchNamesWithUnderscores = true，
+#   use_count / last_used_at 这类下划线列映射不上——写进去 1，读回来 0，而且不抛异常。
+#   生产在 AddNitroPersistence 里设了；测试 fixture 必须照设，否则测的不是同一条读路径。
+
+[[part.capability]]
+id = "retention-sweep"
+summary = "后台按周期真删过期会话行与过保留期记忆行；未过期与不过期的不动"
+impl = "AgentWorkbench.Memory.Persistence/MemoryRetentionService"
+evidence = [
+  "AgentWorkbench.CoreTests.Memory.Persistence.MemoryRetentionTests.R1_过期会话行被清_未过期与不过期的都保留",
+  "AgentWorkbench.CoreTests.Memory.Persistence.MemoryRetentionTests.R2_过保留期的记忆行被真删_未过期的保留",
+  "AgentWorkbench.CoreTests.Memory.Persistence.MemoryRetentionTests.R3_关掉会话TTL时不清会话行",
+]
+# 负控已做：让 SweepOnceAsync 不调 PurgeExpiredAsync → R2 红。
+# R2 特意查仓储而不是查召回：召回本来就过滤 expires_at，看不到它证明不了清理动作。
+
+# ── 判据先于实现：以下两条没有行为测试（一条规格未实现、一条功能未建），tests 可以红 ──
+
+[[part.capability]]
+id = "longterm-tool-registration"
+status = "partial"
+claim = "LongTermEnabled 默认 false；关掉时不注册 remember / recall；注册表 fallback 也必须是 false"
+negative = "默认 true 或 fallback ?? true 会让工具在未启用时仍暴露给模型——这正是 F47 三条在钉的东西"
+remaining = "MemoryOptions.LongTermEnabled 现为 true、组合根 fallback 为 ?? true，与 ADR 0016 §五 A5 / B7「长期记忆停用不删」相反。三条 F47 是预期红，红是正确信号，不要改测试或改生产迁就。"
+tests = [
+  "tests/AgentWorkbench.ApplicationTests/Runtime/SessionContractTests.cs::F47_DefaultOptions_LongTermEnabledMustBeFalse",
+  "tests/AgentWorkbench.ApplicationTests/Runtime/SessionContractTests.cs::F47_OptionsSource_DefaultMustBeFalse",
+  "tests/AgentWorkbench.ApplicationTests/Runtime/SessionContractTests.cs::F47_ToolRegistration_FallbackMustBeFalse",
+]
+# 这是本表唯一「判据已写、测试已存在且预期红」的样本：partial 的正确形态。
+
+[[part.capability]]
+id = "multi-instance-mutex"
+status = "partial"
+claim = "多实例 / 跨进程下同一会话仍然互斥"
+negative = "单进程锁在多实例下等于没有；不得用进程内锁冒充分布式锁"
+remaining = "未实现。需要数据库租约 + fence（见部件文档第六节）。换后端不解决互斥——那是独立契约，别指望换 Postgres 就自动有。"
+tests = []
+
+# ⑤ 明确不用框架能力（无负控，故不登记为 capability，只留决定与重开条件）：
+#
+#   Compaction / CompactionProvider（滑窗、截断、摘要、工具结果压缩等六策略）
+#     为什么不用：它是 AIContextProvider 子类，挂载撞 ① 的红线 F38——MEA 会在工具环外再包一层，
+#                 loop_detected / tool_error / 轨迹全失效。F38 只扫 Context + Harness 两目录，
+#                 本格加 provider 不会被它拦；那是门禁盲区，不是许可。
+#     代价：模型可见历史是全量，没有 token 上限。
+#     重开条件：① 在真实 ToolExecutionPipeline 装配下重验通过（或 F38 撤销）后，
+#               在真实装配里补一条「压缩后 loop_detected 仍生效」的负控，才允许接。
+#     另注：上一轮删自写 TrimHistory 是对的——Compaction 的强项是保住 tool-call/result 配对，
+#           自写按条数切会拆散一对，下一次模型请求直接结构报错。
+#
+#   ChatHistoryMemoryProvider（向量化语义召回 + BeforeAIInvoke 自动注入）
+#     为什么不用：同样是 AIContextProvider 子类，撞 F38；另需 VectorStore
+#                 （依赖已在 Knowledge.Local 的 CommunityToolkit.VectorData.SqliteVec，本模块未引）。
+#     代价：召回只有 LIKE 关键词，命中率低；没有自动召回，只有模型主动调 recall。
+#     重开条件：同上，且先定语义召回的评测口径——否则换过去也不知道好坏。
+#
+#   AgentSessionStore 的 GetSessionLock
+#     为什么不当作业务闸：它是 loop 内 pending messages 的串行化，不阻挡第二个 run 进入。
+#     误用后果：看起来有锁，实际两个 run 并行推进同一会话。
+#
+#   RequirePerServiceCallChatHistoryPersistence
+#     为什么不开：H1/H2 实测一次 run 结束时工具调用与结果都已在历史里；开它只会改变
+#                 FunctionInvokingChatClient 行为（守卫与轨迹随之变），收益为零、风险非零。
+#
+#   框架缺失、本仓必须自补的（部件文档 1.2 五条）：
+#     AgentSessionStore 与 ChatHistoryProvider 的落库实现、结构化记忆条目、保留期清理、多实例互斥。
+#     都不是「框架不会」，而是「框架只给抽象，不管存储/保留期/互斥/隔离边界」。
+
+# ───────────────────────────────────────────────────────────────
+# ⑥ 轨迹与观测
+# 部件文档：docs/core/轨迹与观测.md（2026-11-13 重写：只写内核侧）
+# 本格的特殊性：它几乎不「产生」事实——终态由 ② 与 Harness 判、每一步由 ④ 采，
+# 本格只负责「形状 + 出口」。所以这里的证据多是「搬运没丢字段」，不是「判定对不对」。
+# ───────────────────────────────────────────────────────────────
+
+[[part]]
+id = "trace-observability"
+label = "⑥ 轨迹与观测"
+doc = "docs/core/轨迹与观测.md"
+max_anchors = 3
+allow = [
+  "AgentWorkbench.Observability",   # 记录形状（ExecutionTrace / ExecutionStep）+ 写口 / 读口两个契约；csproj 只许引 Shared
+  "AgentWorkbench.Runtime.Harness", # 五条出口的搬运：判定结果原样转存，不做二次判定
+  "AgentWorkbench.Persistence",     # 落库实现（应用层）。登记只为圈定本格涉及的文件范围，
+                                    # 不表示内核依赖存储：依赖方向是 Persistence → Observability
+]
+# 故意不出表：Runtime.Loop（停因判定在 ②）、Runtime.Tools（步骤采集在 ④）、Host（回放端点在应用层）。
+# 红线 6 的可执行形式：Observability.csproj 只引 Shared；引 Persistence / Domain / EF Core 直接编译不过。
+# 读写分口（write-only-port）后，Harness 构造函数里只有 IExecutionTraceWriter——
+# 内核「不读自己的记录」是编译期事实，不是注释约定。
+
+[[part.capability]]
+id = "outcome-and-code"
+summary = "终态 + 归类码进记录；枚举值不是人话，调用方据此决定重试 / 降级 / 提示"
+impl = "AgentWorkbench.Runtime.Harness/AgentHarnessService"
+evidence = [
+  "AgentWorkbench.CoreTests.Engineering.Observability.轨迹与观测.成功收尾的记录里是succeeded且没有归类码",
+  "AgentWorkbench.CoreTests.Engineering.Observability.轨迹与观测.模型抛异常时记录里是failed且归类为unhandled_error",
+]
+tests = [
+  "tests/AgentWorkbench.CoreTests/Engineering/Observability/轨迹与观测.cs::成功收尾的记录里是succeeded且没有归类码",
+  "tests/AgentWorkbench.CoreTests/Engineering/Observability/轨迹与观测.cs::模型抛异常时记录里是failed且归类为unhandled_error",
+]
+# 证据强度：验的是「Harness 交给存储的那条记录字段对不对」，不是「存储写对了」。
+# 落库往返属应用层（文档第六节已划出），别读成「轨迹已端到端验证」。
+# 另注：归类改成「先认 HarnessModelNotConfiguredException → model_unavailable」，
+#   因为准备阶段搬进 try 后，它不再自己落库（否则同一件事两处写），归类必须在这里补。
+
+[[part.capability]]
+id = "stop-reason-structured"
+summary = "同一个 loop_detected，能分别读出「观测到几次」与「阈值几次」，不靠解析中文"
+impl = "AgentWorkbench.Runtime.Harness/AgentHarnessService"
+evidence = [
+  "AgentWorkbench.CoreTests.Engineering.Observability.轨迹与观测.循环终止的记录里能读出观测次数与阈值",
+  "AgentWorkbench.CoreTests.Engineering.Observability.轨迹与观测.跑满迭代的记录里能读出轮次与预算",
+  "AgentWorkbench.CoreTests.Engineering.Observability.轨迹与观测.token预算终止的记录里能读出实际用量与上限",
+]
+tests = [
+  "tests/AgentWorkbench.CoreTests/Engineering/Observability/轨迹与观测.cs::循环终止的记录里能读出观测次数与阈值",
+  "tests/AgentWorkbench.CoreTests/Engineering/Observability/轨迹与观测.cs::跑满迭代的记录里能读出轮次与预算",
+  "tests/AgentWorkbench.CoreTests/Engineering/Observability/轨迹与观测.cs::token预算终止的记录里能读出实际用量与上限",
+]
+# 生产端在 ② AgentRunGuard 三处（DetectLoop / DetectBudgetOverage / InspectCompletion），
+# 按 allow 不属本格，本格只负责把 RunStopDetail 原样搬进 ExecutionTrace.Stop——不解析 Message、不重算计数。
+# 否决式收口（knowledge_insufficient）不是数值判定，Detail 为 null；那是「非数值触发」，不是「没依据」。
+# 为什么第三条单列：循环与迭代的观测值必然等于阈值（第 N 次触发，N == Limit），写死成配置值也绿——
+# 只有 token 预算的 used > 上限，才把「实际用量」与「配置上限」两个数字分开。缺了它，前两条是恒真的。
+
+[[part.capability]]
+id = "usage-per-run"
+summary = "记录里的 token 是「本次 run」的用量，不是进程累计"
+impl = "AgentWorkbench.Runtime.Harness/AgentHarnessService"
+evidence = [
+  "AgentWorkbench.CoreTests.Engineering.Observability.轨迹与观测.一次run结束后记录里的token等于本次调用上报的用量",
+  "AgentWorkbench.CoreTests.Engineering.Observability.轨迹与观测.供应商没报用量时记null不记0",
+  "AgentWorkbench.CoreTests.Engineering.Observability.轨迹与观测.流式run的用量与同步run同口径",
+]
+tests = [
+  "tests/AgentWorkbench.CoreTests/Engineering/Observability/轨迹与观测.cs::一次run结束后记录里的token等于本次调用上报的用量",
+  "tests/AgentWorkbench.CoreTests/Engineering/Observability/轨迹与观测.cs::供应商没报用量时记null不记0",
+  "tests/AgentWorkbench.CoreTests/Engineering/Observability/轨迹与观测.cs::流式run的用量与同步run同口径",
+]
+# 两条出口取数方式不同，同一个口径：
+#   非流式 → response.Usage（MEA 的 FunctionInvokingChatClient 已把工具往返各次调用聚合到最终响应上）
+#   流式   → 从 update.Contents 里捞 UsageContent 累加（2026-11-13 探针实测：UseProvidedChatClientAsIs 下
+#            最后一个 update 带 UsageContent[10/5]，是 MEA 的约定，不是本仓自造）
+# 「供应商没上报」写 null 而不是 0：0 会被读成「这次真的没花钱」。累加用 Accumulate，null+null 仍是 null。
+# 已知缺口：失败路径没有 AgentResponse，取不到用量，记 null。
+#   想补只能在 FunctionInvokingChatClient 外层包只读装饰器 —— 那违反 ① 的红线（不自写 IChatClient 装饰器），
+#   会绕过守卫与轨迹采集。宁可记 null，也不用进程累计冒充。
+
+[[part.capability]]
+id = "step-sequence-and-truncation"
+summary = "步骤序列含迭代号 / 工具 / 参数 / 结果 / 异常，且每步能声明「是否被截断」"
+impl = "AgentWorkbench.Runtime.Harness/AgentHarnessService"
+evidence = [
+  "AgentWorkbench.CoreTests.Engineering.Observability.轨迹与观测.工具结果被截断时该步带截断标志",
+]
+tests = [
+  "tests/AgentWorkbench.CoreTests/Engineering/Observability/轨迹与观测.cs::工具结果被截断时该步带截断标志",
+]
+# 序列本身（迭代号 / 工具 / 参数 / 结果 / 异常）由既有测试与历史数据覆盖，本条新增的是「截断标志」。
+# 搬运链：④ ToolExecutionPipeline.IsTruncated 置位 ToolCallTrace.Truncated
+#        → ⑥ Harness BuildSteps 搬进 HarnessStep → ExecutionStep → 落库 agent_steps.truncated。
+# 置位与截断共用 MaxResultChars 一个上界，避免两处阈值漂移。
+# 已知缺口：工具调用参数（Arguments）目前没有上界，模型给的超长参数会原样进记录。未验，留作后续。
+
+[[part.capability]]
+id = "completeness-declarable"
+summary = "记录能声明「我覆盖了本次 run 的全部动作」还是「只覆盖了一部分」"
+impl = "AgentWorkbench.Runtime.Harness/AgentHarnessService"
+evidence = [
+  "AgentWorkbench.CoreTests.Engineering.Observability.轨迹与观测.超时中断的记录能声明自己不完整",
+]
+tests = [
+  "tests/AgentWorkbench.CoreTests/Engineering/Observability/轨迹与观测.cs::超时中断的记录能声明自己不完整",
+]
+# 判定口径：成功收尾 / 普通失败 = true（动作都记了）；取消 / run 超时 / 单次请求超时 = false
+#   —— 中断时可能有一条工具调用正在执行、没进步骤序列。
+# 准备阶段失败 = true：没有动作，记录完整地表达了「什么都没做」。
+# OK：「写了一半」比「没写」更危险，前提是看得出来它只有一半。
+
+[[part.capability]]
+id = "failure-paths-durable"
+summary = "失败 / 取消 / 超时也留痕，且落库不跟随调用方的取消令牌"
+impl = "AgentWorkbench.Runtime.Harness/AgentHarnessService"
+evidence = [
+  "AgentWorkbench.CoreTests.Engineering.Observability.轨迹与观测.失败路径落库不跟随调用方的取消令牌",
+]
+tests = [
+  "tests/AgentWorkbench.CoreTests/Engineering/Observability/轨迹与观测.cs::失败路径落库不跟随调用方的取消令牌",
+]
+# 为什么这条重要：只在成功时留记录的系统，出事时恰恰什么都没有——
+# 最需要回放的那次正好是失败那次。
+# 落库失败只记 Warning（PersistQuietlyAsync），不掩盖原始异常。
+
+[[part.capability]]
+id = "prepare-stage-recorded"
+summary = "准备阶段抛异常（取会话失败 / 装配失败 / 没配模型）也留下一条轨迹"
+impl = "AgentWorkbench.Runtime.Harness/AgentHarnessService"
+evidence = [
+  "AgentWorkbench.CoreTests.Engineering.Observability.轨迹与观测.准备阶段抛异常也留下一条轨迹",
+]
+tests = [
+  "tests/AgentWorkbench.CoreTests/Engineering/Observability/轨迹与观测.cs::准备阶段抛异常也留下一条轨迹",
+]
+# 2026-11-13 收口：PrepareRunAsync 搬进 try，两条出口（同步 / 流式）同一个 catch。
+# 代价与配套：
+#   ① PrepareRunAsync 里原来那段「模型未配置自己落轨迹」必须删掉，否则同一件事两处写（会双条记录）；
+#      归类改由 ClassifyFailure 先认 HarnessModelNotConfiguredException → model_unavailable。
+#   ② 流式的准备阶段搬进生产者（StreamRunAsync），订阅/退订 ToolCompleted 也随之内移。
+#   ③ 准备阶段失败时 run 为 null，耗时记 0（准备花的时间没有独立意义，不为此把 Stopwatch 塞进异常）。
+
+[[part.capability]]
+id = "write-only-port"
+summary = "内核只依赖写口 IExecutionTraceWriter；读（回放 / 检索）只被应用层注入"
+impl = "AgentWorkbench.Observability/IExecutionTraceWriter"
+evidence = [
+  "AgentWorkbench.CoreTests.Engineering.Observability.轨迹与观测.内核只依赖写口_不在决策路径上读轨迹",
+]
+tests = [
+  "tests/AgentWorkbench.CoreTests/Engineering/Observability/轨迹与观测.cs::内核只依赖写口_不在决策路径上读轨迹",
+]
+# 2026-11-13 收口：IExecutionTraceStore 拆成 Writer / Reader 两个口（Store 作为合体接口留给存储实现）。
+# 配套改动：IAgentHarness.GetRunAsync 删除 → Host 的只读端点改注入 IExecutionTraceReader，
+#   用 HarnessTraceMapping.ToResult 还原响应形状（路由与字段不变，前端无感）。
+# 为什么值得拆：内核能读自己的记录，判定就与存储耦成环——换存储要改判定，改判定会动存储。
+# 现在「不读」是构造函数里没有那个类型，而不是注释里写着不读。
+
+[[part.capability]]
+id = "record-fields-persisted"
+summary = "记录形状上的每个事实在表里有列，且写进去能原样读回来"
+impl = "AgentWorkbench.Persistence/ExecutionTraceStore"
+evidence = [
+  "AgentWorkbench.CoreTests.Engineering.Observability.轨迹落库迁移.记录形状上的事实在表里都有列",
+  "AgentWorkbench.CoreTests.Engineering.Observability.轨迹落库迁移.写进去的事实能原样读回来",
+]
+tests = [
+  "tests/AgentWorkbench.CoreTests/Engineering/Observability/轨迹落库迁移.cs::记录形状上的事实在表里都有列",
+  "tests/AgentWorkbench.CoreTests/Engineering/Observability/轨迹落库迁移.cs::写进去的事实能原样读回来",
+]
+# 这是本格唯一一条落库测试，理由只有一个：红线 4（加字段必须同时进记录结构与出口）。
+# 出口的最后一站就是落库——M033 与记录形状同一次提交，就是为了不出现「字段有了、读回来是空」。
+# 它验的不是存储实现：怎么建表、检索面有没有人用、留多久，仍属应用层，不在这里验。
+
+[[part.capability]]
+id = "kernel-no-storage-dependency"
+summary = "内核不依赖存储与领域记录：Observability.csproj 只引 Shared"
+impl = "AgentWorkbench.Observability"
+evidence = [
+  "AgentWorkbench.CoreTests.Engineering.Observability.轨迹与观测.观测内核只引Shared_不拖存储与领域进编译期",
+]
+tests = [
+  "tests/AgentWorkbench.CoreTests/Engineering/Observability/轨迹与观测.cs::观测内核只引Shared_不拖存储与领域进编译期",
+]
+# 这条是红线 6 的唯一可执行形式。2026-11-13 曾反向引 Persistence，已回正——
+# 用「塞一个 Domain 类型进去 → CS0234 编译不过 → 拿掉恢复绿」做过一次编译期负控。
+
+# ⑥ 明确不做（无实现，故不登记为 capability）：
+#
+#   遥测（OpenTelemetryAgent / OpenTelemetryChatClient）
+#     为什么不做：span 是树不是账本，答不了「这次 run 是什么结局」（部件文档附录 C）。
+#     接入是加法，但没实测就不算能力——真接要先补「接入后 loop_detected / tool_error 仍照常判定」的负控。
+#
+#   成功率 / P95 / 工具失败率 / 保留期 / 回放面板
+#     为什么不做：都能从记录算出来（判据：事后能不能从别处重建），进来就是双写，归应用层。
+#
+#   落库失败时把残缺行标成 complete = false
+#     为什么不做：内核负责「声明」，落库失败是应用层才知道的事。
+#     现状：SaveAsync 先插 run 再插 steps，两步不在一个事务；steps 写失败会留下「有 run 没步骤」且看起来正常。
+#     要补就补在 Persistence（同一事务，或失败后回写 complete=0），并配「步骤写失败可被识别」的用例。
+#     这条不在内核验收里，但它是 complete 字段真正派上用场的地方——别把「字段有了」当成「完整性做到了」。
+
+[[part.retired_decision]]
+id = "trace-store-moved-to-persistence"
+decision = "ExecutionTraceStore 与它的 DI 扩展从 Observability 移到 Foundation/Persistence/Traces"
+reason = """内核只为写一条记录，不该把 EF Core 栈拖进编译期依赖。
+  移动后 Observability.csproj 只剩 Shared，依赖方向恢复为 Persistence → Observability。"""
+# 留着是因为：以后有人想「顺手把仓储也放回内核」，这里是反例。
+
+# ───────────────────────────────────────────────────────────────
+# ② 循环驱动（最后进表，故排在文件末尾）
+# 部件文档：docs/core/循环驱动.md
+# 本格没有独立模块：循环本体是 MEA 的 FunctionInvokingChatClient（由 ④ 的管道创建），
+# Agent 对象是 MAF 的 ChatClientAgent（由 Harness 构建）。本仓能决定的只有「怎么拼」，
+# 2026-11-14 起全部收在 Runtime.Harness/LoopAssembly.cs —— 这就是 ② 的家。
+[[part]]
+id = "loop-drive"
+label = "② 循环驱动"
+doc = "docs/core/循环驱动.md"
+max_anchors = 2
+allow = [
+  "AgentWorkbench.Runtime.Harness",  # LoopAssembly（全部决定）+ PrepareRunAsync / BuildAgent / 两条出口
+  "AgentWorkbench.Runtime.Tools",    # ToolExecutionPipeline 照单设置 FICC 的四个选项，自己不决策
+]
+# 故意不出表：Runtime.Loop 是 ③（定义预算、不驱动循环）；Runtime.Context 是 ①；Host 不参与装配。
+
+[[part.capability]]
+id = "loop-assembly-single-entry"
+summary = "② 的全部装配决定集中在 Harness 一处：迭代预算来自 ③，四项框架选项与 MAF 开关同源"
+impl = "AgentWorkbench.Runtime.Harness/LoopAssembly"
+evidence = [
+  "AgentWorkbench.CoreTests.Runtime.循环驱动装配.装配决定由Harness一处产出_预算来自Loop",
+  "AgentWorkbench.CoreTests.Runtime.循环驱动装配.Harness的两处装配都走LoopAssembly_不再散着填框架选项",
+]
+tests = [
+  "tests/AgentWorkbench.CoreTests/Runtime/循环驱动装配.cs::装配决定由Harness一处产出_预算来自Loop",
+  "tests/AgentWorkbench.CoreTests/Runtime/循环驱动装配.cs::Harness的两处装配都走LoopAssembly_不再散着填框架选项",
+]
+# 四个常量的值取 MEA 10.10 的当前默认值，是刻意的：落实 ② 不改变任何现有循环行为，
+# 只把「框架隐式默认」变成「本仓显式决定」。升级 MEA 改了默认值，本仓行为不跟着变。
+# 负控：把 MaxConsecutiveErrorsPerRequest 从 3 改成 5 → 本条与下条一起红（实测）。
+
+[[part.capability]]
+id = "ficc-options-explicit"
+summary = "MaximumIterationsPerRequest / MaximumConsecutiveErrorsPerRequest / AllowConcurrentInvocation / TerminateOnUnknownCalls 四项全部显式赋值，不靠框架默认"
+impl = "AgentWorkbench.Runtime.Tools/ToolExecutionPipeline"
+evidence = [
+  "AgentWorkbench.CoreTests.Runtime.循环驱动装配.四个选项真的落到框架的函数调用环上",
+  "AgentWorkbench.CoreTests.Runtime.循环驱动装配.限额的默认值与LoopAssembly的决定一致_两处不得漂移",
+]
+tests = [
+  "tests/AgentWorkbench.CoreTests/Runtime/循环驱动装配.cs::四个选项真的落到框架的函数调用环上",
+  "tests/AgentWorkbench.CoreTests/Runtime/循环驱动装配.cs::限额的默认值与LoopAssembly的决定一致_两处不得漂移",
+]
+# 真触达：读 FunctionInvokingChatClient 实例的属性，不是扫源码字符串。
+# 期望值硬编码在测试里，刻意不引用 LoopAssembly 常量——否则改常量时两边一起变、断言恒绿。
+
+[[part.capability]]
+id = "loop-behavior-locks"
+summary = "两条出口共用一份装配；回填 / 批次 / 自然收尾 / 流式分片 / 迭代上限 / 取消传导各有回归锁"
+impl = "AgentWorkbench.Runtime.Harness/AgentHarnessService"
+evidence = [
+  "AgentWorkbench.CoreTests.Runtime.循环驱动.两轮不同工具的回填_模型被再问一次且两轮都进轨迹",
+  "AgentWorkbench.CoreTests.Runtime.循环驱动.一轮里两个工具调用_都执行且都留痕",
+  "AgentWorkbench.CoreTests.Runtime.循环驱动.同步与流式两条出口_循环次数与终态一致",
+  "AgentWorkbench.CoreTests.Runtime.循环驱动.MaximumIterations落地_工具执行次数不超过上限",
+]
+tests = [
+  "tests/AgentWorkbench.CoreTests/Runtime/循环驱动.cs::两轮不同工具的回填_模型被再问一次且两轮都进轨迹",
+  "tests/AgentWorkbench.CoreTests/Runtime/循环驱动.cs::一轮里两个工具调用_都执行且都留痕",
+  "tests/AgentWorkbench.CoreTests/Runtime/循环驱动.cs::同步与流式两条出口_循环次数与终态一致",
+  "tests/AgentWorkbench.CoreTests/Runtime/循环驱动.cs::MaximumIterations落地_工具执行次数不超过上限",
+]
+# 这八条锁（本表只登记四条主轴）钉的是「现在的行为」，不是新增机制：循环本体 MEA 给了。
+# 用途是换框架版本或改装配时能发现漂移，别读成「循环驱动全部验完」。
+
+[[part.capability]]
+id = "no-second-function-loop-convention"
+status = "unit-only"
+summary = "UseProvidedChatClientAsIs 是装配约定（不是已证实的硬要求）；F1.7 只扫代码行，删掉代码行必须红"
+impl = "AgentWorkbench.Runtime.Harness/AgentHarnessService"
+evidence = [
+  "AgentWorkbench.ApplicationTests.Runtime.LoopStructureTests.Harness_不得二次包裹函数调用环",
+  "AgentWorkbench.CoreTests.Runtime.循环驱动装配.装配约定的开关仍是代码行_不是只剩注释",
+]
+tests = [
+  "tests/AgentWorkbench.ApplicationTests/Runtime/LoopStructureTests.cs::Harness_不得二次包裹函数调用环",
+  "tests/AgentWorkbench.CoreTests/Runtime/循环驱动装配.cs::装配约定的开关仍是代码行_不是只剩注释",
+]
+# 为什么 unit-only：2026-11-13 实测删掉开关后 ① 六条 / ② 两轮回填 / F1.7 全部仍绿，
+# 「会绕过守卫与轨迹」这个因果没有行为证据。F1.7 原先扫含注释全文导致假绿，
+# 本轮改成只扫代码行并实测「删掉代码行 → 红」。开关的**行为必要性**仍待人工复核
+# （MAF 大版本升级后须在真实 ToolExecutionPipeline 装配下重跑探针）。

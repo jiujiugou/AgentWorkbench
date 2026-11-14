@@ -37,14 +37,15 @@
     <ProjectReference Include="..\AgentWorkbench.TestKit\AgentWorkbench.TestKit.csproj" />
     <ProjectReference Include="..\..\src\Core\Foundation\AgentWorkbench.Shared\AgentWorkbench.Shared.csproj" />
     <ProjectReference Include="..\..\src\Core\Ports\AgentWorkbench.Ports.csproj" />
-    <ProjectReference Include="..\..\src\Core\Foundation\AgentWorkbench.Persistence\AgentWorkbench.Persistence.csproj" />
-    <ProjectReference Include="..\..\src\Core\Memory\AgentWorkbench.Memory.Persistence\AgentWorkbench.Memory.Persistence.csproj" />
+    <ProjectReference Include="..\..\src\Implementations\AgentWorkbench.Persistence\AgentWorkbench.Persistence.csproj" />
+    <ProjectReference Include="..\..\src\Implementations\AgentWorkbench.Memory.Persistence\AgentWorkbench.Memory.Persistence.csproj" />
     <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Loop\AgentWorkbench.Runtime.Loop.csproj" />
     <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Context\AgentWorkbench.Runtime.Context.csproj" />
     <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Model\AgentWorkbench.Runtime.Model.csproj" />
     <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Session\AgentWorkbench.Runtime.Session.csproj" />
     <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Tools\AgentWorkbench.Runtime.Tools.csproj" />
     <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Harness\AgentWorkbench.Runtime.Harness.csproj" />
+    <ProjectReference Include="..\AgentWorkbench.Evaluation\AgentWorkbench.Evaluation.csproj" />
     <ProjectReference Include="..\..\src\Core\Tools\AgentWorkbench.Tools.Abstractions\AgentWorkbench.Tools.Abstractions.csproj" />
   </ItemGroup>
 </Project>

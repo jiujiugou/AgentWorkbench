@@ -15,7 +15,7 @@ public sealed class AgentSessionFactory(AIAgent agent) : ISessionFactory
     /// <remarks>
     /// <c>JsonSerializerOptions</c> 必须为 <see langword="null"/>：MAF 的 source-generated 元数据在内部，
     /// 传自定义实例会让 Serialize / Deserialize 抛 <see cref="NotSupportedException"/>。
-    /// 见 docs/跨模块记录/状态与记忆持久化方案.md §一。
+    /// 口径见 <c>docs/core/状态与记忆.md</c>（红线第 4 条）。
     /// </remarks>
     public ValueTask<JsonElement> SerializeAsync(AgentSession session, CancellationToken cancellationToken)
         => agent.SerializeSessionAsync(session, null, cancellationToken);

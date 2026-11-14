@@ -1,5 +1,5 @@
-using AgentWorkbench.Domain;
 using AgentWorkbench.Knowledge.Abstractions.Embedding;
+using AgentWorkbench.Shared;
 
 namespace AgentWorkbench.Knowledge.Abstractions;
 

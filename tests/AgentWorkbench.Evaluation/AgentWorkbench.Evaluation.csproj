@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- 评测装置（事后）：不进任何运行时链路，只读落库的 ExecutionTrace 做判定。
+       放在 tests/ 下而不是 src/Core：它不属于底座——按「三道门」，一次 run 不需要它，
+       也不是某项能力的契约，是事后验证。这一层不该让部署方背。 -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsTestProject>false</IsTestProject>
+    <Description>评测装置：投影轨迹 + 判据工厂 + MAF 结果聚合</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Agents.AI" Version="1.23.0" />
+  </ItemGroup>
+
+  <!-- 只引底座：Shared（值对象）、Observability（轨迹形状与读口）、Runtime.Harness（一次 run 的产物）。
+       刻意不引 Persistence / Domain / Host / Domains——评测读的是接口，不是某一种存储。 -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Core\Foundation\AgentWorkbench.Shared\AgentWorkbench.Shared.csproj" />
+    <ProjectReference Include="..\..\src\Core\Engineering\AgentWorkbench.Observability\AgentWorkbench.Observability.csproj" />
+    <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Harness\AgentWorkbench.Runtime.Harness.csproj" />
+  </ItemGroup>
+</Project>

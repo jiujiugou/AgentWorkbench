@@ -20,7 +20,6 @@ namespace AgentWorkbench.Webapi.Hubs;
 /// <summary>客户端发起的对话请求。</summary>
 /// <param name="ConversationId">想接着哪个会话；不属于自己时由仓储另建新会话。</param>
 /// <param name="Text">用户输入的自然语言。</param>
-/// <param name="History">历史轮次（保留字段，当前由 ChatHistoryProvider 从会话存储恢复）。</param>
 /// <param name="ClientMessageId">
 /// 本次输入的客户端标识，由前端在点击发送时生成、在一次输入内保持不变。<b>必填</b>：
 /// 它是派生动作请求号的输入之一，缺失时 Hub 直接拒绝、不起 run、不落消息。
@@ -29,10 +28,15 @@ namespace AgentWorkbench.Webapi.Hubs;
 /// <c>action_idempotency</c> 只按 requestId 护住动作，护不住整段 run，缺了这层去重就会
 /// 产生两条 user 消息、两次模型调用、两份轨迹。
 /// </param>
+/// <remarks>
+/// 不含历史：历史由 MAF 的 <c>ChatHistoryProvider</c> 从会话存储恢复（见
+/// <c>IRequestContextComposer.CreateChatHistoryProvider</c>）。原 <c>History</c> 参数
+/// 是「无状态服务端」时期的遗留，后端从未读取、前端恒传空数组，2026-11-14 删除——
+/// 留着会让「历史由前端提供」这个假象重新长出第二份历史源。
+/// </remarks>
 public sealed record ChatRequest(
     string? ConversationId,
     string Text,
-    List<ChatTurn>? History,
     string ClientMessageId);
 
 /// <summary>

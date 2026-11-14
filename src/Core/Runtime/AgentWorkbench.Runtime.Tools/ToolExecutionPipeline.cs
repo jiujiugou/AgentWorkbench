@@ -17,7 +17,13 @@ public sealed record ToolExecutionLimits(
     int MaxIterations,
     IAgentRunGuard? Guard = null,
     IToolApprover? Approver = null,
-    IToolResultVeto? Veto = null);
+    IToolResultVeto? Veto = null,
+    // ② 循环驱动的四项装配决定由 Runtime.Harness/LoopAssembly 显式产生。
+    // 这里的默认值只用于其它调用点（测试 / 独立管道用法）不必重复填；
+    // 生产路径必须经过 LoopAssembly，见 Runtime.Harness/LoopAssembly.cs。
+    int MaxConsecutiveErrorsPerRequest = 3,
+    bool AllowConcurrentInvocation = false,
+    bool TerminateOnUnknownCalls = false);
 
 /// <summary>
 /// 结果否决：工具已经返回之后，问一句「这次结果能不能作为依据」；不能就终止这一轮生成。
@@ -45,13 +51,19 @@ public static class ToolValidationCodes
     public const string ArgumentValidationFailed = "argument_validation_failed";
 }
 
-/// <summary>一次工具调用的轨迹（迭代号 / 工具名 / 参数 / 结果 / 失败原因）。</summary>
+/// <summary>一次工具调用的轨迹（迭代号 / 工具名 / 参数 / 结果 / 失败原因 / 是否被截断）。</summary>
 /// <remarks>
 /// <see cref="Result"/> 与 <see cref="Error"/> 互斥：调用成功时只有 <see cref="Result"/>，
 /// 工具抛异常（含被取消）时 <see cref="Result"/> 为 null、<see cref="Error"/> 记下异常类型与消息。
 /// 没有 <see cref="Error"/> 时，失败的调用在轨迹里与「返回了空」完全无法区分。
 /// </remarks>
-public sealed record ToolCallTrace(int Iteration, string Name, string? Arguments, string? Result, string? Error = null);
+/// <param name="Truncated">
+/// 文本是否被 <c>MaxResultChars</c> 截断过。截断是静默的，没有这个标志，
+/// 回放时「模型只看到前 400 字」与「工具本来就返回这么短」看起来一样。
+/// </param>
+public sealed record ToolCallTrace(
+    int Iteration, string Name, string? Arguments, string? Result, string? Error = null,
+    bool Truncated = false);
 
 /// <summary>
 /// 一次「带工具的执行」：把模型生成的工具调用变成真实调用，并留下轨迹。
@@ -113,9 +125,10 @@ public sealed class ToolExecutionRun
         return _traces.Count - 1;
     }
 
-    internal void CompleteCall(int index, string? result, string? error = null, string? fullResult = null)
+    internal void CompleteCall(
+        int index, string? result, string? error = null, string? fullResult = null, bool truncated = false)
     {
-        var completed = _traces[index] with { Result = result, Error = error };
+        var completed = _traces[index] with { Result = result, Error = error, Truncated = truncated };
         _traces[index] = completed;
         // 事件payload 用完整结果；轨迹本体保持截断语义不变。
         ToolCompleted?.Invoke(completed with { Result = fullResult ?? result });
@@ -155,7 +168,8 @@ public sealed class ToolExecutionPipeline : IToolExecutionPipeline
     public ToolExecutionRun Create(IChatClient innerClient, ToolExecutionLimits limits)
     {
         // 核对层夹在「真实模型」与「函数调用环」之间：模型响应先过它，再交给 MEA 决定调不调。
-        // 只记录、不改语义——「工具找不到」的回填由 MEA 自己做（TerminateOnUnknownCalls 默认 false），
+        // 只记录、不改语义——「工具找不到」的回填由 MEA 自己做
+        // （TerminateOnUnknownCalls 由 LoopAssembly 显式设为 false，不靠框架默认），
         // 这里补的是它做完之后没人留下痕迹的那一笔。
         ToolExecutionRun? run = null;
         var logger = _loggerFactory.CreateLogger<ToolExecutionPipeline>();
@@ -165,9 +179,15 @@ public sealed class ToolExecutionPipeline : IToolExecutionPipeline
             logger.LogWarning("模型请求了不在本次工具清单里的工具：{Tool}", name);
         });
 
+        // 循环本体是 MEA 的 FunctionInvokingChatClient，本仓不自研。
+        // 四个选项全部显式赋值：不靠框架隐式默认——升级 MEA 改了默认值时，
+        // 本仓行为不该跟着变（② 的缺口 B）。值由 Runtime.Harness/LoopAssembly 决定。
         var invoking = new FunctionInvokingChatClient(guard, _loggerFactory, _services)
         {
-            MaximumIterationsPerRequest = limits.MaxIterations
+            MaximumIterationsPerRequest = limits.MaxIterations,
+            MaximumConsecutiveErrorsPerRequest = limits.MaxConsecutiveErrorsPerRequest,
+            AllowConcurrentInvocation = limits.AllowConcurrentInvocation,
+            TerminateOnUnknownCalls = limits.TerminateOnUnknownCalls
         };
 
         run = new ToolExecutionRun(invoking);
@@ -198,7 +218,8 @@ public sealed class ToolExecutionPipeline : IToolExecutionPipeline
             {
                 var payload = ValidationPayload(context.Function.Name, validationError);
                 run.CompleteCall(index, Truncate(payload),
-                    error: ToolValidationCodes.ArgumentValidationFailed, fullResult: payload);
+                    error: ToolValidationCodes.ArgumentValidationFailed, fullResult: payload,
+                    truncated: IsTruncated(payload));
                 return payload;
             }
 
@@ -212,7 +233,8 @@ public sealed class ToolExecutionPipeline : IToolExecutionPipeline
                 // 模型据此换路或收口，而不是反复重试同一个被拒的调用。
                 // 轨迹里 result 是结构化拒绝载荷、error 是归类码，回放时「被拒」与「工具失败」分得开。
                 var payload = DenialPayload(context.Function.Name, denial);
-                run.CompleteCall(index, Truncate(payload), error: denial, fullResult: payload);
+                run.CompleteCall(index, Truncate(payload), error: denial, fullResult: payload,
+                    truncated: IsTruncated(payload));
                 return payload;
             }
 
@@ -220,8 +242,9 @@ public sealed class ToolExecutionPipeline : IToolExecutionPipeline
             {
                 var result = await context.Function.InvokeAsync(context.Arguments, token);
                 var text = result?.ToString();
-                // 轨迹存截断版（省账本），事件带完整版（来源面板要用）。
-                run.CompleteCall(index, Truncate(text), fullResult: text);
+                // 轨迹存截断版（省账本），事件带完整版（来源面板要用）；
+                // 截断标志一起记下——否则回放分不清「只看到前 N 字」与「本来就短」。
+                run.CompleteCall(index, Truncate(text), fullResult: text, truncated: IsTruncated(text));
 
                 // 结果否决：先落轨迹、再判——拒答时那份命中仍然是证据，事后要能查"它看到了什么才拒的"。
                 // 收口方式与守卫完全一致（Terminate 让这一轮不再回问模型），区别只在判定时机。
@@ -241,7 +264,8 @@ public sealed class ToolExecutionPipeline : IToolExecutionPipeline
                 // 只记录、不改语义：异常原样抛回 MEA（由它决定转成给模型的错误结果还是向外传播取消）。
                 // 记录必须在这一层做 —— 异常一旦进了 MEA，就再也回不到这里了。
                 run.MarkToolFailure(ex);
-                run.CompleteCall(index, result: null, error: Truncate($"{ex.GetType().Name}: {ex.Message}"));
+                var error = $"{ex.GetType().Name}: {ex.Message}";
+                run.CompleteCall(index, result: null, error: Truncate(error), truncated: IsTruncated(error));
                 throw;
             }
         };
@@ -416,6 +440,10 @@ public sealed class ToolExecutionPipeline : IToolExecutionPipeline
         JsonElement element => element.Clone(),
         _ => value?.ToString()
     };
+
+    /// <summary>该文本进轨迹前会被截断吗？置位与截断共用同一个上界，避免两处阈值漂移。</summary>
+    private bool IsTruncated(string? value)
+        => value is not null && value.Length > _options.MaxResultChars;
 
     private string? Truncate(string? value)
         => value is null || value.Length <= _options.MaxResultChars

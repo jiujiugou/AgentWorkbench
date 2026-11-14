@@ -48,3 +48,9 @@ tools/mcp-rag/.venv/
 
 # 本地备份文件（迁移脚本留下的临时快照）
 *.bak-*
+
+# MAF 机制层扫描产物：由 scripts/maf_scan.py 从本机 NuGet 缓存机械生成，
+# 可随时重跑覆盖。脚本入库，三份快照不入库（约 2.8 MB，随包版本变动会整份 diff）。
+docs/机制层/MAF机制层扫描.json
+docs/机制层/MAF机制层扫描.md
+docs/机制层/MAF机制层图谱.html
