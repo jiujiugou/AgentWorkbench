@@ -10,6 +10,7 @@ using AgentWorkbench.Persistence.ActionStore;
 using AgentWorkbench.Ports;
 using AgentWorkbench.Tools.Abstractions;
 using AgentWorkbench.Tools.Builtin;
+using AgentWorkbench.Tools.Mcp;
 
 /// <summary>
 /// M1 动作链装配（组合根）。这是全仓唯一同时认识底座端口与动作域的地方（M1 设计 §7）。
@@ -25,6 +26,12 @@ public static class ActionServiceCollectionExtensions
 
     /// <summary>存储开关：Sqlite（默认，重启不丢）/ InMemory（仅本地演练与诊断）。</summary>
     public const string StoreConfigKey = "Actions:Store";
+
+    /// <summary>ERP 执行体的传输方式：Http（默认）或 Mcp。换手不换闸。</summary>
+    public const string ErpTransportConfigKey = "Actions:ErpTransport";
+
+    /// <summary>查 ERP 单据用的工具全名；只在 Mcp 传输下有意义。</summary>
+    public const string ErpMcpToolConfigKey = "Actions:ErpNext:McpTool";
 
     /// <summary>
     /// 三个域名的唯一来源。写成常量而不是散落的字符串，
@@ -65,7 +72,7 @@ public static class ActionServiceCollectionExtensions
             services.AddSingleton<IActionHistoryQuery>(sp => sp.GetRequiredService<InMemoryTraceStore>());
         }
 
-        services.AddSingleton<IActionSet>(_ => ResolveActionSet(configuration));
+        services.AddSingleton<IActionSet>(sp => ResolveActionSet(configuration, sp));
         services.AddSingleton<ActionRunService>();
 
         // 方案第 4 步：一个「填单工具」。能力清单来自注入的 IActionSet.Specs，
@@ -83,7 +90,7 @@ public static class ActionServiceCollectionExtensions
     /// 而翻译工具只按接口读清单 —— 所以这里换成谁，模型看到的能力清单就变成谁的，<c>src/Core</c> 不动。
     /// 未知名字退回 Erp（默认域）而不抛异常：配置写错时宁可跑默认域，也不要宿主起不来。
     /// </summary>
-    private static IActionSet ResolveActionSet(IConfiguration configuration)
+    private static IActionSet ResolveActionSet(IConfiguration configuration, IServiceProvider services)
     {
         var name = configuration[ActionSetConfigKey];
 
@@ -93,20 +100,36 @@ public static class ActionServiceCollectionExtensions
         if (string.Equals(name, GiteaActionSetName, StringComparison.OrdinalIgnoreCase))
             return new GiteaActionSet(ReadGiteaOptions(configuration));
 
-        return ErpActionSetWithRealTransport(configuration);
+        return ErpActionSetWithRealTransport(configuration, services);
     }
 
     /// <summary>
-    /// ERP 域的两条执行路径，判定只看一处：配了 <c>Actions:ErpNext:BaseUrl</c> 就走真执行体，
-    /// 否则退回内存假件。配了一半（缺 key / secret / 时区）**仍然**走真执行体，由
-    /// <see cref="ErpNextQueryAdapter"/> 以 <c>configuration_missing</c> 明确拒绝 —— 不回落假件
-    /// （M2 设计 §3.1 决定 3：最糟的不是「不能写」，而是「以为写了，其实写进了内存假 ERP」）。
+    /// ERP 域的执行路径选择。判据只有一处：<c>Actions:ErpNext:BaseUrl</c> 是否有值。
+    /// <list type="bullet">
+    /// <item>没配 → 内存假件（本地演练）；</item>
+    /// <item>配了 → 真执行体，<b>传输方式</b>由 <c>Actions:ErpTransport</c> 决定：</item>
+    /// </list>
+    /// <c>Http</c>（默认）走本仓的 <see cref="HttpErpTransport"/>；<c>Mcp</c> 走闸后面的
+    /// <see cref="McpActionExecutor"/> → <c>IToolInvoker</c> → 外部 MCP server。
+    /// 两者共用同一套 ActionSpec、同一套四道闸、同一套审计 —— 换的是手，不是判断。
+    /// <para>
+    /// 配了一半（缺 key / secret / 时区）**仍然**走真执行体，由适配器以 <c>configuration_missing</c>
+    /// 明确拒绝 —— 不回落假件（M2 设计 §3.1 决定 3：最糟的不是「不能写」，而是
+    /// 「以为写了，其实写进了内存假 ERP」）。
+    /// </para>
     /// </summary>
-    private static IActionSet ErpActionSetWithRealTransport(IConfiguration configuration)
+    private static IActionSet ErpActionSetWithRealTransport(IConfiguration configuration, IServiceProvider services)
     {
         var options = ReadErpNextOptions(configuration);
         if (options is null)
             return new ErpActionSet();
+
+        if (UseMcpTransport(configuration))
+        {
+            var invoker = services.GetRequiredService<IToolInvoker>();
+            var bindings = ErpMcpBindings.All(configuration[ErpMcpToolConfigKey]);
+            return new ErpActionSet(new McpActionExecutor(invoker, bindings));
+        }
 
         // 超时由 ErpNextOptions.EffectiveTimeout 逐次控制，HttpClient 自己不要再截一刀，
         // 否则「超时归 Unknown」与「调用方取消」会混在一起。
@@ -114,6 +137,10 @@ public static class ActionServiceCollectionExtensions
         var transport = new HttpErpTransport(http, options);
         return new ErpActionSet(new ErpNextQueryAdapter(transport, options));
     }
+
+    /// <summary>ERP 执行体的传输方式：<c>Http</c>（默认）或 <c>Mcp</c>。写错名字按 Http 处理。</summary>
+    private static bool UseMcpTransport(IConfiguration configuration)
+        => string.Equals(configuration[ErpTransportConfigKey], "Mcp", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>ERPNext 连接参数。只读 BaseUrl 判断「要不要真连」，四项齐不齐交给 IsConfigured 判。</summary>
     private static ErpNextOptions? ReadErpNextOptions(IConfiguration configuration)

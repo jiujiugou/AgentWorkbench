@@ -14,5 +14,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AgentWorkbench.Tools.Abstractions\AgentWorkbench.Tools.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Ports\AgentWorkbench.Ports.csproj" />
   </ItemGroup>
 </Project>

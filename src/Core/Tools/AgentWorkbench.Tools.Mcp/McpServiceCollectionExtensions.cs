@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using AgentWorkbench.Ports;
 using AgentWorkbench.Tools.Abstractions;
 
 namespace AgentWorkbench.Tools.Mcp;
@@ -18,6 +19,10 @@ public static class McpServiceCollectionExtensions
         services.AddSingleton<McpToolRegistry>();
         services.AddHostedService<McpConnectionHostedService>();
         services.AddSingleton<IAgentToolProvider, McpToolProvider>();
+
+        // 闸后面的出口：动作域的执行体通过这个端口调用外部工具，不直接碰 MCP 客户端。
+        // 与上面的工具目录是两条路 —— 目录决定「模型能直接看见什么」，这个端口决定「闸能调用什么」。
+        services.AddSingleton<IToolInvoker, McpToolInvoker>();
         return services;
     }
 }

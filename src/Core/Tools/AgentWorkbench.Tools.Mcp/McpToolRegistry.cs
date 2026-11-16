@@ -43,7 +43,7 @@ public sealed record McpToolCapability(
         var idempotent = annotations?.IdempotentHint;
 
         var trusted = server.TrustedReadOnly.Contains(tool.Name, StringComparer.Ordinal);
-        var eligible = destructive != true && (readOnly == true || trusted);
+        var eligible = server.ExposeToModel && destructive != true && (readOnly == true || trusted);
 
         return new McpToolCapability(fullName, server.Name, tool.Name, readOnly, destructive, idempotent, eligible);
     }

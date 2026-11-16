@@ -74,4 +74,15 @@ public sealed class McpServerOptions
     /// 名字必须写全，<b>不支持通配</b>：一条 <c>*</c> 就能让这条配置读完等于没读。
     /// </remarks>
     public List<string> TrustedReadOnly { get; set; } = [];
+
+    /// <summary>
+    /// 这个 server 的工具能否直通模型目录。默认 <c>true</c>（只读的可以直通）。
+    /// </summary>
+    /// <remarks>
+    /// 设为 <c>false</c> 时，它的全部工具一律只能由动作闸背后的执行体调用 ——
+    /// 用于「所有能力都必须过四道闸」的外部系统（ERP / 工单 / 财务这类）。
+    /// 与 <c>ReadOnlyHint</c> 无关：即使工具自称只读，也不给模型直通，
+    /// 因为「谁说它只读」这件事对这类系统不能由 server 单方面决定。
+    /// </remarks>
+    public bool ExposeToModel { get; set; } = true;
 }
