@@ -64,6 +64,15 @@ public sealed class ErpBusinessRule : IBusinessRule
             new EvidenceRef("clause-7", "备件采购审批制度.md", 7, 2),
         ];
 
+        // 金额档位管的是「要花钱的动作」。查单、取消不涉及金额 ——
+        // 早先这里对所有原语一律读 amount，导致只读查询被「金额缺失」拒掉，
+        // 唯一绕法是让调用方多传一个 schema 里根本没有的字段。那是判定与声明脱节的样本。
+        if (!RequiresAmount(request.ActionKey))
+        {
+            return ValueTask.FromResult(new RuleDecision(
+                true, $"动作 {request.ActionKey} 不涉及金额档位", evidence));
+        }
+
         if (!ErpArguments.TryReadAmount(request, out var amount))
             return ValueTask.FromResult(new RuleDecision(false, "金额字段缺失或非法", null));
 
@@ -75,6 +84,11 @@ public sealed class ErpBusinessRule : IBusinessRule
                 : $"金额 {amount} 超 {AmountCeiling} 档位，按第 7 条须升级审批",
             evidence));
     }
+
+    /// <summary>哪些动作受金额档位约束。答案在动作域，不在底座。</summary>
+    private static bool RequiresAmount(string actionKey)
+        => string.Equals(actionKey, ErpActionSpecs.SubmitKey, StringComparison.Ordinal)
+           || string.Equals(actionKey, ErpActionSpecs.DraftKey, StringComparison.Ordinal);
 }
 
 /// <summary>审批闸：审批人 / 层级 / 时长由动作域注入，底座只拿 Approved 与 Approver。</summary>

@@ -78,6 +78,13 @@ public static class ActionServiceCollectionExtensions
         services.AddSingleton<IActionSet>(sp => ResolveActionSet(configuration, sp));
         services.AddSingleton<ActionRunService>();
 
+        // 直连工具的动作闸：模型自己发起的 MCP 工具调用从这里进四道闸。
+        // 只翻译身份，判定全部在 ActionRunService —— 全仓只有一份「谁批准的」答案。
+        services.AddSingleton<IToolCallGateway>(sp => new ActionToolGateway(
+            sp.GetRequiredService<ActionRunService>(),
+            sp.GetRequiredService<IActionSubjectProvider>(),
+            ResolveToolPolicies(configuration)));
+
         // 方案第 4 步：一个「填单工具」。能力清单来自注入的 IActionSet.Specs，
         // 工具本身业务无关，换域时自动换成新域的能力描述。
         services.AddSingleton<IAgentToolProvider, ProposeActionTool>();
@@ -87,6 +94,23 @@ public static class ActionServiceCollectionExtensions
     /// <summary>默认落库；只有显式写 InMemory 才退回内存实现。</summary>
     private static bool UseSqliteStore(IConfiguration configuration)
         => !string.Equals(configuration[StoreConfigKey], "InMemory", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 直连工具的策略表，按当前动作域取。没有策略的域返回空表 ——
+    /// 空表意味着「所有直连工具都认不出来」，也就是一律拒，而不是一律放行。
+    /// </summary>
+    private static IReadOnlyList<ToolCallPolicy> ResolveToolPolicies(IConfiguration configuration)
+    {
+        var name = configuration[ActionSetConfigKey];
+
+        if (string.Equals(name, FakeActionSetName, StringComparison.OrdinalIgnoreCase))
+            return [];
+
+        if (string.Equals(name, GiteaActionSetName, StringComparison.OrdinalIgnoreCase))
+            return [];
+
+        return ErpToolPolicies.All();
+    }
 
     /// <summary>
     /// 换域只有这一处分支。三个域都实现同一个 <see cref="IActionSet"/>，
