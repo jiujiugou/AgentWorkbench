@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using Xunit;
 
-namespace AgentWorkbench.ApplicationTests.Runtime;
+namespace AgentWorkbench.ArchitectureTests;
 
 /// <summary>
 /// F3.7 / F3.8：结构断言。直接 File.ReadAllText 扫描源码，不依赖被扫类型的可访问性。

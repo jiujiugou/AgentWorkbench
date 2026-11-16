@@ -4,7 +4,7 @@ using AgentWorkbench.Shared;
 using Microsoft.Extensions.Options;
 using Xunit;
 
-namespace AgentWorkbench.ApplicationTests.Runtime;
+namespace AgentWorkbench.CoreTests.Runtime.Session;
 
 /// <summary>
 /// 会话互斥（L1，进程内）。

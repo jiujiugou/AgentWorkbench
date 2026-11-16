@@ -11,7 +11,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Xunit;
 
-namespace AgentWorkbench.ApplicationTests.Runtime;
+namespace AgentWorkbench.CoreTests.Runtime.Session;
 
 /// <summary>
 /// F4.1–F4.4：进程内 <see cref="SessionStore"/> 的存取 / TTL / 容量 / 写回。

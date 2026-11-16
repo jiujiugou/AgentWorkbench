@@ -5,7 +5,7 @@ using AgentWorkbench.TestKit;
 using Microsoft.Extensions.AI;
 using Xunit;
 
-namespace AgentWorkbench.ApplicationTests.Host;
+namespace AgentWorkbench.ApplicationTests.Flow;
 
 /// <summary>
 /// S09（结果回传模型）的验收装置。<b>一个方法 = 一个步骤功能</b>：方法名说的是「这一步做什么」，

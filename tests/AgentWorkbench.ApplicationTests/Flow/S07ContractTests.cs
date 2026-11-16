@@ -4,7 +4,7 @@ using AgentWorkbench.ApplicationTests.ActionGateway;
 using AgentWorkbench.Ports;
 using Xunit;
 
-namespace AgentWorkbench.ApplicationTests.Host;
+namespace AgentWorkbench.ApplicationTests.Flow;
 
 /// <summary>
 /// S07（审批：挂起 or 直接放行）的验收装置。<b>一个方法 = 一个步骤功能</b>：
@@ -20,9 +20,11 @@ namespace AgentWorkbench.ApplicationTests.Host;
 /// <c>S05_07</c>（挂起期间零外部调用）。把它们搬来会拆散原组上下文，也不该重复抄一遍。
 /// 本组只补四栏里<b>确实还没有</b>的那几处，编号从 01 起算。
 ///
-/// <b>边界</b>：起于 <c>SubmitDeferredAsync</c> 挂起，止于 Approve / Reject 收口交给 S08。
-/// 四栏覆盖：①该审批的没审批就执行 → 01、08；②审批过了请求已被改动 → 04（只锁现状，见下）；
-/// ③审批卡住不返回 → 02；「交给下一格什么」→ 04、05；「不许留下什么」→ 02、03、06、07。
+/// <b>边界</b>：起于「这次动作需要人批」这一判断，止于「审批有了结论并交给 S08」。
+/// <b>两种形态都在这一个格里</b>：01–08 是挂起式（<c>SubmitDeferredAsync</c>，等人来 approve），
+/// 09–10 是当场问式（<c>RunAsync</c>，模型直连工具时用，问不到人即拒）。
+/// 四栏覆盖：①该审批的没审批就执行 → 01、08、09；②审批过了请求已被改动 → 04（只锁现状，见下）；
+/// ③审批卡住不返回 → 02；「交给下一格什么」→ 04、05、10；「不许留下什么」→ 02、03、06、07、09。
 /// <b>不归本格</b>：执行本身（S08）。
 ///
 /// <b>登记在案的空白（不写占位测试、不写恒真的绿）</b>：
@@ -35,6 +37,11 @@ namespace AgentWorkbench.ApplicationTests.Host;
 /// <item><c>PendingRequestCodec.TryDecode</c> 只在外层反序列化处 catch 了 <c>JsonException</c>；
 /// 「外层 JSON 合法但 ArgumentsJson 非法」会在 try 之外的 <c>JsonDocument.Parse</c> 抛出未被捕获的异常。
 /// 07 只覆盖外层损坏的三种形状，这处边界如实挂着，未在本格解决。</item>
+/// <item><b>同步审批被拒后没有收口待办</b>：<c>RunAsync</c> 的拒绝分支
+/// 只写轨迹就返回，没有调 <c>ResumeAsync</c>，所以那条 checkpoint 会一直留在
+/// <c>PendingApproval</c> 队列里（挂起式那条路 03 已经证明是清掉的）。
+/// 09 只断言「零外部调用 + 明确终态」，<b>不锁这个现状、也不在本格修</b> —— 修它要动
+/// <c>RunAsync</c>，属生产代码改动，登记待处理。</item>
 /// </list>
 ///
 /// <b>层 × 方向</b>：01–08 全在 Core（<c>ActionRunService</c> / <c>PendingRequestCodec</c>），
@@ -207,6 +214,46 @@ public sealed class S07ContractTests
         Assert.Equal(ActionStatuses.Pending, result.Status);
         Assert.Equal(0, set.ExecutorStub.CallCount);
         Assert.Single(await store.ListCheckpointsAsync(ActionRunStates.PendingApproval, CancellationToken.None));
+    }
+
+    // [S07-09] 当场问式审批（<c>RunAsync</c>，模型直连工具走这条）：问不到人 / 被拒时，
+    // 必须是明确终态、执行体零调用、审批门确实被问过一次。
+    // 负控：RunAsync 不看 decision.Approved 直接执行 → 本条红。
+    // 边界：不断言「待办队列被清空」—— 当前拒绝分支没收口，见头部登记 4。
+    [Fact]
+    public async Task S07_09_当场问式审批被拒时明确终态且零外部调用()
+    {
+        var (service, set, trace, _) = Create();
+        set.Approval.Approved = false;
+
+        var result = await service.RunAsync(TestRequests.Create("s07-09"), CancellationToken.None);
+
+        Assert.Equal(ActionStatuses.Rejected, result.Status);
+        Assert.Equal(ActionRejectionCodes.ApprovalDenied, result.Code);
+        Assert.Equal(1, set.Approval.CallCount);
+        Assert.Equal(0, set.ExecutorStub.CallCount);
+
+        var deny = Assert.Single(trace.Events.Where(e => e.Stage == ApprovalStage && e.Outcome == "deny"));
+        Assert.Null(deny.ExternalId);   // 没执行就拿不到外部单号，拒绝不得带
+    }
+
+    // [S07-10] 当场问式审批同意时才执行，且审批人从审批结论来、进轨迹。
+    // 负控：把 approver 写死成 subject（或 null）→ 本条红；执行完不 Resume → 待办断言红。
+    [Fact]
+    public async Task S07_10_当场问式审批同意后才执行且审批人进轨迹()
+    {
+        var (service, set, trace, store) = Create();
+
+        var result = await service.RunAsync(TestRequests.Create("s07-10"), CancellationToken.None);
+
+        Assert.Equal(ActionStatuses.Succeeded, result.Status);
+        Assert.Equal(1, set.ExecutorStub.CallCount);
+
+        var allow = Assert.Single(trace.Events.Where(e => e.Stage == ApprovalStage && e.Outcome == "allow"));
+        Assert.Equal("审批人·测试", allow.Approver);
+
+        // 同意这条路确实收口了待办（拒绝那条没有，见头部登记 4）。
+        Assert.Empty(await store.ListCheckpointsAsync(ActionRunStates.PendingApproval, CancellationToken.None));
     }
 
     // ── 装配 ────────────────────────────────────────────────────────

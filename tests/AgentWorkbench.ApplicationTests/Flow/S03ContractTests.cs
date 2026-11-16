@@ -7,7 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
-namespace AgentWorkbench.ApplicationTests.Runtime;
+namespace AgentWorkbench.ApplicationTests.Flow;
 
 /// <summary>
 /// S03（Harness 组上下文）的验收装置。<b>一个方法 = 一个步骤功能</b>：方法名说的是「这一步做什么」，

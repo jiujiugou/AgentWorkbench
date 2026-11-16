@@ -3,7 +3,7 @@ using AgentWorkbench.ApplicationTests.ActionGateway;
 using AgentWorkbench.Ports;
 using Xunit;
 
-namespace AgentWorkbench.ApplicationTests.Host;
+namespace AgentWorkbench.ApplicationTests.Flow;
 
 /// <summary>
 /// S08（执行：幂等 → 连接器 → 外部）的验收装置。<b>一个方法 = 一个步骤功能</b>：

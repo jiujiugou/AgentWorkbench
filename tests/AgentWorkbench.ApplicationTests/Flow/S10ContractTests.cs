@@ -13,7 +13,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Xunit;
 
-namespace AgentWorkbench.ApplicationTests.Host;
+namespace AgentWorkbench.ApplicationTests.Flow;
 
 /// <summary>
 /// S10（流式输出 + 落库）的验收装置。<b>一个方法 = 一个步骤功能</b>：方法名说的是「这一步做什么」，
