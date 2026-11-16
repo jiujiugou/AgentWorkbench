@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using AgentWorkbench.Evaluation;
+using AgentWorkbench.Evaluation.Kernel;
 using AgentWorkbench.Observability;
 using AgentWorkbench.Runtime.Context;
 using AgentWorkbench.Runtime.Harness;

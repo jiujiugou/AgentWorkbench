@@ -1,4 +1,4 @@
-namespace AgentWorkbench.Evaluation;
+namespace AgentWorkbench.Evaluation.Kernel;
 
 /// <summary>
 /// 把一次 run 的步骤序列投影成 MAF 能读的对话消息。

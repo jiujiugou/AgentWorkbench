@@ -1,4 +1,4 @@
-namespace AgentWorkbench.Evaluation;
+namespace AgentWorkbench.Evaluation.Kernel;
 
 /// <summary>
 /// 本仓的内核判据：每一条都吃**按 RunId 读回来的** <see cref="ExecutionTrace"/>，
@@ -27,6 +27,13 @@ public static class KernelChecks
     private const string NameTruncated = "工具结果截断标志";
     private const string NameToolSteps = "工具步数";
     private const string NameIterations = "迭代数";
+    private const string NameSession = "会话归属";
+    private const string NameModel = "模型";
+    private const string NameElapsed = "耗时";
+    private const string NameError = "错误人话";
+    private const string NameToolStep = "工具步";
+    private const string NamePayload = "工具载荷";
+    private const string NameKinds = "步骤序列";
 
     /// <summary>终态 + 归类码：调用方据此决定重试、降级还是提示用户。</summary>
     public static EvalCheck Outcome(ExecutionTrace? trace, string expectedStatus, string? expectedCode = null)
@@ -121,6 +128,118 @@ public static class KernelChecks
             t.Iterations == expected
                 ? (true, $"迭代 {t.Iterations}")
                 : (false, $"期望迭代 {expected}，实际 {t.Iterations}"));
+
+    /// <summary>会话归属：重建一次 run 时，它是把轨迹、对话、动作三者关联起来的键。</summary>
+    /// <remarks>
+    /// 这一条看起来最像「顺便验一下」，实际是最容易串的地方：会话 id 在 Hub 里来自仓储，
+    /// 在 Harness 里同时充当 <c>sessionId</c>。任何一处取错（比如用了请求体传来的那个），
+    /// 轨迹仍会写成功、字段也都在，只是记到了别人的会话上。
+    /// </remarks>
+    public static EvalCheck SessionOwnership(ExecutionTrace? trace, string expected)
+        => _ => Check(trace, NameSession, t =>
+            string.Equals(t.SessionId, expected, StringComparison.Ordinal)
+                ? (true, $"会话 {t.SessionId}")
+                : (false, $"期望会话 {expected}，实际 {t.SessionId}"));
+
+    /// <summary>用的哪个模型；<c>null</c> 表示本次没用模型（准备阶段就失败），与「用了一个空名」是两回事。</summary>
+    public static EvalCheck ModelUsed(ExecutionTrace? trace, string? expected)
+        => _ => Check(trace, NameModel, t =>
+            string.Equals(t.Model, expected, StringComparison.Ordinal)
+                ? (true, $"模型 {t.Model ?? "未使用"}")
+                : (false, $"期望模型 {expected ?? "未使用"}，实际 {t.Model ?? "未使用"}"));
+
+    /// <summary>耗时落在区间内。</summary>
+    /// <remarks>
+    /// 刻意不给「等于多少毫秒」：同一场景两次跑的耗时必然不同，精确断言只会被放宽成
+    /// <c>&gt;= 0</c>，那就等于恒真。区间至少能抓到「瞬间返回却报成功」这类明显的假执行。
+    /// </remarks>
+    public static EvalCheck ElapsedWithin(ExecutionTrace? trace, long minMs, long maxMs = long.MaxValue)
+        => _ => Check(trace, NameElapsed, t =>
+        {
+            var upper = maxMs == long.MaxValue ? "∞" : $"{maxMs}ms";
+            var passed = t.LatencyMs >= minMs && t.LatencyMs <= maxMs;
+            return passed
+                ? (true, $"耗时 {t.LatencyMs}ms 落在 [{minMs}ms,{upper}]")
+                : (false, $"期望耗时在 [{minMs}ms,{upper}]，实际 {t.LatencyMs}ms");
+        });
+
+    /// <summary>人话错误串与终态一致：失败必须有人说的话，成功必须为空。</summary>
+    /// <remarks>
+    /// 与 <see cref="Outcome"/> 分开的理由：有归类码不等于有人话。只判码会让「失败但用户看到空白」
+    /// 通过评测——而那正是「出错时用户看不出是出错」这个老问题的形态。
+    /// </remarks>
+    public static EvalCheck ErrorNarrative(ExecutionTrace? trace, bool expectPresent)
+        => _ => Check(trace, NameError, t =>
+        {
+            var present = !string.IsNullOrWhiteSpace(t.Error);
+            return present == expectPresent
+                ? (true, expectPresent ? $"错误人话：{t.Error}" : "没有人话错误串（成功）")
+                : (false, expectPresent ? "期望有一句人话错误，实际为空" : $"期望为空，实际有：{t.Error}");
+        });
+
+    /// <summary>某轮工具步的工具名，以及有没有异常（可断言异常文本片段）。</summary>
+    /// <remarks>「找不到该步」判失败，不跳过——跳过会让「工具根本没跑」看起来像「工具没出错」。</remarks>
+    public static EvalCheck ToolStep(
+        ExecutionTrace? trace, int iteration, string expectedTool, string? expectedErrorContains = null)
+        => _ => Check(trace, NameToolStep, t =>
+        {
+            var step = ToolAt(t, iteration);
+            if (step is null)
+                return (false, $"第 {iteration} 轮没有工具步");
+
+            if (!string.Equals(step.Tool, expectedTool, StringComparison.Ordinal))
+                return (false, $"期望工具 {expectedTool}，实际 {step.Tool}");
+
+            if (expectedErrorContains is null)
+                return step.Error is null
+                    ? (true, $"工具 {step.Tool}，无异常")
+                    : (false, $"期望无异常，实际 {step.Error}");
+
+            return step.Error is not null && step.Error.Contains(expectedErrorContains, StringComparison.Ordinal)
+                ? (true, $"工具 {step.Tool}，异常含 {expectedErrorContains}")
+                : (false, $"期望异常含 {expectedErrorContains}，实际 {step.Error ?? "无异常"}");
+        });
+
+    /// <summary>某轮工具步的参数与结果原文：这是「看到了什么」的输入侧与输出侧。</summary>
+    public static EvalCheck ToolPayload(
+        ExecutionTrace? trace, int iteration, string? argumentsContains = null, string? resultContains = null)
+        => _ => Check(trace, NamePayload, t =>
+        {
+            var step = ToolAt(t, iteration);
+            if (step is null)
+                return (false, $"第 {iteration} 轮没有工具步");
+
+            if (argumentsContains is not null
+                && (step.Arguments is null || !step.Arguments.Contains(argumentsContains, StringComparison.Ordinal)))
+                return (false, $"期望参数含 {argumentsContains}，实际 {step.Arguments ?? "无参数"}");
+
+            if (resultContains is not null
+                && (step.Result is null || !step.Result.Contains(resultContains, StringComparison.Ordinal)))
+                return (false, $"期望结果含 {resultContains}，实际 {step.Result ?? "无结果"}");
+
+            return (true, "参数与结果均符合");
+        });
+
+    /// <summary>步骤序列的类型顺序：几轮、每轮是工具还是答复。</summary>
+    /// <remarks>
+    /// 只比顺序与数量，不比内容——内容归 <see cref="ToolPayload"/>。
+    /// 这条在「模型有两条动作入口」之后才有味道：同一次任务走 propose_action 和走直连工具，
+    /// 步骤序列的形状不一样，而这个差别正是要能看出来的东西。
+    /// </remarks>
+    public static EvalCheck StepKinds(ExecutionTrace? trace, params string[] expected)
+        => _ => Check(trace, NameKinds, t =>
+        {
+            var actual = t.Steps.Select(s => s.Kind).ToArray();
+            var passed = actual.Length == expected.Length
+                         && actual.Zip(expected).All(p => string.Equals(p.First, p.Second, StringComparison.Ordinal));
+            return passed
+                ? (true, $"步骤 {string.Join("→", actual)}")
+                : (false, $"期望 {string.Join("→", expected)}，实际 {string.Join("→", actual)}");
+        });
+
+    private static ExecutionStep? ToolAt(ExecutionTrace trace, int iteration)
+        => trace.Steps.FirstOrDefault(s =>
+            s.Iteration == iteration && string.Equals(s.Kind, "tool", StringComparison.Ordinal));
 
     private static string Fmt(long? value) => value?.ToString() ?? "未上报";
 

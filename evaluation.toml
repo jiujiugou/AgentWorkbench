@@ -1,0 +1,201 @@
+# evaluation.toml — 两个评测量：评什么、吃哪个字段、由谁判、哪条测试守着
+#
+# 【为什么是 toml 而不是文档】评测的清单天然会长，写在 md 里必然漂移——
+#   上一次漂移的代价是「文档说 7 条、代码是 13 条」，读文档的人据此判断覆盖面，
+#   结论直接错。本表离代码近、字段短、能被机器核对，所以清单放这里。
+#   解释性的长句（为什么评这个、评不到什么）仍在 docs/评测对象与判据.md，但**它不登记清单**，
+#   想知道「现在有哪些判据」只看本文件。
+#
+# 【事实源】代码 + 测试输出。本表是声明；与代码冲突时以代码为准，且核查应当报红。
+#
+# 【断言】由 tests/AgentWorkbench.CoreTests/Evaluation/评测登记表.cs 读本文件的**文本**核对，
+#   不引入 toml 解析器（那是为一个 200 行文件引一个依赖）：
+#   ① 每条 status = "wired" 的 check.api，必须在 KernelChecks 的公开静态方法里真实存在；
+#   ② 每条 evidence 里的测试方法，必须在测试程序集里真实存在；
+#   ③ KernelChecks 的每个公开静态判据方法，必须在本表里有一条 check —— 双向，缺一边就红；
+#   ④ 每条 covers 里点名的字段，必须是 subject 类型上真实存在的属性（含 Steps.* 这类成员路径）。
+#   这条断言本身就是「清单不会漂移」的唯一保证；没有它，本文件和 md 没有区别。
+#
+# 【两个量为什么分开】见 docs/评测对象与判据.md 第三节末。一句话：失败归因。
+#   内核红去看 Harness / Loop / 轨迹落库；目标红去看动作闸 / 权限 / 业务规则 / 执行体。
+#   混在一个分数里，红了你不知道该改哪儿，评测就失去「比较改前改后」这个唯一用处。
+
+[meta]
+version = 1
+# 两个量的输入不重叠：一个吃 ExecutionTrace，一个吃 TraceEvent 序列 + ActionResult。
+# 判据类型也刻意不共享——字段没有交集，互相 import 就是错的。
+
+# ────────────────────────────── 内核自洽 ──────────────────────────────
+[measure.kernel]
+label = "内核自洽"
+question = "这一次 run 的记录，能不能把过程独立重建出来"
+subject = "ExecutionTrace"
+namespace = "AgentWorkbench.Evaluation.Kernel"
+folder = "tests/AgentWorkbench.Evaluation/Kernel"
+status = "wired"
+external = false
+# 聚合：N 次采样 → 分布 / 均值 / 比率。它不是判据（没有 covers / evidence 的语义），
+# 所以不进下面的 check 列表；但也要被登记，否则「有没有聚合层」只能靠翻代码。
+# 对应「多少 / 多贵 / 多慢 / 稳不稳」四类问题——前三条单次就能答，第四条必须多次采样。
+aggregate = "KernelReport"
+sample = "KernelSample"
+
+[[measure.kernel.check]]
+id = "outcome"
+summary = "终态与归类码：调用方据此决定重试 / 降级 / 提示，不靠解析中文"
+api = "Outcome"
+covers = ["Status", "ErrorCode"]
+evidence = ["终态判据_状态改坏就红"]
+
+[[measure.kernel.check]]
+id = "stop-detail"
+summary = "停因四件套：Kind / 观测值 / 阈值 / 主体，观测值与阈值必须分别比对"
+api = "StopDetail"
+covers = ["Stop"]
+evidence = ["停因判据_观测值与阈值分别比对_写死配置值也红"]
+
+[[measure.kernel.check]]
+id = "usage-per-run"
+summary = "本次 run 的用量；null（没上报）与 0（报了零）是两回事，进程累计值不得冒充"
+api = "UsagePerRun"
+covers = ["InputTokens", "OutputTokens"]
+evidence = ["用量判据_进程累计冒充本次值会红"]
+
+[[measure.kernel.check]]
+id = "completeness"
+summary = "中断（超时 / 取消）的记录必须自报不完整"
+api = "Completeness"
+covers = ["Complete"]
+evidence = ["完整性判据_中断态报成完整会红"]
+
+[[measure.kernel.check]]
+id = "truncation-flag"
+summary = "某轮工具结果被截断时必须看得出来；找不到该步判失败，不静默通过"
+api = "TruncationFlag"
+covers = ["Steps.Truncated"]
+evidence = ["截断标志判据_没有该步不静默通过"]
+
+[[measure.kernel.check]]
+id = "tool-step-count"
+summary = "工具步总数：一次 run 究竟调了几次外部能力"
+api = "ToolStepCount"
+covers = ["Steps"]
+evidence = ["真Harness跑一轮_落库读回_评测闭环全通过"]
+
+[[measure.kernel.check]]
+id = "iterations"
+summary = "迭代数（模型被问了几轮）：换模型 / 换预算后的可比较基线"
+api = "Iterations"
+covers = ["Iterations"]
+evidence = ["真Harness诱导重复调用_停因从落库轨迹被评到"]
+
+[[measure.kernel.check]]
+id = "session-ownership"
+summary = "会话归属：重建一次 run 时，它是把轨迹、对话、动作三者关联起来的键"
+api = "SessionOwnership"
+covers = ["SessionId"]
+evidence = ["会话归属判据_串号会红"]
+
+[[measure.kernel.check]]
+id = "model-used"
+summary = "用的哪个模型；null（本次没用模型）与空名是两回事，换模型前后要能分辨"
+api = "ModelUsed"
+covers = ["Model"]
+evidence = ["模型判据_换名会红"]
+
+[[measure.kernel.check]]
+id = "elapsed-within"
+summary = "耗时落在区间内。不给精确值：同一场景两次跑必然不同，精确断言只会被放宽到恒真"
+api = "ElapsedWithin"
+covers = ["LatencyMs"]
+evidence = ["耗时判据_区间外会红"]
+
+[[measure.kernel.check]]
+id = "error-narrative"
+summary = "人话错误串与终态一致：失败必须有人说的话，成功必须为空"
+api = "ErrorNarrative"
+covers = ["Error"]
+evidence = ["错误人话判据_成功却带错会红"]
+
+[[measure.kernel.check]]
+id = "tool-step"
+summary = "某轮工具步的工具名与异常：工具失败时要能读出是哪一件、抛了什么"
+api = "ToolStep"
+covers = ["Steps.Tool", "Steps.Error"]
+evidence = ["工具步判据_换工具名与缺步都会红"]
+
+[[measure.kernel.check]]
+id = "tool-payload"
+summary = "某轮工具步的参数与结果：这是「看到了什么」的输入侧与输出侧原文"
+api = "ToolPayload"
+covers = ["Steps.Arguments", "Steps.Result"]
+evidence = ["工具载荷判据_参数或结果被改写会红"]
+
+[[measure.kernel.check]]
+id = "step-kinds"
+summary = "步骤序列的类型顺序：几轮、每轮是工具还是答复，一次读完"
+api = "StepKinds"
+covers = ["Steps.Kind"]
+evidence = ["步骤序列判据_顺序与数量不符都会红"]
+
+# ────────────────────────────── 目标达成 ──────────────────────────────
+# 未建。这里先登记「要评什么」，因为它决定 A 层的字段需求——
+# 其中 external-state-recorded 现在写不了（TraceEvent 只存单号，不存「变成什么」），
+# 先补审计字段才能评。别把 status = "planned" 读成「已经能评」。
+[measure.goal]
+label = "目标达成"
+question = "这一层能不能让 AI 安全地碰真系统"
+subject = "TraceEvent 序列 + ActionResult"
+namespace = "AgentWorkbench.Evaluation.Goal"
+folder = "tests/AgentWorkbench.Evaluation/Goal"
+status = "planned"
+external = true
+
+[[measure.goal.check]]
+id = "approval-suspended"
+summary = "有 approval/pending，且其后没有 execute 阶段（六句第 2 句前半）"
+api = ""
+covers = ["Stage", "Outcome"]
+evidence = []
+
+[[measure.goal.check]]
+id = "zero-external-call"
+summary = "审计里没有任何 execute/executed 或 execute/written（六句第 2 句后半）"
+api = ""
+covers = ["Stage", "Outcome"]
+evidence = []
+
+[[measure.goal.check]]
+id = "single-execution"
+summary = "同一 requestId 只有一条 execute/executed（六句第 3 句）"
+api = ""
+covers = ["RequestId", "Stage"]
+evidence = []
+
+[[measure.goal.check]]
+id = "replay-not-reexecuted"
+summary = "第二次同号带 replay 标记，execute 计数不增（六句第 3 句后半）"
+api = ""
+covers = ["RequestId", "Outcome"]
+evidence = []
+
+[[measure.goal.check]]
+id = "audit-five-fields"
+summary = "五字段齐全：需审批时 Approver 非空，有副作用时 ExternalId 非空（六句第 5 句）"
+api = ""
+covers = ["Intent", "Arguments", "Approver", "Result", "ExternalId"]
+evidence = []
+
+[[measure.goal.check]]
+id = "external-state-recorded"
+summary = "execute 阶段带了对方状态快照（方向判据②第五问）——阻塞：TraceEvent 无此字段"
+api = ""
+covers = []
+evidence = []
+
+[[measure.goal.check]]
+id = "unknown-not-replayed"
+summary = "终态 Unknown 之后只有查询类审计，没有第二次写（六句第 4 句）"
+api = ""
+covers = ["Stage", "Outcome"]
+evidence = []

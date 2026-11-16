@@ -1,7 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- 评测装置（事后）：不进任何运行时链路，只读落库的 ExecutionTrace 做判定。
+  <!-- 评测装置（事后）：不进任何运行时链路，只读落库的记录做判定。
        放在 tests/ 下而不是 src/Core：它不属于底座——按「三道门」，一次 run 不需要它，
-       也不是某项能力的契约，是事后验证。这一层不该让部署方背。 -->
+       也不是某项能力的契约，是事后验证。这一层不该让部署方背。
+
+       两个子目录，两个评测量，判据类型不共享（字段没有交集）：
+         Kernel/  内核自洽：吃 ExecutionTrace，问「这次 run 的记录能不能把过程重建出来」
+         Goal/    目标达成：吃 TraceEvent 序列 + ActionResult，问「这一层能不能安全地碰真系统」
+                  （尚未落地；它的第一条判据 blocked 在 TraceEvent 缺「变成什么」字段上）
+
+       清单以仓库根的 evaluation.toml 为准，由 CoreTests/Evaluation/评测登记表.cs 双向核对。
+       本文档不登记清单——上次写在这里就已经漂了。 -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

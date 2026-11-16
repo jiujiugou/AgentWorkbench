@@ -1,4 +1,4 @@
-namespace AgentWorkbench.Evaluation;
+namespace AgentWorkbench.Evaluation.Kernel;
 
 /// <summary>
 /// 评测入口：把一次 run 的结果投影进 MAF，交给 <see cref="LocalEvaluator"/> 跑判定并聚合。
