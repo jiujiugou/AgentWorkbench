@@ -1,1 +1,8 @@
-mcp>=2.0,<3
+# 钉 1.x，不是 <2.3。
+# 2026-11-16 实测更正：mcp 2.2.0 同样对外声明 2026-07-28 协议，C# 侧
+# ModelContextProtocol 2.4.0 客户端只协商到 2025-11-25，initialize 握手被拒
+# （UnsupportedProtocolVersionException，日志：connection is serving the 2026-07-28
+# protocol）。之前“2.2.0 握手正常”的判断是错的——那时握手成功的是 1.x 的 server。
+# 1.30.0（tools/mcp-erpnext 环境）对外 LATEST_PROTOCOL_VERSION = 2025-11-25，可用；
+# 因此本 server 也改用 1.x 的 FastMCP API（server.py 里 from mcp.server.fastmcp import FastMCP）。
+mcp>=1.30,<2

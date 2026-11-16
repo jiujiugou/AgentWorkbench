@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any
 
 import anyio
-from mcp.server.mcpserver import MCPServer
+from mcp.server.fastmcp import FastMCP
 
 # tools/mcp-rag/server.py → 仓库根
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -41,9 +41,9 @@ _DEFAULT_DB = _REPO_ROOT / "src" / "Host" / "AgentWorkbench.Webapi" / "data" / "
 _SEGMENT = re.compile(r"[A-Za-z0-9_#](?:[A-Za-z0-9_#.\-/]*[A-Za-z0-9_#])?|[\u4e00-\u9fff]+")
 _MAX_QUERY_TOKENS = 24
 
-server = MCPServer(
+server = FastMCP(
     "agentworkbench-rag",
-    description="本地企业资料检索（只读）。返回带出处的片段，不做答案生成与引用判定。",
+    instructions="本地企业资料检索（只读）。返回带出处的片段，不做答案生成与引用判定。",
 )
 
 
