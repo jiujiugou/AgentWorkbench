@@ -52,8 +52,26 @@ public sealed class McpServerOptions
     public Dictionary<string, string> Headers { get; set; } = [];
 
     /// <summary>
-    /// 只暴露这些工具（用 server 的原名，不含前缀）。留空 = 该 server 的所有工具都暴露，
-    /// 但**仍然要过 <c>Harness:Tools:Whitelist</c>**：两道关，缺一不可。
+    /// 放行这些工具（用 server 的原名，不含前缀）。<b>留空 = 一个都不放行。</b>
     /// </summary>
+    /// <remarks>
+    /// 默认是空集，不是「全部」。「这个 server 装了哪些工具」是别人决定的，
+    /// 不写清楚就等于把别人的能力清单当成我们的授权清单 —— 而没被点名的工具，
+    /// 在日志和排障里都不会留下任何痕迹。
+    /// <para>
+    /// 放行之后仍要过两道：本 server 的能力准入（见 <see cref="McpToolCapability"/>）
+    /// 与 <c>Harness:Tools:Whitelist</c>。三道关缺一不可。
+    /// </para>
+    /// </remarks>
     public List<string> AllowTools { get; set; } = [];
+
+    /// <summary>
+    /// 显式信任为「只读」的工具名（server 原名，不含前缀）。
+    /// </summary>
+    /// <remarks>
+    /// 只在 server 自己<b>没有</b>声明 <c>ReadOnlyHint</c> 时才需要它。
+    /// 我们不猜工具语义，但可以为自己写的、或已经审过的 server 逐个点名。
+    /// 名字必须写全，<b>不支持通配</b>：一条 <c>*</c> 就能让这条配置读完等于没读。
+    /// </remarks>
+    public List<string> TrustedReadOnly { get; set; } = [];
 }
