@@ -61,20 +61,21 @@ public interface IToolInvoker
 /// 允不允许仍由动作域的权限查询与业务规则回答。
 /// </summary>
 /// <remarks>
-/// 三条默认值都是「最严」：
+/// 默认值全是「最严」：
 /// <list type="bullet">
-/// <item><see cref="ArgumentNames"/> 为空 = 参数名原样透传，不做改名；</item>
+/// <item><see cref="ArgumentNames"/> 为空 = <b>一个参数都不转发</b>（只有声明过的才出门）；</item>
 /// <item><see cref="WritableFieldsArgument"/> 为空 = 该工具没有自由字段参数，字段闸不介入；</item>
-/// <item><see cref="WritableFields"/> 为空 = <b>一个字段都不许写给</b>（仅当声明了字段参数时生效）。</item>
+/// <item><see cref="WritableFields"/> 为空 = <b>一个字段都不许由请求给</b>（仅当声明了字段参数时生效）。</item>
 /// </list>
 /// </remarks>
 /// <param name="ActionKey">对应哪条 <see cref="ActionSpec"/>；同一 ActionKey 只能有一条绑定。</param>
 /// <param name="ToolName">外部工具全名，如 <c>mcp__erpnext__frappe_get_doc</c>。</param>
-/// <param name="ArgumentNames">业务参数名 → 工具参数名。未列出的按原样透传。</param>
+/// <param name="ArgumentNames">业务参数名 → 工具参数名。<b>未列出的不转发</b>——转发范围就是对外暴露面。</param>
 /// <param name="FixedArguments">每次都带的常量参数（如 <c>doctype</c>）。请求里不能覆盖它。</param>
 /// <param name="BusinessKeyPath">从返回体里取业务键的路径（点号分隔，如 <c>data.name</c>）。取不到就算不合格。</param>
-/// <param name="WritableFieldsArgument">承载「要写哪些字段」的那个对象参数名（如 <c>fields</c>）。</param>
-/// <param name="WritableFields">允许出现在该对象参数里的字段名；空集 = 一个都不许。</param>
+/// <param name="WritableFieldsArgument">承载「要写哪些字段」的那个对象参数名（如 <c>data</c>）。</param>
+/// <param name="WritableFields">允许出现在该对象参数里的字段名；空集 = 一个都不许由请求给。</param>
+/// <param name="FixedFieldsJson">每次都写死进去的字段（JSON 对象文本，如 <c>{"docstatus":1}</c>）。请求不能覆盖它。</param>
 public sealed record McpActionBinding(
     string ActionKey,
     string ToolName,
@@ -82,7 +83,8 @@ public sealed record McpActionBinding(
     IReadOnlyDictionary<string, string>? FixedArguments = null,
     string? BusinessKeyPath = null,
     string? WritableFieldsArgument = null,
-    IReadOnlyList<string>? WritableFields = null)
+    IReadOnlyList<string>? WritableFields = null,
+    string? FixedFieldsJson = null)
 {
     public static readonly IReadOnlyDictionary<string, string> NoRenames =
         new Dictionary<string, string>(StringComparer.Ordinal);

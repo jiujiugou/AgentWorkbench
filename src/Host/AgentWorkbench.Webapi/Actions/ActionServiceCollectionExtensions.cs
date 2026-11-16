@@ -33,6 +33,9 @@ public static class ActionServiceCollectionExtensions
     /// <summary>查 ERP 单据用的工具全名；只在 Mcp 传输下有意义。</summary>
     public const string ErpMcpToolConfigKey = "Actions:ErpNext:McpTool";
 
+    /// <summary>提交 ERP 单据用的工具全名；只在 Mcp 传输下有意义。</summary>
+    public const string ErpMcpSubmitToolConfigKey = "Actions:ErpNext:McpSubmitTool";
+
     /// <summary>
     /// 三个域名的唯一来源。写成常量而不是散落的字符串，
     /// 是为了让「换域只改配置」这句话可被测试直接引用。
@@ -127,7 +130,9 @@ public static class ActionServiceCollectionExtensions
         if (UseMcpTransport(configuration))
         {
             var invoker = services.GetRequiredService<IToolInvoker>();
-            var bindings = ErpMcpBindings.All(configuration[ErpMcpToolConfigKey]);
+            var bindings = ErpMcpBindings.All(
+                configuration[ErpMcpToolConfigKey],
+                configuration[ErpMcpSubmitToolConfigKey]);
             return new ErpActionSet(new McpActionExecutor(invoker, bindings));
         }
 

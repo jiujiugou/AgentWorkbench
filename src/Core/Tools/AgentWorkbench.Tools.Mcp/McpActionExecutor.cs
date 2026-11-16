@@ -74,14 +74,14 @@ public sealed class McpActionExecutor : IActionExecutor
             return Fail(request.RequestId, McpActionCodes.InvalidArguments,
                 "参数里出现了绑定的常量字段，不允许覆盖");
 
-        var denied = FirstDeniedField(arguments.Value, binding);
-        if (denied is not null)
-            return Reject(request.RequestId, McpActionCodes.FieldDenied, denied);
+        var merged = MergeFields(arguments.Value, binding, out var fieldError);
+        if (fieldError is not null)
+            return Reject(request.RequestId, McpActionCodes.FieldDenied, fieldError);
 
         ToolInvocationResult called;
         try
         {
-            called = await _invoker.InvokeAsync(binding.ToolName, arguments.Value, ct);
+            called = await _invoker.InvokeAsync(binding.ToolName, merged!.Value, ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -140,33 +140,91 @@ public sealed class McpActionExecutor : IActionExecutor
     }
 
     /// <summary>
-    /// 字段闸：写入对象的键必须都在白名单里。返回 null = 放行，否则返回拒绝原因。
+    /// 字段闸：把「绑定写死的字段」与「请求允许给的字段」合成最终写入对象。
     /// </summary>
     /// <remarks>
-    /// 为什么必须有这一道：通用的 <c>update_document(doctype, name, fields)</c> 里，
-    /// <c>fields={"remarks":"x"}</c> 是改备注、<c>fields={"docstatus":1}</c> 是提交。
+    /// 为什么必须有这一道：通用的 <c>update_document(doctype, name, data)</c> 里，
+    /// <c>data={"remarks":"x"}</c> 是改备注、<c>data={"docstatus":1}</c> 是<b>提交</b>。
     /// 不解释字段就分不开这两件事，而「提交」本该走它自己的动作与审批。
+    /// <para>
+    /// 反过来，「提交」这条动作也只能写 <c>docstatus</c> —— 它不能顺手改金额。
+    /// 常量字段先落、请求字段后补，撞上常量一律拒：谁先写在绑定里，谁就是这次动作的全部写入面。
+    /// </para>
     /// </remarks>
-    private static string? FirstDeniedField(JsonElement arguments, McpActionBinding binding)
+    /// <returns>合并后的参数；<paramref name="error"/> 非空表示拒绝，调用方不应执行。</returns>
+    private static JsonElement? MergeFields(JsonElement arguments, McpActionBinding binding, out string? error)
     {
+        error = null;
         if (!binding.GuardsFields)
-            return null;
+            return arguments;
 
         var holder = binding.WritableFieldsArgument!;
-        if (!arguments.TryGetProperty(holder, out var fields))
-            return null;
+        var fields = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
 
-        if (fields.ValueKind != JsonValueKind.Object)
-            return $"参数 {holder} 必须是对象";
-
-        var allow = binding.WritableFields ?? [];
-        foreach (var field in fields.EnumerateObject())
+        if (!string.IsNullOrWhiteSpace(binding.FixedFieldsJson))
         {
-            if (!allow.Contains(field.Name, StringComparer.Ordinal))
-                return $"字段 {field.Name} 不在 {holder} 的白名单里";
+            try
+            {
+                using var fixedDocument = JsonDocument.Parse(binding.FixedFieldsJson);
+                if (fixedDocument.RootElement.ValueKind != JsonValueKind.Object)
+                {
+                    error = "绑定里的常量字段不是 JSON 对象";
+                    return null;
+                }
+
+                foreach (var property in fixedDocument.RootElement.EnumerateObject())
+                    fields[property.Name] = property.Value.Clone();
+            }
+            catch (JsonException)
+            {
+                error = "绑定里的常量字段不是合法 JSON";
+                return null;
+            }
         }
 
-        return null;
+        if (arguments.TryGetProperty(holder, out var provided))
+        {
+            if (provided.ValueKind != JsonValueKind.Object)
+            {
+                error = $"参数 {holder} 必须是对象";
+                return null;
+            }
+
+            var allow = binding.WritableFields ?? [];
+            foreach (var field in provided.EnumerateObject())
+            {
+                if (fields.ContainsKey(field.Name))
+                {
+                    error = $"字段 {field.Name} 由绑定固定，不允许覆盖";
+                    return null;
+                }
+
+                if (!allow.Contains(field.Name, StringComparer.Ordinal))
+                {
+                    error = $"字段 {field.Name} 不在 {holder} 的白名单里";
+                    return null;
+                }
+
+                fields[field.Name] = field.Value.Clone();
+            }
+        }
+
+        if (fields.Count == 0)
+        {
+            error = $"参数 {holder} 没有任何可写字段";
+            return null;
+        }
+
+        var rebuilt = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        foreach (var property in arguments.EnumerateObject())
+        {
+            if (string.Equals(property.Name, holder, StringComparison.Ordinal))
+                continue;
+            rebuilt[property.Name] = property.Value.Clone();
+        }
+
+        rebuilt[holder] = JsonSerializer.SerializeToElement(fields);
+        return JsonSerializer.SerializeToElement(rebuilt);
     }
 
     /// <summary>按点号路径取业务键，如 <c>data.name</c>。取不到返回 null，不猜。</summary>
