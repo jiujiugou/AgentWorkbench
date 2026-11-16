@@ -2,6 +2,7 @@ namespace AgentWorkbench.Webapi.Actions;
 
 using AgentWorkbench.ActionGateway;
 using AgentWorkbench.Erp;
+using AgentWorkbench.Erp.ErpNext;
 using AgentWorkbench.Gitea;
 using AgentWorkbench.LabBooking;
 using AgentWorkbench.Persistence;
@@ -92,8 +93,50 @@ public static class ActionServiceCollectionExtensions
         if (string.Equals(name, GiteaActionSetName, StringComparison.OrdinalIgnoreCase))
             return new GiteaActionSet(ReadGiteaOptions(configuration));
 
-        return new ErpActionSet();
+        return ErpActionSetWithRealTransport(configuration);
     }
+
+    /// <summary>
+    /// ERP 域的两条执行路径，判定只看一处：配了 <c>Actions:ErpNext:BaseUrl</c> 就走真执行体，
+    /// 否则退回内存假件。配了一半（缺 key / secret / 时区）**仍然**走真执行体，由
+    /// <see cref="ErpNextQueryAdapter"/> 以 <c>configuration_missing</c> 明确拒绝 —— 不回落假件
+    /// （M2 设计 §3.1 决定 3：最糟的不是「不能写」，而是「以为写了，其实写进了内存假 ERP」）。
+    /// </summary>
+    private static IActionSet ErpActionSetWithRealTransport(IConfiguration configuration)
+    {
+        var options = ReadErpNextOptions(configuration);
+        if (options is null)
+            return new ErpActionSet();
+
+        // 超时由 ErpNextOptions.EffectiveTimeout 逐次控制，HttpClient 自己不要再截一刀，
+        // 否则「超时归 Unknown」与「调用方取消」会混在一起。
+        var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+        var transport = new HttpErpTransport(http, options);
+        return new ErpActionSet(new ErpNextQueryAdapter(transport, options));
+    }
+
+    /// <summary>ERPNext 连接参数。只读 BaseUrl 判断「要不要真连」，四项齐不齐交给 IsConfigured 判。</summary>
+    private static ErpNextOptions? ReadErpNextOptions(IConfiguration configuration)
+    {
+        var baseUrl = configuration["Actions:ErpNext:BaseUrl"];
+        if (string.IsNullOrWhiteSpace(baseUrl))
+            return null;
+
+        var doctype = configuration["Actions:ErpNext:PurchaseOrderDoctype"];
+        return new ErpNextOptions(
+            BaseUrl: baseUrl.TrimEnd('/'),
+            ApiKey: configuration["Actions:ErpNext:ApiKey"],
+            ApiSecret: configuration["Actions:ErpNext:ApiSecret"],
+            TimeZoneId: configuration["Actions:ErpNext:TimeZoneId"],
+            PurchaseOrderDoctype: string.IsNullOrWhiteSpace(doctype) ? "Purchase Order" : doctype,
+            Timeout: ReadSeconds(configuration["Actions:ErpNext:TimeoutSeconds"]),
+            MaxReadRetries: int.TryParse(configuration["Actions:ErpNext:MaxReadRetries"], out var retries) && retries >= 0
+                ? retries
+                : 2);
+    }
+
+    private static TimeSpan? ReadSeconds(string? raw)
+        => int.TryParse(raw, out var seconds) && seconds > 0 ? TimeSpan.FromSeconds(seconds) : null;
 
     /// <summary>
     /// Gitea 连接参数。缺 BaseUrl / Token 时返回 <see cref="GiteaOptions.Unconfigured"/>：
