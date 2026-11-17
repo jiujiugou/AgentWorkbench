@@ -682,8 +682,12 @@ tests = [
 # 代价与配套：
 #   ① PrepareRunAsync 里原来那段「模型未配置自己落轨迹」必须删掉，否则同一件事两处写（会双条记录）；
 #      归类改由 ClassifyFailure 先认 HarnessModelNotConfiguredException → model_unavailable。
-#   ② 流式的准备阶段搬进生产者（StreamRunAsync），订阅/退订 ToolCompleted 也随之内移。
+#   ② 流式的准备阶段搬进生产者，订阅/退订 ToolCompleted 也随之内移。
 #   ③ 准备阶段失败时 run 为 null，耗时记 0（准备花的时间没有独立意义，不为此把 Stopwatch 塞进异常）。
+# 2026-11-16 收口：两条出口的实现合并为一处（RunCoreAsync + RunBody + IRunSink）。
+#   一次性出口 RunAsync 不再自带 catch/落库（曾与流式那份逐字重复 4 段）；
+#   两条出口现在只差「用哪个执行体跑模型」与「跑完怎么交出去」。
+#   坑：通道必须由生产者关闭——放到消费者侧 finally 会死锁（消费者靠关闭才退出 ReadAllAsync）。
 
 [[part.capability]]
 id = "write-only-port"

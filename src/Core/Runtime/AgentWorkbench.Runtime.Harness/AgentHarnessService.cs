@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Threading.Channels;
 using AgentWorkbench.Runtime.Context;
@@ -38,7 +39,32 @@ public sealed class AgentHarnessService : IAgentHarness
     /// <summary>最终答复写入轨迹时的截断长度：轨迹用于回放/排障，不做全文归档，避免单条记录过大。</summary>
     private const int MaxAssistantChars = 400;
 
-    /// <summary>统一采样温度：越低越确定，便于测试与结果复现。</summary>
+    /// <summary>
+    /// 采样温度：本仓固定值，不对外暴露，也不读 Provider 配置（<c>Provider:Temperature</c> 已删）。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>为什么不删掉、让它走供应商默认</b>：<see cref="ChatOptions.Temperature"/> 为 null 时该字段不进请求，
+    /// 各家的默认值不同 —— OpenAI / DeepSeek 系是 1.0（比 0.7 更飘），推理模型（o1、GLM-Z1 一类）干脆不接受
+    /// 这个参数，直接 400。删掉等于把「话有多飘」交给一个我们看不见、也不记录的值，出错时无从解释。
+    /// </para>
+    /// <para>
+    /// <b>它保的是什么</b>（都不影响运行时，只影响事后）：① <b>排障入口</b> —— 模型答得飘 / 答得死板 /
+    /// 报 unsupported parameter 时，这是唯一能回答「我们请求时带了什么」的源码位置（2026-11-16 实测
+    /// glm-4-flash 把工具调用写成纯文本，第一步就是排掉「温度过高」这个假设）；② <b>责任归属</b> ——
+    /// 把供应商的隐式默认变成本仓的显式决定，取向同 <see cref="LoopAssembly"/>；③ <b>改动落点</b> ——
+    /// 真遇到「某个模型不接受这个字段」，三处引用都在本文件内，加一个判断即可。
+    /// </para>
+    /// <para>
+    /// <b>它不是什么</b>：不保证结果可复现（那要「0 温度 + 固定 seed」两样一起，当前不支持，这里不承诺），
+    /// 也不减少模型犯错（编参数 / 跳闸 / 重放与它无关）。它属于「倾向常量」，没有任何判据守它 ——
+    /// 改成 0.3 一条测试都不会红（tests 里那处 <c>0.7f</c> 断言的是测试自己传的值）。
+    /// </para>
+    /// <para>
+    /// <b>与已删的 <c>Provider:Temperature</c> 的区别</b>：那是第二来源，删掉后行为不变（代码里这个常量仍生效）；
+    /// 这个是唯一来源，删掉后行为立刻改变。判据是「删完还剩几个来源」—— 剩一个就删，变成没人决定就留。
+    /// </para>
+    /// </remarks>
     private const float Temperature = 0.7f;
 
     /// <summary>会话被占用时回给用户的文案。前端据此提示「稍候」，与「服务出错」区分开。</summary>
@@ -106,6 +132,12 @@ public sealed class AgentHarnessService : IAgentHarness
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <b>薄壳</b>：抢会话票 → 交给 <see cref="RunCoreAsync"/> 跑完整条循环 → 把结局交出去。
+    /// 它自己不再有判定、catch、落库——那四段曾经在这里与流式路径各写一遍，改一处忘一处就会分裂。
+    /// 失败时保持原语义<b>抛出原始异常</b>（调用方靠它区分「跑坏了」与「跑出了结果」）；
+    /// 核心不抛，因为它还要服务一个不能抛的出口。
+    /// </remarks>
     public async Task<HarnessRunResult> RunAsync(HarnessRunRequest request, CancellationToken cancellationToken = default)
     {
         var sessionId = ResolveSessionId(request.SessionId);
@@ -119,65 +151,14 @@ public sealed class AgentHarnessService : IAgentHarness
 
         using var memoryScope = _memoryScope.Begin(MemoryScope.Session(sessionId));
 
-        // 准备阶段也在 try 内：装配失败 / 取会话失败同样算「一次 run 失败了」，必须留痕。
-        // 它曾经在 try 之外，于是除了「模型未配置」自己落了轨迹，其余准备期异常直接冒泡、库里什么都没有——
-        // 「无论成败都留一条轨迹」那句话对任何非 Hub 调用方都不成立。
-        PreparedRun? run = null;
-        try
-        {
-            run = await PrepareRunAsync(request, sessionId, cancellationToken);
+        var outcome = await RunCoreAsync(
+            request, sessionId, RunBlockingBodyAsync, NullRunSink.Instance, cancellationToken);
 
-            // 执行控制：run 级超时由 AgentLoop 施加（超时抛 AgentRunTimeoutException）
-            var response = await _loop.ExecuteAsync(
-                async token => await run.Agent.RunAsync(
-                    run.Messages, run.Session,
-                    new ChatClientAgentRunOptions(new ChatOptions { Temperature = Temperature }),
-                    token),
-                cancellationToken);
+        // ExceptionDispatchInfo 而非 throw ex：保留原始堆栈，否则调用方看到的异常位置会指向这里。
+        if (outcome.Error is not null)
+            ExceptionDispatchInfo.Capture(outcome.Error).Throw();
 
-            return await FinishSucceededAsync(
-                run, response.Text ?? string.Empty,
-                response.Usage?.InputTokenCount, response.Usage?.OutputTokenCount, cancellationToken);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            // 调用方取消不是失败：它是「按用户意愿停下」，必须与 failed 分开，否则前端会把它当成故障上报。
-            await PersistQuietlyAsync(
-                sessionId, AgentRunStatus.Cancelled, AgentRunCode.Cancelled, "调用方取消",
-                run?.Endpoint.Model, StopAndRead(run), run?.Execution.Traces ?? [],
-                complete: false);
-            throw;
-        }
-        catch (AgentRunTimeoutException ex)
-        {
-            // run 级墙钟预算（AgentLoop 施加）先于单次请求超时被识别，两者归类码不同。
-            await PersistQuietlyAsync(
-                sessionId, AgentRunStatus.Timeout, AgentRunCode.RunTimeout, ex.Message,
-                run?.Endpoint.Model, StopAndRead(run), run?.Execution.Traces ?? [],
-                complete: false);
-            throw;
-        }
-        catch (TimeoutException ex)
-        {
-            await PersistQuietlyAsync(
-                sessionId, AgentRunStatus.Timeout, AgentRunCode.ModelTimeout, ex.Message,
-                run?.Endpoint.Model, StopAndRead(run), run?.Execution.Traces ?? [],
-                complete: false);
-            throw;
-        }
-        catch (Exception ex)
-        {
-            await PersistQuietlyAsync(
-                sessionId, AgentRunStatus.Failed, ClassifyFailure(ex, run?.Execution), ex.Message,
-                run?.Endpoint.Model, StopAndRead(run), run?.Execution.Traces ?? []);
-            throw;
-        }
-        finally
-        {
-            // 会话写回：成功 / 失败 / 取消 / 超时都要落，否则重启后只有成功那轮记得住。
-            if (run is not null && _memoryOptions.Value.SessionEnabled)
-                await SaveSessionQuietlyAsync(run.SessionId, run.SessionFactory, run.Session);
-        }
+        return outcome.Result!;
     }
 
     /// <inheritdoc />
@@ -210,9 +191,14 @@ public sealed class AgentHarnessService : IAgentHarness
             SingleWriter = false
         });
 
-        // 生产者单独跑：它吞掉全部异常并转成 Failed 事件 + 完成通道，消费者侧永不因生产侧故障而中断读取。
-        // 准备阶段也搬进生产者——与 RunAsync 同一条纪律：装配失败同样要留一条轨迹。
-        var producer = StreamRunAsync(channel.Writer, request, sessionId, cancellationToken);
+        // 生产者单独跑：核心把全部异常转成 Failed 事件（它自己不抛），所以消费者侧不会因生产侧故障中断读取。
+        // 准备阶段也在核心内——与一次性出口同一条纪律：装配失败同样要留一条轨迹。
+        //
+        // 通道必须由生产者关（ProduceAsync 的 finally），不能放到下面的 finally：
+        // 消费者靠「通道被关」才退出 ReadAllAsync，而下面的 finally 要等消费者退出后才执行——
+        // 放到那里就是死锁（2026-11-16 抽核心时踩过：流式测试挂住，150 秒被 timeout 杀掉）。
+        var producer = ProduceAsync(
+            request, sessionId, new ChannelRunSink(channel.Writer), channel.Writer, cancellationToken);
         try
         {
             await foreach (var evt in channel.Reader.ReadAllAsync(cancellationToken))
@@ -226,78 +212,94 @@ public sealed class AgentHarnessService : IAgentHarness
     }
 
     /// <summary>
-    /// 流式 run 的生产者：跑模型循环、把文本增量与工具完成事件写进通道，收尾落轨迹 + 写回会话。
-    /// 结构与 <see cref="RunAsync"/> 一一对应（同一 loop / guard / trace），异常全部转成 <see cref="HarnessStreamEventKind.Failed"/>。
+    /// 流式出口的生产者壳：跑核心，无论成败都在结束时关掉通道。
+    /// 它存在的唯一理由是「谁负责关通道」——核心不认识通道，消费者又要靠关闭才能收口。
     /// </summary>
-    private async Task StreamRunAsync(
-        ChannelWriter<HarnessStreamEvent> writer, HarnessRunRequest request, string sessionId,
+    /// <param name="request">本次 run 的输入（会话 id / 用户原文 / 系统指令），原样转给核心。</param>
+    /// <param name="sessionId">已由 <see cref="ResolveSessionId"/> 归一过的会话号，与调用方抢到的会话闸句柄一致。</param>
+    /// <param name="sink">事件出口：核心把「发生了什么」交给它，这里传的是 <see cref="ChannelRunSink"/>。</param>
+    /// <param name="writer">
+    /// 通道写入端。<b>与 <paramref name="sink"/> 指向同一个通道</b>，但职责不同：
+    /// sink 决定「写什么形状的事件」（动词），writer 决定「何时关通道」（生命周期）。
+    /// 分开传是因为关通道属于生产者的收尾责任，而 <see cref="IRunSink"/> 契约里没有「关闭」这个动词——
+    /// 它只面向「跑完之后怎么交出去」，不该逼每个出口实现都处理通道。
+    /// </param>
+    /// <param name="cancellationToken">调用方取消令牌；取消时核心落 Cancelled 轨迹并写 Failed 事件，这里仍负责关通道。</param>
+    private async Task ProduceAsync(
+        HarnessRunRequest request, string sessionId, IRunSink sink,
+        ChannelWriter<HarnessStreamEvent> writer, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await RunCoreAsync(request, sessionId, RunStreamingBodyAsync, sink, cancellationToken);
+        }
+        finally
+        {
+            writer.TryComplete();
+        }
+    }
+
+    /// <summary>
+    /// 一次 run 的<b>唯一实现</b>：抢到票之后的一切都在这里——准备、跑、收尾、归类、落库、写回会话。
+    /// 两条公开出口只决定两件事：用哪种方式跑模型（<see cref="RunBody"/>）、跑完怎么交出去（<see cref="IRunSink"/>）。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>为什么本方法不抛业务异常</b>：两个出口对「失败」的处理方向相反——一次性出口要把异常抛给调用方
+    /// （调用方靠它区分「跑坏了」与「跑出了结果」），流式出口绝不能抛（抛了会被 Hub 的 catch 当成「服务出错」，
+    /// 与「这条会话正在回答」混在一起）。核心只把异常放进 <see cref="RunOutcome"/>，是否抛出由出口决定。
+    /// </para>
+    /// <para>
+    /// 四个 catch 的<b>顺序不能动</b>：<see cref="AgentRunTimeoutException"/> 继承自 <see cref="TimeoutException"/>，
+    /// 若被基类先接住，归类码会从 <c>run_timeout</c> 退化成 <c>model_timeout</c>——两个含义完全不同的故障被记成一类。
+    /// 第一个 catch 的 <c>when</c> 过滤器同样必要：<c>AgentLoop</c> 已把自己的超时转成前者，走到这里的一定是调用方真的取消。
+    /// </para>
+    /// </remarks>
+    private async Task<RunOutcome> RunCoreAsync(
+        HarnessRunRequest request, string sessionId, RunBody body, IRunSink sink,
         CancellationToken cancellationToken)
     {
-        var answer = new StringBuilder();
         PreparedRun? run = null;
         Action<ToolCallTrace>? onToolCompleted = null;
         try
         {
+            // 准备阶段也在 try 内：装配失败 / 取会话失败同样算「一次 run 失败了」，必须留痕。
+            // 它曾经在 try 之外，于是除了「模型未配置」自己落了轨迹，其余准备期异常直接冒泡、库里什么都没有——
+            // 「无论成败都留一条轨迹」那句话对任何非 Hub 调用方都不成立。
             run = await PrepareRunAsync(request, sessionId, cancellationToken);
 
             // 准备之后才订阅：准备阶段不可能有工具执行，提前订阅只多一条退订路径。
-            onToolCompleted = trace
-                => writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.ToolCompleted, Tool: trace));
+            onToolCompleted = sink.Tool;
             run.Execution.ToolCompleted += onToolCompleted;
 
-            // 流式没有最终 AgentResponse 可读用量，只能从 update 里捞 UsageContent 累加。
-            // 实测（2026-11-13 探针）：UseProvidedChatClientAsIs 下最后一个 update 带 UsageContent[10/5]，
-            // 走的是 MEA 的约定，不是本仓自造。拿不到就保持 null，绝不补 0。
-            long? inputTokens = null;
-            long? outputTokens = null;
-
-            // run 级超时同样施加：把整段流式 drain 包进 AgentLoop 的墙钟预算（超时抛 AgentRunTimeoutException）。
-            // drain 的返回值即累积全文，随后交给 FinishSucceededAsync 落轨迹——两条出口的收尾完全同路。
-            var streamed = await _loop.ExecuteAsync(
-                async token =>
-                {
-                    await foreach (var update in run.Agent.RunStreamingAsync(
-                        run.Messages, run.Session,
-                        new ChatClientAgentRunOptions(new ChatOptions { Temperature = Temperature }),
-                        token))
-                    {
-                        foreach (var content in update.Contents)
-                        {
-                            if (content is not UsageContent usage)
-                                continue;
-                            inputTokens = Accumulate(inputTokens, usage.Details.InputTokenCount);
-                            outputTokens = Accumulate(outputTokens, usage.Details.OutputTokenCount);
-                        }
-
-                        if (string.IsNullOrEmpty(update.Text))
-                            continue;
-                        answer.Append(update.Text);
-                        writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.TextDelta, Text: update.Text));
-                    }
-
-                    return answer.ToString();
-                },
-                cancellationToken);
+            var output = await body(run, sink, cancellationToken);
 
             run.Stopwatch.Stop();
-            var result = await FinishSucceededAsync(run, streamed, inputTokens, outputTokens, cancellationToken);
-            writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.Completed, Result: result));
+            var result = await FinishSucceededAsync(
+                run, output.Text, output.InputTokens, output.OutputTokens, cancellationToken);
+            sink.Completed(result);
+            return new RunOutcome(result, null);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
         {
+            // 调用方取消不是失败：它是「按用户意愿停下」，必须与 failed 分开，否则前端会把它当成故障上报。
+            // 注意两句话面向两类读者：轨迹记「调用方取消」，给用户看的是「已停止生成」。
             await PersistQuietlyAsync(
                 sessionId, AgentRunStatus.Cancelled, AgentRunCode.Cancelled, "调用方取消",
                 run?.Endpoint.Model, StopAndRead(run), run?.Execution.Traces ?? [],
                 complete: false);
-            writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.Failed, Error: "已停止生成。", Status: AgentRunStatus.Cancelled));
+            sink.Failed(AgentRunStatus.Cancelled, null, "已停止生成。");
+            return new RunOutcome(null, ex);
         }
         catch (AgentRunTimeoutException ex)
         {
+            // run 级墙钟预算（AgentLoop 施加）先于单次请求超时被识别，两者归类码不同。
             await PersistQuietlyAsync(
                 sessionId, AgentRunStatus.Timeout, AgentRunCode.RunTimeout, ex.Message,
                 run?.Endpoint.Model, StopAndRead(run), run?.Execution.Traces ?? [],
                 complete: false);
-            writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.Failed, Error: ex.Message, Status: AgentRunStatus.Timeout));
+            sink.Failed(AgentRunStatus.Timeout, null, ex.Message);
+            return new RunOutcome(null, ex);
         }
         catch (TimeoutException ex)
         {
@@ -305,14 +307,16 @@ public sealed class AgentHarnessService : IAgentHarness
                 sessionId, AgentRunStatus.Timeout, AgentRunCode.ModelTimeout, ex.Message,
                 run?.Endpoint.Model, StopAndRead(run), run?.Execution.Traces ?? [],
                 complete: false);
-            writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.Failed, Error: ex.Message, Status: AgentRunStatus.Timeout));
+            sink.Failed(AgentRunStatus.Timeout, null, ex.Message);
+            return new RunOutcome(null, ex);
         }
         catch (Exception ex)
         {
             await PersistQuietlyAsync(
                 sessionId, AgentRunStatus.Failed, ClassifyFailure(ex, run?.Execution), ex.Message,
                 run?.Endpoint.Model, StopAndRead(run), run?.Execution.Traces ?? []);
-            writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.Failed, Error: ex.Message, Status: AgentRunStatus.Failed));
+            sink.Failed(AgentRunStatus.Failed, null, ex.Message);
+            return new RunOutcome(null, ex);
         }
         finally
         {
@@ -320,13 +324,142 @@ public sealed class AgentHarnessService : IAgentHarness
             {
                 if (onToolCompleted is not null)
                     run.Execution.ToolCompleted -= onToolCompleted;
+
+                // 会话写回：成功 / 失败 / 取消 / 超时都要落，否则重启后只有成功那轮记得住。
                 if (_memoryOptions.Value.SessionEnabled)
                     await SaveSessionQuietlyAsync(run.SessionId, run.SessionFactory, run.Session);
             }
-
-            writer.TryComplete();
         }
     }
+
+    /// <summary>一次性返回的执行体：整段交给 MAF 的非流式入口，跑完所有工具轮次才回来。</summary>
+    private async Task<RunOutput> RunBlockingBodyAsync(
+        PreparedRun run, IRunSink sink, CancellationToken cancellationToken)
+    {
+        // 执行控制：run 级超时由 AgentLoop 施加（超时抛 AgentRunTimeoutException）
+        var response = await _loop.ExecuteAsync(
+            token => run.Agent.RunAsync(run.Messages, run.Session, RunOptions(), token),
+            cancellationToken);
+
+        return new RunOutput(
+            response.Text ?? string.Empty,
+            response.Usage?.InputTokenCount,
+            response.Usage?.OutputTokenCount);
+    }
+
+    /// <summary>流式执行体：drain 增量文本，边攒边推，最后交出全文。</summary>
+    private async Task<RunOutput> RunStreamingBodyAsync(
+        PreparedRun run, IRunSink sink, CancellationToken cancellationToken)
+    {
+        var answer = new StringBuilder();
+
+        // 流式没有最终 AgentResponse 可读用量，只能从 update 里捞 UsageContent 累加。
+        // 实测（2026-11-13 探针）：UseProvidedChatClientAsIs 下最后一个 update 带 UsageContent[10/5]，
+        // 走的是 MEA 的约定，不是本仓自造。拿不到就保持 null，绝不补 0。
+        long? inputTokens = null;
+        long? outputTokens = null;
+
+        // run 级超时同样施加：把整段流式 drain 包进 AgentLoop 的墙钟预算（超时抛 AgentRunTimeoutException）。
+        await _loop.ExecuteAsync(
+            async token =>
+            {
+                await foreach (var update in run.Agent.RunStreamingAsync(
+                    run.Messages, run.Session, RunOptions(), token))
+                {
+                    foreach (var content in update.Contents)
+                    {
+                        if (content is not UsageContent usage)
+                            continue;
+                        inputTokens = Accumulate(inputTokens, usage.Details.InputTokenCount);
+                        outputTokens = Accumulate(outputTokens, usage.Details.OutputTokenCount);
+                    }
+
+                    if (string.IsNullOrEmpty(update.Text))
+                        continue;
+                    answer.Append(update.Text);
+                    sink.Delta(update.Text);
+                }
+
+                return true;
+            },
+            cancellationToken);
+
+        return new RunOutput(answer.ToString(), inputTokens, outputTokens);
+    }
+
+    /// <summary>
+    /// run 级覆盖选项。<b>只带温度</b>：指令已在 agent 级设一次，两级都设会被 MAF 换行拼接（实测 "A\nA"），
+    /// 结构门禁 F38 钉住「Instructions 赋值只出现一次」。
+    /// </summary>
+    private static ChatClientAgentRunOptions RunOptions()
+        => new(new ChatOptions { Temperature = Temperature });
+
+    /// <summary>
+    /// 一次 run 的执行体：跑完模型循环，交出全文与用量。<b>两条出口的全部差异收敛在这个委托上</b>——
+    /// 其余（准备、预算、守卫、归类、落库、写回会话）都由 <see cref="RunCoreAsync"/> 一份代码承担。
+    /// </summary>
+    private delegate Task<RunOutput> RunBody(
+        PreparedRun run, IRunSink sink, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 一次 run 的出口：核心只认识这四个动作，不认识 HTTP、通道、返回值。
+    /// 之所以要这层：同一个「发生了什么」在两条出口上要变成两种形态（结果对象 / 事件流），
+    /// 让核心直接写其中一种，另一种就得复制整段判定。
+    /// </summary>
+    private interface IRunSink
+    {
+        /// <summary>正文增量（仅流式出口消费）。</summary>
+        void Delta(string text);
+
+        /// <summary>一次工具调用完成（执行过程要看得见）。</summary>
+        void Tool(ToolCallTrace trace);
+
+        /// <summary>成功终态，携带完整结果对象。</summary>
+        void Completed(HarnessRunResult result);
+
+        /// <summary>失败终态。<paramref name="code"/> 为 <c>null</c> 表示沿用状态本身，不额外细分。</summary>
+        void Failed(string status, string? code, string? error);
+    }
+
+    /// <summary>把 run 事件写进通道的出口（流式）。只做形状转换，不做任何判断。</summary>
+    private sealed class ChannelRunSink(ChannelWriter<HarnessStreamEvent> writer) : IRunSink
+    {
+        public void Delta(string text)
+            => writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.TextDelta, Text: text));
+
+        public void Tool(ToolCallTrace trace)
+            => writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.ToolCompleted, Tool: trace));
+
+        public void Completed(HarnessRunResult result)
+            => writer.TryWrite(new HarnessStreamEvent(HarnessStreamEventKind.Completed, Result: result));
+
+        public void Failed(string status, string? code, string? error)
+            => writer.TryWrite(new HarnessStreamEvent(
+                HarnessStreamEventKind.Failed, Error: error, Status: status, Code: code));
+    }
+
+    /// <summary>
+    /// 丢弃全部事件的出口（一次性返回）：它只要 <see cref="RunCoreAsync"/> 的返回值。
+    /// 保留下沉到核心的订阅是刻意的——工具事件照常触发，只是这里不消费，行为与「没订阅」等价。
+    /// </summary>
+    private sealed class NullRunSink : IRunSink
+    {
+        public static readonly NullRunSink Instance = new();
+
+        public void Delta(string text) { }
+
+        public void Tool(ToolCallTrace trace) { }
+
+        public void Completed(HarnessRunResult result) { }
+
+        public void Failed(string status, string? code, string? error) { }
+    }
+
+    /// <summary>执行体的产出：全文 + 用量（流式靠累加，非流式直接读响应）。用量未知时为 <c>null</c>，不补 0。</summary>
+    private readonly record struct RunOutput(string Text, long? InputTokens, long? OutputTokens);
+
+    /// <summary>核心的结局：成功给 <see cref="Result"/>、失败给 <see cref="Error"/>，两者恰有一个非空。</summary>
+    private sealed record RunOutcome(HarnessRunResult? Result, Exception? Error);
 
     /// <summary>缺省 sessionId 时随机生成，保证「无状态调用」也能各 run 隔离；显式传入则复用同一会话。</summary>
     private static string ResolveSessionId(string? sessionId)
