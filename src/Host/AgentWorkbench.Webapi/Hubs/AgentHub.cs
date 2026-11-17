@@ -12,6 +12,8 @@ using AgentWorkbench.Shared.Options;
 using AgentWorkbench.Runtime.Tools;
 using AgentWorkbench.Webapi.Actions;
 using AgentWorkbench.Webapi.Auth;
+using AgentWorkbench.Webapi.Conversations;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 
@@ -54,7 +56,14 @@ public sealed record ChatRequest(
 /// 评测一条都覆盖不到——这正是「验收假绿」的结构性来源。
 /// 来源面板由工具完成事件驱动（模型调 MCP 检索工具时推送），不依赖服务端预检索。
 /// </para>
+/// <para>
+/// <b>授权姿态写在类上，不靠全局默认。</b><see cref="AuthorizeAttribute"/> 让「要登录」这件事
+/// 成为本文件可见、可被架构断言守住的事实；在此之前它只存在于 <c>Program.cs</c> 的
+/// <c>FallbackPolicy</c> 里，改那条全局策略就会静默失守而没有任何测试会红。
+/// 方法体内的认证判空仍然保留：那是第二道，防的是直接实例化（测试）与将来可能的破例。
+/// </para>
 /// </remarks>
+[Authorize]
 public sealed class AgentHub : Hub
 {
     private readonly IAgentHarness _harness;
@@ -94,10 +103,17 @@ public sealed class AgentHub : Hub
         var messageId = Guid.NewGuid().ToString("N");
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(Context.ConnectionAborted);
 
+        // 出口只认「往这个调用者发」：形状与字段名收在 sink 里，本方法不再出现 SendAsync。
+        // 抽它的理由不是好看——一旦加第二个入口（CLI / 定时任务），这段编排不该被复制一份。
+        var sink = new SignalRConversationSink(Clients.Caller, messageId, _logger);
+
+        // 第二道，不是第一道：管道上的 [Authorize] 已经在协商阶段拦住未登录连接（实测未登录
+        // negotiate 与直连 WS 接入点均 401）。这里防的是「绕过管道直调方法」——单元测试就是
+        // 这样进来的，将来若某个端点被显式放行也走这条。
         // 连接也必须有身份：多租户下「谁在说话」不能靠客户端自报。
         if (Context.User.Identity?.IsAuthenticated != true)
         {
-            await SendErrorAsync("未登录：请刷新页面重新登录。");
+            await sink.ErrorAsync("未登录：请刷新页面重新登录。", linked.Token);
             return;
         }
         var (tenantId, userId) = Context.User.Owner();
@@ -107,7 +123,7 @@ public sealed class AgentHub : Hub
         // 放在 TryAdd 之前：判空返回时没有占用 Generations 槽位，不需要走 finally 清理。
         if (!InputIdentity.IsPresent(request.ClientMessageId))
         {
-            await SendErrorAsync($"缺少本次输入的标识（{InputIdentity.MissingCode}），请刷新页面重试。");
+            await sink.ErrorAsync($"缺少本次输入的标识（{InputIdentity.MissingCode}），请刷新页面重试。", linked.Token);
             return;
         }
 
@@ -116,7 +132,7 @@ public sealed class AgentHub : Hub
         // 不需要 finally 清理，也不产生终态。
         if (string.IsNullOrWhiteSpace(request.Text))
         {
-            await SendErrorAsync("输入为空：请输入内容后再发送。");
+            await sink.ErrorAsync("输入为空：请输入内容后再发送。", linked.Token);
             return;
         }
 
@@ -129,7 +145,7 @@ public sealed class AgentHub : Hub
         // 不要把这两层混成一层：删掉它 Stop 会坏，靠它挡并发则挡不住。
         if (!Generations.TryAdd(Context.ConnectionId, linked))
         {
-            await SendErrorAsync("已有生成在进行中，请先停止或等待完成。");
+            await sink.ErrorAsync("已有生成在进行中，请先停止或等待完成。", linked.Token);
             return;
         }
 
@@ -148,14 +164,14 @@ public sealed class AgentHub : Hub
             var capabilities = await _harness.GetCapabilitiesAsync(linked.Token);
             if (!capabilities.Llm)
             {
-                await SendErrorAsync("模型未配置：请在「设置」页添加供应商与模型。");
+                await sink.ErrorAsync("模型未配置：请在「设置」页添加供应商与模型。", linked.Token);
                 return;
             }
 
             // 客户端给的 conversationId 只是「我想接着哪个」，是否属于我由仓储判定：
             // 别人的 id 会新建一个新会话，既不越权也不泄露存在性。
             conversation = await _conversations.GetOrCreateAsync(request.ConversationId, tenantId, userId);
-            await Clients.Caller.SendAsync("ReceiveConversation", new { conversationId = conversation.Id }, linked.Token);
+            await sink.ConversationStartedAsync(conversation.Id, linked.Token);
             await _conversations.AddMessageAsync(conversation.Id, "user", request.Text);
 
             // 翻译工具在 harness 的工具环里执行，此刻的 HttpContext 不保证还在（长连接）。
@@ -178,34 +194,21 @@ public sealed class AgentHub : Hub
                 {
                     case HarnessStreamEventKind.TextDelta:
                         answer.Append(evt.Text);
-                        await Clients.Caller.SendAsync("ReceiveDelta", new { messageId, delta = evt.Text }, linked.Token);
+                        await sink.DeltaAsync(evt.Text, linked.Token);
                         break;
 
                     case HarnessStreamEventKind.ToolCompleted:
                         // 执行过程要看得见：每次工具调用完成就推一条，前端按序拼成时间线。
-                        // 只推预览（截断），完整结果留在轨迹表里——这是给演示/排障看的，不是数据通道。
                         if (evt.Tool is { } tool)
                         {
-                            await Clients.Caller.SendAsync("ReceiveTool", new
-                            {
-                                messageId,
-                                iteration = tool.Iteration,
-                                name = tool.Name,
-                                arguments = Clip(tool.Arguments),
-                                resultPreview = Clip(tool.Result),
-                                error = tool.Error
-                            }, linked.Token);
-                        }
+                            await sink.ToolAsync(tool, linked.Token);
 
-                        var hits = TryReadKnowledgeHits(evt.Tool);
-                        if (hits is { Count: > 0 })
-                        {
-                            evidence = hits;
-                            await Clients.Caller.SendAsync("ReceiveSources", new
+                            var hits = TryReadKnowledgeHits(tool);
+                            if (hits is { Count: > 0 })
                             {
-                                messageId,
-                                sources = hits.Select(ToSource).ToList()
-                            }, linked.Token);
+                                evidence = hits;
+                                await sink.SourcesAsync(hits, linked.Token);
+                            }
                         }
 
                         break;
@@ -214,8 +217,8 @@ public sealed class AgentHub : Hub
                         // 失败已由 harness 落轨迹（含失败分类码），这里只负责让用户看见。
                         // 同时把终态发下去：没有它，「用户取消」和「服务出错」在界面上长得一样。
                         // Code 再细分一层：session_busy 表示这条会话正忙、本次根本没开始跑，前端应提示「稍候」。
-                        await NotifyStoppedAsync(messageId, evt.Status, evt.Error, evt.Code);
-                        await SendErrorAsync(evt.Error ?? "生成失败。");
+                        await sink.StoppedAsync(evt.Status, evt.Error, evt.Code, linked.Token);
+                        await sink.ErrorAsync(evt.Error ?? "生成失败。", linked.Token);
                         break;
 
                     case HarnessStreamEventKind.Completed:
@@ -231,49 +234,28 @@ public sealed class AgentHub : Hub
             if (refused)
             {
                 answer.Clear().Append(run!.Text);
-                await Clients.Caller.SendAsync("ReceiveRefusal", new
-                {
-                    messageId,
-                    text = run.Text,
-                    code = run.Code
-                }, linked.Token);
+                await sink.RefusedAsync(run.Text, run.Code, linked.Token);
             }
 
             await SaveAnswerAsync(conversation.Id, answer, run?.RunId);
             if (!refused)
-                await PushCitationsAsync(messageId, answer.ToString(), evidence, linked.Token);
-            await Clients.Caller.SendAsync("ReceiveDone", new
-            {
-                messageId,
-                conversationId = conversation.Id,
-                // run 摘要：iterations / latencyMs / status / code 是「执行控制真的在生效」的唯一可视证据，
-                // 没有它，界面上「答完了」和「跑满迭代被强制收口」长得一模一样。
-                run = run is null ? null : new
-                {
-                    runId = run.RunId,
-                    iterations = run.Iterations,
-                    model = run.Model,
-                    latencyMs = run.LatencyMs,
-                    status = run.Status,
-                    code = run.Code,
-                    steps = run.Steps.Count,
-                    tools = run.Steps.Count(s => string.Equals(s.Kind, "tool", StringComparison.Ordinal))
-                }
-            }, linked.Token);
+                await PushCitationsAsync(sink, answer.ToString(), evidence, linked.Token);
+            await sink.CompletedAsync(run, linked.Token);
         }
         catch (OperationCanceledException)
         {
             // 取消时 harness 的 Failed 事件常常送不进来（读端 token 已取消，await foreach 直接抛），
             // 所以终态要在这里补发一次，否则界面上的轨迹条永远停在「运行中」。
-            await NotifyStoppedAsync(messageId, AgentRunStatus.Cancelled, "已停止生成。");
+            // 这里刻意用 None：token 已经取消，带它发只会再抛一次，终态就永远送不出去。
+            await sink.StoppedAsync(AgentRunStatus.Cancelled, "已停止生成。", null, CancellationToken.None);
             await SaveAnswerAsync(conversation?.Id, answer, run?.RunId);
-            await SendErrorAsync("已停止生成。");
+            await sink.ErrorAsync("已停止生成。", CancellationToken.None);
         }
         catch (Exception ex)
         {
             await SaveAnswerAsync(conversation?.Id, answer, run?.RunId);
             _logger.LogError(ex, "生成失败");
-            await SendErrorAsync(ex.Message);
+            await sink.ErrorAsync(ex.Message, CancellationToken.None);
         }
         finally
         {
@@ -371,7 +353,7 @@ public sealed class AgentHub : Hub
     /// 推送失败不中断对话：报告是增益，正文已经发出去了。
     /// </remarks>
     private async Task PushCitationsAsync(
-        string messageId,
+        IConversationSink sink,
         string answer,
         IReadOnlyList<RetrievalHit>? evidence,
         CancellationToken cancellationToken)
@@ -384,35 +366,15 @@ public sealed class AgentHub : Hub
             // 两处各算一遍，迟早漂移，而漂移时两边都不报错。
             var support = CitationSupport.Judge(report, _knowledgeOptions.UnsupportedRatio);
 
-            await Clients.Caller.SendAsync("ReceiveCitations", new
-            {
-                messageId,
-                sentenceCount = report.SentenceCount,
-                citedSentenceCount = report.CitedSentenceCount,
-                uncitedSentenceCount = report.UncitedSentenceCount,
-                outOfRangeCount = report.OutOfRangeCount,
-                unsupportedCount = report.UnsupportedCount,
-                // 注意这两个不是一回事：unsupportedCount 是"有几条引用指向了错块"（条），
-                // supportVerdict 是"整段有没有资料撑"（段）。英文只差几个字母，含义完全不同。
-                uncitedRatio = CitationSupport.UncitedRatio(report),
-                supportVerdict = support.ToString().ToLowerInvariant(),
-                cleanedAnswer = report.CleanedAnswer,
-                citations = report.Citations.Select(c => new
-                {
-                    sentenceIndex = c.SentenceIndex,
-                    evidenceNo = c.EvidenceNo,
-                    fileName = c.FileName,
-                    seq = c.Seq,
-                    chunkId = c.ChunkId,
-                    // 枚举转小写字符串：数字默认为 0/1/2，前端拿数字没法判断，也不可读。
-                    check = c.Check.ToString().ToLowerInvariant(),
-                    coverage = c.Coverage
-                }).ToList()
-            }, cancellationToken);
+            await sink.CitationsAsync(
+                report,
+                support.ToString().ToLowerInvariant(),
+                CitationSupport.UncitedRatio(report),
+                cancellationToken);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "推送引用校验结果失败：{MessageId}", messageId);
+            _logger.LogWarning(ex, "推送引用校验结果失败");
         }
     }
 
@@ -432,42 +394,6 @@ public sealed class AgentHub : Hub
             _logger.LogWarning(ex, "保存助手消息失败：{ConversationId}", conversationId);
         }
     }
-
-    private Task SendErrorAsync(string message)
-        => Clients.Caller.SendAsync("Error", new { message });
-
-    /// <summary>工具参数/结果截断到可传输长度：完整内容在轨迹表里，界面上只需要够判断的量。</summary>
-    private static string? Clip(string? text, int max = 600)
-        => text is null || text.Length <= max ? text : text[..max] + "…";
-
-    /// <summary>发终态通知；连接已断时静默失败（这里的目的只是让还活着的客户端知道发生了中止）。</summary>
-    private async Task NotifyStoppedAsync(string messageId, string? status, string? error, string? code = null)
-    {
-        if (status is null) return;
-        try
-        {
-            await Clients.Caller.SendAsync("ReceiveStopped", new { messageId, status, error, code });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "发送终态通知失败（连接可能已断开）");
-        }
-    }
-
-    private static object ToSource(RetrievalHit hit) => new
-    {
-        chunkId = hit.ChunkId,
-        documentId = hit.DocumentId,
-        fileName = hit.FileName,
-        seq = hit.Seq,
-        heading = hit.Heading,
-        pageFrom = hit.PageFrom,
-        pageTo = hit.PageTo,
-        vectorScore = hit.VectorScore,
-        textScore = hit.TextScore,
-        fusedScore = hit.FusedScore,
-        content = hit.Content
-    };
 
     /// <summary>停止当前生成。</summary>
     public Task Stop()
