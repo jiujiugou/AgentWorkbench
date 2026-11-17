@@ -248,10 +248,6 @@ async function fetchForCurrent(): Promise<void> {
           <span class="k">Embedding 模型</span>
           <span class="v">{{ preview.embeddingModel || '（未配置）' }}</span>
         </div>
-        <div class="preview-item">
-          <span class="k">温度</span>
-          <span class="v">{{ preview.temperature ?? '不适用' }}</span>
-        </div>
       </div>
     </section>
 

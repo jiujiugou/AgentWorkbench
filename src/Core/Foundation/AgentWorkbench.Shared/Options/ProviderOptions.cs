@@ -20,9 +20,6 @@ public sealed class ProviderOptions
     /// <summary>Embedding 模型（用于 RAG，可选）</summary>
     public string EmbeddingModel { get; set; } = string.Empty;
 
-    /// <summary>采样温度</summary>
-    public float Temperature { get; set; } = 0.7f;
-
     /// <summary>
     /// 是否允许向模型发送函数工具（function calling）。
     /// 部分 OpenAI 兼容端点/推理模型（如 SiliconFlow 的 GLM-Z1）不支持 <c>tools</c>，置 false 可避免 400。

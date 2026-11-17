@@ -23,8 +23,6 @@ export interface SettingsPreview {
   baseUrl: string
   model: string
   embeddingModel: string
-  // Python 版没有 temperature 这个旋钮：后端恒返回 null，界面显示「不适用」
-  temperature: number | null
   systemPrompt: string
   apiKeyConfigured: boolean
   configured: boolean

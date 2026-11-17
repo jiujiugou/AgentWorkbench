@@ -29,7 +29,8 @@ public static class ProvidersServiceCollectionExtensions
     public static IServiceCollection AddNitroProviders(
         this IServiceCollection services, IConfiguration configuration)
     {
-        // 配置节 Provider：BaseUrl / ApiKey / Model / Temperature / SupportsTools / SystemPrompt 等。
+        // 配置节 Provider：BaseUrl / ApiKey / Model / EmbeddingModel / SupportsTools / SystemPrompt。
+        // 采样温度刻意不在这里：它由 AgentHarnessService 固定，不作为供应商配置项（本模块从不读它）。
         // 它同时充当「数据库里没有任何供应商时」的回退来源（见 ChatClientFactory.ResolveAsync）。
         services.AddOptions<ProviderOptions>().Bind(configuration.GetSection(ProviderOptions.SectionName));
         services.AddHttpClient();

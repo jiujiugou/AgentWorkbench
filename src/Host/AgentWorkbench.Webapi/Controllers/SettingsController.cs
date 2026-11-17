@@ -60,7 +60,6 @@ public sealed class SettingsController : ControllerBase
             baseUrl = endpoint?.BaseUrl ?? _options.BaseUrl,
             model = endpoint?.Model ?? _options.Model,
             embeddingModel = _knowledge.Embedding.Model,
-            temperature = _options.Temperature,
             systemPrompt = _options.SystemPrompt,
             apiKeyConfigured = !string.IsNullOrWhiteSpace(endpoint?.ApiKey),
             configured = endpoint is not null,
