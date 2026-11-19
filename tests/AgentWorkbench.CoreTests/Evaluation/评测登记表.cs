@@ -15,7 +15,7 @@ namespace AgentWorkbench.CoreTests.Evaluation;
 ///
 /// 背景：评测清单以前写在 md 里，改代码不改文档就成了「文档说 7 条、代码 13 条」——
 /// 读文档的人据此判断覆盖面，结论直接错。清单搬到 toml 还不够，必须有东西读它，
-/// 否则它和 md 没有区别（`agent-parts.toml` 头部那句话：「别把已经写成 toml 当成已经约束住」）。
+/// 否则它和 md 没有区别——「别把已经写成 toml 当成已经约束住」。
 ///
 /// <b>六条断言，双向互证：</b>
 /// ① 表里 status = wired 的每个 <c>api</c>，必须是 <see cref="KernelChecks"/> 的公开静态判据方法；

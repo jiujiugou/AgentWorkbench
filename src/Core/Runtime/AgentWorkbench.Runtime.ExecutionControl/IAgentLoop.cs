@@ -1,4 +1,4 @@
-namespace AgentWorkbench.Runtime.Loop;
+namespace AgentWorkbench.Runtime.ExecutionControl;
 
 /// <summary>
 /// 执行控制：为一次 Agent 运行提供预算（最大迭代 / 总耗时）与「带超时执行」的包装。

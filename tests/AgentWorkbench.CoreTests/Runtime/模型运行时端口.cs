@@ -21,7 +21,7 @@ namespace AgentWorkbench.CoreTests.Runtime;
 /// </summary>
 /// <remarks>
 /// 这一格不属于六部件里的任何一格（六格是「一次 run 的六个动作」，调哪家模型是 run 之前的环境事实），
-/// 所以 agent-parts.toml 里没有登记、也没有门禁会变红。这里的用例就是它唯一的常驻判据。
+/// 所以它没有门禁会变红。这里的用例就是它唯一的常驻判据。
 /// </remarks>
 public sealed class 模型运行时端口
 {

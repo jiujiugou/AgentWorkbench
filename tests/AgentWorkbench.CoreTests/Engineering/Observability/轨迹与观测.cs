@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 using AgentWorkbench.Observability;
 using AgentWorkbench.Runtime.Context;
 using AgentWorkbench.Runtime.Harness;
-using AgentWorkbench.Runtime.Loop;
+using AgentWorkbench.Runtime.ExecutionControl;
 using AgentWorkbench.Runtime.Model;
 using AgentWorkbench.Runtime.Session;
 using AgentWorkbench.Runtime.Tools;
@@ -32,7 +32,7 @@ namespace AgentWorkbench.CoreTests.Engineering.Observability;
 /// 落库往返、检索面、报告全属应用层（部件文档第六节已划出），这里一条都不碰。
 ///
 /// 当前状态：本文件里**有一部分是预期红**——红的每一条都对应
-/// agent-parts.toml 里 status = "partial" 的那条能力。红是正确信号，不要改测试迁就生产。
+/// 仍属 partial 的那条能力。红是正确信号，不要改测试迁就生产。
 /// 每条都写明负控：改坏什么会红。能脚本判定的禁止用 AI 判。
 /// </summary>
 public sealed class 轨迹与观测

@@ -1,4 +1,4 @@
-using AgentWorkbench.Runtime.Loop;
+using AgentWorkbench.Runtime.ExecutionControl;
 using AgentWorkbench.Runtime.Tools;
 using AgentWorkbench.Shared;
 using AgentWorkbench.TestKit;
@@ -14,7 +14,7 @@ namespace AgentWorkbench.ApplicationTests.Flow;
 /// <b>三处各说一件事，互不重复</b>：方法名 = 步骤功能；注释 = 改哪里会红 + 边界；
 /// <c>docs/运行期流程.md</c> = 为什么要有、不许留下什么、归谁。
 ///
-/// <b>本组与模块级单测不关联</b>：这一格归属写的是 Core（<c>Runtime.Loop</c> + <c>Runtime.Tools</c>），
+/// <b>本组与模块级单测不关联</b>：这一格归属写的是 Core（<c>Runtime.ExecutionControl</c> + <c>Runtime.Tools</c>），
 /// 仓里也确实另有一整套守卫/超时/归类码的模块级单测（CoreTests 与 ApplicationTests/Runtime 下）。
 /// <b>那两套东西和本组互不迁移、互不复用、互不计数</b>：S 系列是「一次 run 的流程验收」，
 /// 与其余 Sxx 同处 Host 项目、走门禁默认项目；模块级单测验的是单个类的行为。

@@ -24,7 +24,7 @@
     <ProjectReference Include="..\AgentWorkbench.TestKit\AgentWorkbench.TestKit.csproj" />
     <ProjectReference Include="..\..\src\Core\Foundation\AgentWorkbench.Shared\AgentWorkbench.Shared.csproj" />
     <ProjectReference Include="..\..\src\Core\Ports\AgentWorkbench.Ports.csproj" />
-    <ProjectReference Include="..\..\src\Core\Tools\AgentWorkbench.ActionGateway\AgentWorkbench.ActionGateway.csproj" />
+    <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.ActionGateway\AgentWorkbench.ActionGateway.csproj" />
     <ProjectReference Include="..\..\src\Core\Tools\AgentWorkbench.Tools.Builtin\AgentWorkbench.Tools.Builtin.csproj" />
     <ProjectReference Include="..\..\src\Domains\Erp\AgentWorkbench.Erp.csproj" />
     <ProjectReference Include="..\..\src\Domains\FakeActionSet\AgentWorkbench.FakeActionSet.csproj" />
@@ -32,7 +32,7 @@
     <ProjectReference Include="..\..\src\Implementations\AgentWorkbench.Domain\AgentWorkbench.Domain.csproj" />
     <ProjectReference Include="..\..\src\Implementations\AgentWorkbench.Persistence\AgentWorkbench.Persistence.csproj" />
     <ProjectReference Include="..\..\src\Implementations\AgentWorkbench.Memory.Persistence\AgentWorkbench.Memory.Persistence.csproj" />
-    <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Loop\AgentWorkbench.Runtime.Loop.csproj" />
+    <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.ExecutionControl\AgentWorkbench.Runtime.ExecutionControl.csproj" />
     <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Context\AgentWorkbench.Runtime.Context.csproj" />
     <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Session\AgentWorkbench.Runtime.Session.csproj" />
     <ProjectReference Include="..\..\src\Core\Runtime\AgentWorkbench.Runtime.Tools\AgentWorkbench.Runtime.Tools.csproj" />

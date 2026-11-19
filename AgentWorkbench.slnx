@@ -7,7 +7,7 @@
   </Folder>
   <Folder Name="/src/Core/Runtime/">
     <Project Path="src/Core/Runtime/AgentWorkbench.Runtime.Harness/AgentWorkbench.Runtime.Harness.csproj" />
-    <Project Path="src/Core/Runtime/AgentWorkbench.Runtime.Loop/AgentWorkbench.Runtime.Loop.csproj" />
+    <Project Path="src/Core/Runtime/AgentWorkbench.Runtime.ExecutionControl/AgentWorkbench.Runtime.ExecutionControl.csproj" />
     <Project Path="src/Core/Runtime/AgentWorkbench.Runtime.Model/AgentWorkbench.Runtime.Model.csproj" />
     <Project Path="src/Core/Runtime/AgentWorkbench.Runtime.Context/AgentWorkbench.Runtime.Context.csproj" />
     <Project Path="src/Core/Runtime/AgentWorkbench.Runtime.Session/AgentWorkbench.Runtime.Session.csproj" />
@@ -17,7 +17,7 @@
     <Project Path="src/Core/Tools/AgentWorkbench.Tools.Abstractions/AgentWorkbench.Tools.Abstractions.csproj" />
     <Project Path="src/Core/Tools/AgentWorkbench.Tools.Builtin/AgentWorkbench.Tools.Builtin.csproj" />
     <Project Path="src/Core/Tools/AgentWorkbench.Tools.Mcp/AgentWorkbench.Tools.Mcp.csproj" />
-    <Project Path="src/Core/Tools/AgentWorkbench.ActionGateway/AgentWorkbench.ActionGateway.csproj" />
+    <Project Path="src/Core/Runtime/AgentWorkbench.ActionGateway/AgentWorkbench.ActionGateway.csproj" />
   </Folder>
   <Folder Name="/src/Core/Knowledge/">
     <Project Path="src/Core/Knowledge/AgentWorkbench.Knowledge.Abstractions/AgentWorkbench.Knowledge.Abstractions.csproj" />

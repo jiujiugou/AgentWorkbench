@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Configuration;
 
-namespace AgentWorkbench.Runtime.Loop;
+namespace AgentWorkbench.Runtime.ExecutionControl;
 
 /// <summary>AgentLoop 模块（执行控制）：迭代预算与 run 级超时策略。</summary>
 public static class AgentLoopServiceCollectionExtensions

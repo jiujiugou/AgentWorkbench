@@ -1,4 +1,4 @@
-global using AgentWorkbench.Runtime.Loop;
+global using AgentWorkbench.Runtime.ExecutionControl;
 global using AgentWorkbench.Runtime.Session;
 global using AgentWorkbench.Runtime.Model;
 global using AgentWorkbench.Observability;

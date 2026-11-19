@@ -1,4 +1,4 @@
-namespace AgentWorkbench.Runtime.Loop;
+namespace AgentWorkbench.Runtime.ExecutionControl;
 
 /// <summary>
 /// 执行控制守卫（一次 run 一个实例，状态随 run 增长）：管住「卡在同一个调用上」与「钱」。

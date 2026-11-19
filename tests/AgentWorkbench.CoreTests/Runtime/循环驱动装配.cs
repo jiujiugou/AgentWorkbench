@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using AgentWorkbench.Runtime.Harness;
-using AgentWorkbench.Runtime.Loop;
+using AgentWorkbench.Runtime.ExecutionControl;
 using AgentWorkbench.Runtime.Tools;
 using AgentWorkbench.Shared;
 using Microsoft.Extensions.AI;

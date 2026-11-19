@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Options;
 
-namespace AgentWorkbench.Runtime.Loop;
+namespace AgentWorkbench.Runtime.ExecutionControl;
 
 /// <inheritdoc />
 public sealed class AgentLoopService : IAgentLoop

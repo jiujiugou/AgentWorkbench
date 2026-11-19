@@ -2,7 +2,7 @@ using System.Reflection;
 using AgentWorkbench.Shared;
 using Xunit;
 
-namespace AgentWorkbench.CoreTests.Runtime.Loop;
+namespace AgentWorkbench.CoreTests.Runtime.ExecutionControl;
 
 /// <summary>
 /// F1.5 终态可归因 + F1.7 不自研循环。结构断言，不依赖模型运行。

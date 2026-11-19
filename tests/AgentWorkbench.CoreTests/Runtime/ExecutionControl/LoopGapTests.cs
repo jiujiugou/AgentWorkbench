@@ -1,11 +1,11 @@
 using System.Reflection;
-using AgentWorkbench.Runtime.Loop;
+using AgentWorkbench.Runtime.ExecutionControl;
 using AgentWorkbench.Shared;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
 
-namespace AgentWorkbench.CoreTests.Runtime.Loop;
+namespace AgentWorkbench.CoreTests.Runtime.ExecutionControl;
 
 /// <summary>
 /// 七项职责的缺口补锁（现有 13 条见同目录 AgentLoopServiceTests / AgentRunGuardTests）：

@@ -7,7 +7,7 @@ using AgentWorkbench.Evaluation.Kernel;
 using AgentWorkbench.Observability;
 using AgentWorkbench.Runtime.Context;
 using AgentWorkbench.Runtime.Harness;
-using AgentWorkbench.Runtime.Loop;
+using AgentWorkbench.Runtime.ExecutionControl;
 using AgentWorkbench.Runtime.Model;
 using AgentWorkbench.Runtime.Session;
 using AgentWorkbench.Runtime.Tools;

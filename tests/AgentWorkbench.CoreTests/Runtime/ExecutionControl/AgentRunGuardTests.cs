@@ -1,9 +1,9 @@
-using AgentWorkbench.Runtime.Loop;
+using AgentWorkbench.Runtime.ExecutionControl;
 using AgentWorkbench.Shared;
 using Moq;
 using Xunit;
 
-namespace AgentWorkbench.CoreTests.Runtime.Loop;
+namespace AgentWorkbench.CoreTests.Runtime.ExecutionControl;
 
 /// <summary>
 /// 执行控制的判定：跑满 ≠ 答完、重复调用在发出前停、预算按 run 起点计。

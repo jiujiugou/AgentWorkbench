@@ -1,11 +1,11 @@
-using AgentWorkbench.Runtime.Loop;
+using AgentWorkbench.Runtime.ExecutionControl;
 using AgentWorkbench.Shared;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Xunit;
 
-namespace AgentWorkbench.CoreTests.Runtime.Loop;
+namespace AgentWorkbench.CoreTests.Runtime.ExecutionControl;
 
 /// <summary>
 /// F1.2 / F1.5 / F1.6：run 级墙钟、取消与超时的区分、预算属性透出。

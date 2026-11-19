@@ -15,7 +15,7 @@ namespace AgentWorkbench.CoreTests.Runtime;
 ///
 /// 定位：这是「换成 MAF 原生装法之后，框架到底给到哪」的**装配判据**。
 /// 生产实现已按这里验证的形状落地（Runtime.Context + AgentHarnessService.BuildAgent），
-/// 对应 agent-parts.toml 的 `maf-injection-equivalence`。
+/// 这一格装配形状的常驻判据就是本文件。
 ///
 /// 装配形状刻意与 HistoryProviderProbeTests 一致：
 /// FunctionInvokingChatClient 包录制客户端 → ChatClientAgent 用 UseProvidedChatClientAsIs = true 原样使用，

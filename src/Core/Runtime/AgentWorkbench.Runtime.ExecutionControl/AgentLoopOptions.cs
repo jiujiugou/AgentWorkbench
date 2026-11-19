@@ -1,4 +1,4 @@
-namespace AgentWorkbench.Runtime.Loop;
+namespace AgentWorkbench.Runtime.ExecutionControl;
 
 /// <summary>
 /// 执行控制配置（配置节 <c>Harness:Loop</c>）：整个任务的迭代预算与总耗时上限。

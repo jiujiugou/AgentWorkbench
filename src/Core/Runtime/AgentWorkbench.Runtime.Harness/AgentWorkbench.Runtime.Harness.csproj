@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\AgentWorkbench.Runtime.Loop\AgentWorkbench.Runtime.Loop.csproj" />
+    <ProjectReference Include="..\AgentWorkbench.Runtime.ExecutionControl\AgentWorkbench.Runtime.ExecutionControl.csproj" />
     <ProjectReference Include="..\AgentWorkbench.Runtime.Session\AgentWorkbench.Runtime.Session.csproj" />
     <ProjectReference Include="..\AgentWorkbench.Runtime.Context\AgentWorkbench.Runtime.Context.csproj" />
     <ProjectReference Include="..\AgentWorkbench.Runtime.Model\AgentWorkbench.Runtime.Model.csproj" />
