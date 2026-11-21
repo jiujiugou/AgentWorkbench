@@ -19,7 +19,7 @@ namespace AgentWorkbench.CoreTests.Memory.Persistence;
 /// - `chat_messages`：模型上下文（含 functionCall / functionResult），由 provider 写。
 ///
 /// 这几条不是「验功能」，是把两条路径的形状钉住，防止有人以为它们是同一份数据。
-/// X1/X4 属于职责不同的必然结果；X2/X3 对应 `docs/core/runtime.md` §7.3 第 1 条
+/// X1/X4 属于职责不同的必然结果；X2/X3 对应 `docs/core/状态与记忆.md`
 /// 那两个尚未定义的边界条件（失败轮、删除/TTL），改之前先定边界。
 ///
 /// 写路径刻意照抄 `AgentHub`：`RunAsync` 里 user 消息在 run <b>之前</b>写，
@@ -147,7 +147,7 @@ public sealed class HistoryDivergenceTests
     }
 
     // [X1] 一轮带工具调用的对话：界面 2 条，模型 4 条；工具调用只存在于模型那一份。
-    // 这是「界面不展示执行过程」的正常结果，不是分歧缺陷；见 docs/core/runtime.md §7.1。
+    // 这是「界面不展示执行过程」的正常结果，不是分歧缺陷；见 docs/core/轨迹与观测.md。
     [Fact]
     public async Task X1_一轮带工具的对话_两个源条数不同且工具只在一个源里()
     {

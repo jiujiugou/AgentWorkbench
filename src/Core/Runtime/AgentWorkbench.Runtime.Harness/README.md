@@ -1,15 +1,17 @@
 # Agent 运行时编排门面（AgentHarness）
 
+- **适用侧**：底座 ｜ **寿命**：现状（就近维护） ｜ **最后校准**：2026-11-21
+
 这个模块只干一件事：**把模型交互 / 工具调用 / 执行控制 / 上下文 / 记忆 / 可观测装配成一条流水线，
 一次 run 走一遍，并把这次 run 的结局归类**。
 
-它**自身不实现任何一项能力**：迭代循环本体由 `Microsoft.Extensions.AI` 的 `FunctionInvokingChatClient` 承担，超时与预算在 `Loop/`（已并入本项目），工具在 `ToolExecution`，
+它**自身不实现任何一项能力**：迭代循环本体由 `Microsoft.Extensions.AI` 的 `FunctionInvokingChatClient` 承担，超时与预算在 `ExecutionControl`，工具在 `ToolExecution`，
 上下文在 `Context`，会话在 `Runtime.Session`，痕迹在 `Observability`。
 
 **本模块也不拥有三段历史中的任何一段**：它只在 `PrepareRunAsync` 把 `aw.session_id` 写进 `StateBag`、
 在收尾调 `IExecutionTraceStore.SaveAsync`、在入口抢 `ISessionRunGate`。写什么 / 存哪 / 给谁看，
 分别由 `Runtime.Session` / `Memory.Persistence`、`Observability`、`Host` 决定。
-三段归属见 `docs/core/runtime.md` §7.1；失败轮与删除语义两个待定边界见 §7.3 第 1 条。
+三段归属见 `docs/core/轨迹与观测.md`；失败轮与删除语义两个待定边界见 `docs/core/状态与记忆.md`。
 
 ---
 
@@ -22,12 +24,12 @@ ResolveSessionId(请求的 SessionId)                    会话标识（缺省�
   → ISessionRunGate.TryAcquireAsync(sessionId)         会话互斥（抢不到 → session_busy，直接返回，不落轨迹）
   → ResolveAsync(端点)                                 Providers
   → IModelRuntime.Wrap(client)                       模型交互（超时 / 重试 / 并发 / 用量）
-  → IAgentLoop.CreateGuard(用量来源)                  执行控制（一次 run 一个守卫）
+  → IAgentExecutionControl.CreateGuard(用量来源)                  执行控制（一次 run 一个守卫）
   → IToolExecutionPipeline.Create(client, 预算+守卫+审批者)  工具调用（工具环 + 轨迹采集 + 环内终止 + 审批闸门）
   → ChatClientAgent（工具来自 IToolCatalog）           对话运行时 + 白名单目录（Safety）
   → 用户原文直接进模型（知识检索走 search_knowledge 工具，harness 不暗中拼装）
-  → ISessionStore.GetOrCreateAsync(sessionId)         会话快照（历史不在这里，见 docs/core/runtime.md §7.1）
-  → IAgentLoop.ExecuteAsync(...)                      执行控制（run 级超时）
+  → ISessionStore.GetOrCreateAsync(sessionId)         会话快照（历史不在这里，见 `docs/core/轨迹与观测.md`）
+  → IAgentExecutionControl.ExecuteAsync(...)                      执行控制（run 级超时）
   → 收尾分类（循环 / 预算 / 跑满 / 取消 / 超时 / 失败）  执行控制 + 编排层
   → IExecutionTraceStore.SaveAsync(轨迹+状态+归类码)    可观测（四条路径都落库）
 ```
@@ -36,14 +38,14 @@ ResolveSessionId(请求的 SessionId)                    会话标识（缺省�
 `RunAsync` 返回 `Code=session_busy, RunId=0`（0 = 没开始跑、没落轨迹），
 `StreamAsync` 产出**一个 Failed 事件**就结束。闸在 Harness 而不是 Hub，
 因为所有起 run 的入口都汇到 Harness，放 Hub 只补一处。
-覆盖范围只有单进程，跨进程要数据库租约——见 `docs/core/runtime.md` §7.6。
+覆盖范围只有单进程，跨进程要数据库租约——见 `docs/core/状态与记忆.md`。
 
 **这道闸同时保护会话快照的写回。** `ISessionStore.SaveAsync` 全仓只在
 `SaveSessionQuietlyAsync` 里被调用（本模块的 `finally`），而 `await using var gate` 在
 `RunAsync` / `StreamAsync` 开头、作用域包住整个方法体含 `finally`。因此单进程内
 `agent_sessions` 的整份 Upsert 不会有两个 run 并发写；加新 provider 往 StateBag 放实质状态
 也不会触发 lost update。剩余风险只有「L2 未实现」与「未来绕过本模块直接写 StateBag 的后台任务」，
-都归 §7.6 管辖。
+都归 `docs/core/状态与记忆.md` 管辖。
 
 ### 审批怎么接进来（harness 只做透传，不做判断）
 

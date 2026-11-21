@@ -33,7 +33,7 @@ namespace AgentWorkbench.ApplicationTests.Flow;
 /// <b>三处各说一件事，互不重复</b>：方法名 = 步骤功能；注释 = 改哪里会红 + 边界；
 /// <c>docs/运行期流程.md</c> = 为什么要有、不许留下什么、归谁。
 ///
-/// <b>本格有三条入口，一张单子。</b> 同一句承诺（无身份 / 非法参数 / 认不出动作 → 不进网关、
+/// <b>本格有两条入口，一张单子。</b> 同一句承诺（无身份 / 非法参数 / 无身份 / 非法参数 → 不进网关、
 /// 零外部调用），但身份从哪来、请求号怎么派生各不相同，所以分三段写、同一个编号：
 /// <list type="bullet">
 /// <item><b>01–22 模型工具入口</b>（<c>propose_action</c>）：起于模型给出的 actionKey + argumentsJson，
@@ -42,32 +42,24 @@ namespace AgentWorkbench.ApplicationTests.Flow;
 /// 「不许留下什么」→ 04、06、19、20、22。</item>
 /// <item><b>23–31 宿主入口</b>：模型消息到达 Hub 与 HTTP <c>POST /api/actions</c> 这两条路，
 /// 缺标识 / 未登录 / 换一次输入各自该发生什么。</item>
-/// <item><b>32–37 模型直连工具入口</b>：模型自己拼参数调外部工具时，怎么被认出是哪个动作并归到同一份闸。</item>
 /// </list>
 ///
-/// <b>不归本格</b>：四道闸的判定（S06）；审批（S07，含直连下那条同步审批）；执行与幂等领取（S08）。
+/// <b>不归本格</b>：四道闸的判定（S06）；审批（S07）；执行与幂等领取（S08）。
 /// <c>requestId</c> 的具体算法也不归本格 —— 01–22 只验「稳定、可由主体+会话+编号+动作+参数复算」，
 /// 不锁定哈希算法或截断长度。
 ///
 /// <b>层 × 方向</b>：01–16 是 Core（<c>Tools.Builtin</c>）+ Host（提供输入身份作用域）；
 /// 17–22 用 <c>CapturingSet</c> 在第 1 道闸前直接捕获 <c>ActionRequest</c>，把「不进网关」
 /// 从间接证据（trace 写次数）升级成直接证据；23–31 全在 Host（Hub / Controller / 作用域实现）；
-/// 32–37 是 Host 组合根 + 域策略表 + Core 的 <c>ActionRunService</c> 真件，执行体为计数替身。
 ///
 /// <b>迁移说明</b>：01–16 原是 <c>ProposeActionToolTests</c> 的 P1–P16；23–31 原为
-/// <c>InputIdentityContractTests</c> 的 H1–H8 / H11；32–37 原为 <c>ToolCallGatewayTests</c> 的 G1–G6。
-/// 三次归位<b>断言一条未改</b>，只改编号与归属 —— 它们此前住在坐标之外，
+/// <c>InputIdentityContractTests</c> 的 H1–H8 / H11。
+/// 两次归位<b>断言一条未改</b>，只改编号与归属 —— 它们此前住在坐标之外，
 /// 门禁按 <c>S05</c> 前缀计数认不到，等于「没有保障伪装成有保障」。
 ///
 /// <b>登记在案的空白</b>：
 /// <list type="number">
 /// <item><c>S01_01</c>（前端每次点击生成新编号）仍是 Skip，本格 23–31 只验后端不信前端，不验前端真的生成了。</item>
-/// <item><b>33–37 这条入口的幂等是坏的</b>：网关给每次调用一个新的 <c>Guid</c> 当 <c>RequestId</c>，
-/// 而去重表主键是 <c>request_id</c>（<c>idempotency_key</c> 只是普通列），所以指纹算出来了却没人拿它判重
-/// —— 同一次调用重发会重新执行。目前只走到只读（重发一次无害），写工具尚未开放直连，
-/// 是潜伏缺陷、不是现行事故。本组不把它锁成期望行为。</item>
-/// <item><b>金额该从单据取，不该问模型</b>：37 只验到「这次调用被当成提交」，它随后被业务规则
-/// 以「金额缺失」拒掉 —— 直连时模型不会自带 amount，而现有 spec 仍要求它。已知缺陷，不在本组解决。</item>
 /// </list>
 ///
 /// <b>纪律</b>：行为断言，不是源码字符串断言；每条都写明了改哪里会红。恒真的绿等于没验。
@@ -640,107 +632,9 @@ public sealed class S05ContractTests
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // 入口三：模型直连工具 —— 32–37
-    // 起于「模型已给出工具名 + 参数」，止于「ActionRunService 收到 ActionRequest」。
-    // ═══════════════════════════════════════════════════════════════
-
-    // [S05-32] 负控：把 Handles 改成恒 true → 本条红（未登记的工具会被误纳入管辖）。
-    [Fact]
-    public void S05_32_没有策略条目的工具不归本闸管()
-    {
-        var (gateway, _) = CreateDirectGateway();
-
-        Assert.True(gateway.Handles(QueryTool));
-        Assert.False(gateway.Handles("mcp__other__search"));
-        Assert.False(gateway.Handles("calculator"));
-    }
-
-    // [S05-33] 负控：删掉 ActionToolGateway 里的 RequiredValues 检查 → 本条红（会拿 Item 去查采购单）。
-    [Fact]
-    public async Task S05_33_doctype不是配置值时不执行()
-    {
-        var (gateway, executor) = CreateDirectGateway();
-
-        var outcome = await gateway.ExecuteAsync(
-            QueryTool, """{"doctype":"Item","name":"AW-TEST-001"}""", CancellationToken.None);
-
-        Assert.False(outcome.Ok);
-        Assert.Equal("argument_denied", outcome.Code);
-        Assert.Equal(0, executor.QueryCallCount);
-    }
-
-    // [S05-34] 负控：把 UpdateTool 策略的 ActionKey 补上一个默认值 → 本条红（认不出来就不该放行）。
-    [Fact]
-    public async Task S05_34_认不出等于哪个动作的更新调用被拒()
-    {
-        var (gateway, executor) = CreateDirectGateway();
-
-        var outcome = await gateway.ExecuteAsync(
-            UpdateTool,
-            """{"doctype":"Purchase Order","name":"PUR-ORD-2026-00001","data":{"remarks":"x"}}""",
-            CancellationToken.None);
-
-        Assert.False(outcome.Ok);
-        Assert.Equal("unrecognized_call", outcome.Code);
-        Assert.Equal(0, executor.CallCount);
-    }
-
-    // [S05-35] 负控：让 ActionToolGateway 直接执行工具（跳过 ActionRunService）→ 本条红（审计与闸都没了）。
-    [Fact]
-    public async Task S05_35_查单直连走完四道闸才执行()
-    {
-        var (gateway, executor) = CreateDirectGateway();
-
-        var outcome = await gateway.ExecuteAsync(
-            QueryTool, """{"doctype":"Purchase Order","name":"PUR-ORD-2026-00001"}""",
-            CancellationToken.None);
-
-        Assert.True(outcome.Ok);
-        Assert.Equal(1, executor.QueryCallCount);
-        // 回填给模型的载荷里写着这次被当成哪个动作 —— 模型才知道自己刚做的是查询。
-        Assert.Contains("\"action\":\"erp.query\"", outcome.Payload);
-    }
-
-    // [S05-36] 负控：把主体检查去掉（用空串继续）→ 本条红（等于允许匿名主体提动作）。
-    [Fact]
-    public async Task S05_36_取不到主体时拒绝且不执行()
-    {
-        var (gateway, executor) = CreateDirectGateway(subject: null);
-
-        var outcome = await gateway.ExecuteAsync(
-            QueryTool, """{"doctype":"Purchase Order","name":"PUR-ORD-2026-00001"}""",
-            CancellationToken.None);
-
-        Assert.False(outcome.Ok);
-        Assert.Equal("subject_missing", outcome.Code);
-        Assert.Equal(0, executor.QueryCallCount);
-    }
-
-    // [S05-37] 负控：删掉 UpdateTool 的 Sensitive 条目 → 本条红（data.docstatus=1 会被认成「认不出来」）。
-    [Fact]
-    public async Task S05_37_写入状态字段时被归一成提交而不是普通更新()
-    {
-        var (gateway, _) = CreateDirectGateway();
-
-        var outcome = await gateway.ExecuteAsync(
-            UpdateTool,
-            """{"doctype":"Purchase Order","name":"PUR-ORD-2026-00001","data":{"docstatus":1}}""",
-            CancellationToken.None);
-
-        // 主张：这次调用在闸里被当成了 erp.submit（而不是「一次普通更新」）。
-        Assert.Contains("\"action\":\"erp.submit\"", outcome.Payload);
-
-        // 附带事实（不作为期望）：它随后被业务规则以「金额缺失」拒掉 —— 直连时模型不带 amount。
-        // 该缺陷登记在头部空白 3，不在本组解决。
-        Assert.False(outcome.Ok);
-    }
-
-    // ═══════════════════════════════════════════════════════════════
     // 装配
     // ═══════════════════════════════════════════════════════════════
 
-    private const string QueryTool = "mcp__erpnext__frappe_get_doc";
-    private const string UpdateTool = "mcp__erpnext__frappe_update_doc";
 
     private sealed class StubSubjects(string? subject) : IActionSubjectProvider
     {
@@ -893,20 +787,4 @@ public sealed class S05ContractTests
         public string? CurrentSubject => subject;
     }
 
-    // ── 直连工具入口的装配 ──────────────────────────────────────────
-
-    private static (ActionToolGateway Gateway, CountingExecutor Executor) CreateDirectGateway(
-        string? subject = "wang")
-    {
-        var executor = new CountingExecutor();
-        var set = new ErpActionSet(executor);
-        var (service, _, _) = TestHarness.Create(set);
-        var gateway = new ActionToolGateway(service, new GatewaySubject(subject), ErpToolPolicies.All());
-        return (gateway, executor);
-    }
-
-    private sealed class GatewaySubject(string? subject) : IActionSubjectProvider
-    {
-        public string? CurrentSubject => subject;
-    }
 }

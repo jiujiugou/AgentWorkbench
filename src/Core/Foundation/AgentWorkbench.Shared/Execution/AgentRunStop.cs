@@ -37,7 +37,7 @@ public sealed record AgentRunStop(
 /// <remarks>
 /// 判「重复调用指纹」「token 用量」这类信息只有在环内、工具调用发出时才有；
 /// 而执行控制模块又不允许反向依赖工具调用或模型运行时。于是把契约放在这里：
-/// 执行控制（AgentLoop）实现，工具调用（ToolExecution）在环内调用，编排层（AgentHarness）装配。
+/// 执行控制（ExecutionControl）实现，工具调用（ToolExecution）在环内调用，编排层（AgentHarness）装配。
 /// </remarks>
 public interface IAgentRunGuard
 {

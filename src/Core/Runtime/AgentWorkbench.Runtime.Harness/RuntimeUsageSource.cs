@@ -4,7 +4,7 @@ using AgentWorkbench.Shared;
 namespace AgentWorkbench.Runtime.Harness;
 
 /// <summary>
-/// 把模型运行时的用量计数器接到执行控制守卫上：AgentLoop 要判 token 预算，但不能依赖 ModelRuntime，
+/// 把模型运行时的用量计数器接到执行控制守卫上：ExecutionControl 要判 token 预算，但不能依赖 ModelRuntime，
 /// 所以由编排层（本层同时依赖两者）把读数转成 <see cref="IAgentUsageSource"/>。
 /// </summary>
 /// <remarks>

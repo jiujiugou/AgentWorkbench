@@ -80,7 +80,7 @@ public sealed class AgentHarnessService : IAgentHarness
     private readonly ISessionRunGate _gate;         // 会话互斥：同一 sessionId 同时只允许一个 run
     private readonly IOptions<MemoryOptions> _memoryOptions;   // 记忆开关（会话是否启用）
     private readonly IMemoryScopeAccessor _memoryScope;        // 记忆作用域：隔离并发 run 的 remember/recall
-    private readonly IAgentLoop _loop;              // 执行控制：迭代预算、run 级超时、用量守卫
+    private readonly IAgentExecutionControl _loop;              // 执行控制：迭代预算、run 级超时、用量守卫
     private readonly IExecutionTraceWriter _traces;  // 可观测：只写口——内核不读自己的记录做决策
     private readonly ILoggerFactory _loggerFactory; // 传给 ChatClientAgent 构造日志
     private readonly IServiceProvider _services;    // 传给 ChatClientAgent 以解析其内部依赖
@@ -96,7 +96,7 @@ public sealed class AgentHarnessService : IAgentHarness
         ISessionRunGate gate,
         IOptions<MemoryOptions> memoryOptions,
         IMemoryScopeAccessor memoryScope,
-        IAgentLoop loop,
+        IAgentExecutionControl loop,
         IExecutionTraceWriter traces,
         ILoggerFactory loggerFactory,
         IServiceProvider services,
@@ -124,7 +124,7 @@ public sealed class AgentHarnessService : IAgentHarness
         // 能否跑起来完全取决于「有没有可解析的模型端点」，其余能力位只是配置开关的实际取值。
         var llm = await _factory.ResolveAsync(null, cancellationToken) is not null;
         return new HarnessCapabilities(
-            Loop: true,
+            ExecutionControl: true,
             Llm: llm,
             Context: _context.Options.Enabled,
             Memory: _memoryOptions.Value.SessionEnabled,
@@ -252,7 +252,7 @@ public sealed class AgentHarnessService : IAgentHarness
     /// <para>
     /// 四个 catch 的<b>顺序不能动</b>：<see cref="AgentRunTimeoutException"/> 继承自 <see cref="TimeoutException"/>，
     /// 若被基类先接住，归类码会从 <c>run_timeout</c> 退化成 <c>model_timeout</c>——两个含义完全不同的故障被记成一类。
-    /// 第一个 catch 的 <c>when</c> 过滤器同样必要：<c>AgentLoop</c> 已把自己的超时转成前者，走到这里的一定是调用方真的取消。
+    /// 第一个 catch 的 <c>when</c> 过滤器同样必要：<c>ExecutionControl</c> 已把自己的超时转成前者，走到这里的一定是调用方真的取消。
     /// </para>
     /// </remarks>
     private async Task<RunOutcome> RunCoreAsync(
@@ -293,7 +293,7 @@ public sealed class AgentHarnessService : IAgentHarness
         }
         catch (AgentRunTimeoutException ex)
         {
-            // run 级墙钟预算（AgentLoop 施加）先于单次请求超时被识别，两者归类码不同。
+            // run 级墙钟预算（ExecutionControl 施加）先于单次请求超时被识别，两者归类码不同。
             await PersistQuietlyAsync(
                 sessionId, AgentRunStatus.Timeout, AgentRunCode.RunTimeout, ex.Message,
                 run?.Endpoint.Model, StopAndRead(run), run?.Execution.Traces ?? [],
@@ -336,7 +336,7 @@ public sealed class AgentHarnessService : IAgentHarness
     private async Task<RunOutput> RunBlockingBodyAsync(
         PreparedRun run, IRunSink sink, CancellationToken cancellationToken)
     {
-        // 执行控制：run 级超时由 AgentLoop 施加（超时抛 AgentRunTimeoutException）
+        // 执行控制：run 级超时由 ExecutionControl 施加（超时抛 AgentRunTimeoutException）
         var response = await _loop.ExecuteAsync(
             token => run.Agent.RunAsync(run.Messages, run.Session, RunOptions(), token),
             cancellationToken);
@@ -359,7 +359,7 @@ public sealed class AgentHarnessService : IAgentHarness
         long? inputTokens = null;
         long? outputTokens = null;
 
-        // run 级超时同样施加：把整段流式 drain 包进 AgentLoop 的墙钟预算（超时抛 AgentRunTimeoutException）。
+        // run 级超时同样施加：把整段流式 drain 包进 ExecutionControl 的墙钟预算（超时抛 AgentRunTimeoutException）。
         await _loop.ExecuteAsync(
             async token =>
             {
@@ -487,7 +487,7 @@ public sealed class AgentHarnessService : IAgentHarness
         var endpoint = await _factory.ResolveAsync(null, cancellationToken)
             ?? throw new HarnessModelNotConfiguredException();
 
-        // 模型请求统一走 ModelRuntime（超时 / 重试 / 用量），工具环预算来自 AgentLoop，工具授权已由 ToolCatalog 按白名单裁剪
+        // 模型请求统一走 ModelRuntime（超时 / 重试 / 用量），工具环预算来自 ExecutionControl，工具授权已由 ToolCatalog 按白名单裁剪
         var chatClient = _runtime.Wrap(_factory.GetClient(endpoint));
 
         // 执行控制守卫：一次 run 一个实例，管住「卡在同一个调用上」与「把 token 烧光」；

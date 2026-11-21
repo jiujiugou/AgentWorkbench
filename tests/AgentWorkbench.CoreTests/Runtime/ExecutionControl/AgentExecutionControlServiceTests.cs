@@ -9,16 +9,16 @@ namespace AgentWorkbench.CoreTests.Runtime.ExecutionControl;
 
 /// <summary>
 /// F1.2 / F1.5 / F1.6：run 级墙钟、取消与超时的区分、预算属性透出。
-/// AgentLoopService 只依赖 IOptions + ILogger，可直接实例化。
+/// AgentExecutionControlService 只依赖 IOptions + ILogger，可直接实例化。
 /// </summary>
-public sealed class AgentLoopServiceTests
+public sealed class AgentExecutionControlServiceTests
 {
-    private static AgentLoopService Loop(int timeoutSeconds = 1, int maxIterations = 6)
-        => new(Options.Create(new AgentLoopOptions
+    private static AgentExecutionControlService Loop(int timeoutSeconds = 1, int maxIterations = 6)
+        => new(Options.Create(new AgentExecutionControlOptions
         {
             TimeoutSeconds = timeoutSeconds,
             MaxIterations = maxIterations
-        }), NullLogger<AgentLoopService>.Instance);
+        }), NullLogger<AgentExecutionControlService>.Instance);
 
     [Fact]
     public async Task 整轮超时_抛_AgentRunTimeoutException()

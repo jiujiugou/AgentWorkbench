@@ -28,7 +28,7 @@ public sealed class 循环驱动装配
     [Fact]
     public void 装配决定由Harness一处产出_预算来自Loop()
     {
-        var loop = new Mock<IAgentLoop>();
+        var loop = new Mock<IAgentExecutionControl>();
         loop.Setup(x => x.MaxIterations).Returns(6);
         var guard = new Mock<IAgentRunGuard>().Object;
 
@@ -44,7 +44,7 @@ public sealed class 循环驱动装配
     [Fact]
     public void 四个选项真的落到框架的函数调用环上()
     {
-        var loop = new Mock<IAgentLoop>();
+        var loop = new Mock<IAgentExecutionControl>();
         loop.Setup(x => x.MaxIterations).Returns(6);
         var limits = LoopAssembly.CreateLimits(loop.Object, new Mock<IAgentRunGuard>().Object, null, null);
 

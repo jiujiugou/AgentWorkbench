@@ -29,7 +29,7 @@ public static class InputIdentity
     /// <summary>入口拒绝时返回给调用方的归类码。</summary>
     public const string MissingCode = "client_message_id_required";
 
-    /// <summary>三条入口共用的判空规则；空白串也算缺。</summary>
+    /// <summary>两条入口共用的判空规则；空白串也算缺。</summary>
     public static bool IsPresent(string? value) => !string.IsNullOrWhiteSpace(value);
 
     /// <summary>

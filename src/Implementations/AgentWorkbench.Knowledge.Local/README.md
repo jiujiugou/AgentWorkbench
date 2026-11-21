@@ -1,7 +1,9 @@
 # 本地知识引擎（Knowledge.Local）
 
+- **适用侧**：底座 ｜ **寿命**：现状（就近维护） ｜ **最后校准**：2026-11-21
+
 > 校准基线：`b4d5f2c`。本文只写判断与边界；接口、成员、默认值一律以代码为准，
-> 用 `find src/Core/Knowledge/AgentWorkbench.Knowledge.Local -name '*.cs'` 取清单。
+> 用 `find src/Implementations/AgentWorkbench.Knowledge.Local -name '*.cs'` 取清单。
 
 ## 这一格是什么
 
@@ -35,14 +37,14 @@
 
 ## 已知边界（不是完成态）
 
-Python server 目前只跑 bigram 全文路、返回 `textScore`，**没有向量距离**；
+Python server 只跑 bigram 全文路、返回 `textScore`，**没有向量距离**；
 `SufficiencyGate` 因此实际只命中 `no_candidates`，其余判定落在 `undetermined` / `no_vector`，
 不会触发否决。等 Python 侧提供距离，C# 判定代码不用改就会恢复。
 Py 仓 `freshness.py` 那条「索引过期不许用空结果冒充没有资料」也还没接。
 
 删掉 `KnowledgeController` 之后，「先清旧向量再重建索引」失去唯一入口：
 `DocumentsController` 的 reparse 只重新入队、不清旧向量，换 embedding 模型后会留孤儿向量。
-这条与上一节第 4 条同源，归 M2 之前处理。
+这条与上一节第 4 条同源，属检索侧缺口，不是本模块待办。
 
 ## 怎么验
 

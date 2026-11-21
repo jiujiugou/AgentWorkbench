@@ -21,7 +21,7 @@ public static class AgentRunCode
     /// <summary>跑满迭代预算被强制收口。</summary>
     public const string IterationLimit = "iteration_limit";
 
-    /// <summary>整轮超出 run 级墙钟预算（AgentLoop 施加）。</summary>
+    /// <summary>整轮超出 run 级墙钟预算（ExecutionControl 施加）。</summary>
     public const string RunTimeout = "run_timeout";
 
     /// <summary>单次模型请求超时（ModelRuntime 施加）。</summary>

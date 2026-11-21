@@ -3,12 +3,12 @@ using Microsoft.Extensions.Options;
 namespace AgentWorkbench.Runtime.ExecutionControl;
 
 /// <inheritdoc />
-public sealed class AgentLoopService : IAgentLoop
+public sealed class AgentExecutionControlService : IAgentExecutionControl
 {
-    private readonly AgentLoopOptions _options;
-    private readonly ILogger<AgentLoopService> _logger;
+    private readonly AgentExecutionControlOptions _options;
+    private readonly ILogger<AgentExecutionControlService> _logger;
 
-    public AgentLoopService(IOptions<AgentLoopOptions> options, ILogger<AgentLoopService> logger)
+    public AgentExecutionControlService(IOptions<AgentExecutionControlOptions> options, ILogger<AgentExecutionControlService> logger)
     {
         _options = options.Value;
         _logger = logger;

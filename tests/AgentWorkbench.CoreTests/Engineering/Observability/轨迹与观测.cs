@@ -181,7 +181,7 @@ public sealed class 轨迹与观测
         IReadOnlyList<AITool>? tools = null,
         ISessionStore? sessions = null,
         MemoryOptions? memory = null,
-        AgentLoopOptions? loopOptions = null,
+        AgentExecutionControlOptions? loopOptions = null,
         int maxResultChars = 400,
         IChatClient? clientSeenByHarness = null)
     {
@@ -210,9 +210,9 @@ public sealed class 轨迹与观测
             new SessionRunGate(),
             Options.Create(memoryOptions),
             new AsyncLocalMemoryScopeAccessor(),
-            new AgentLoopService(
-                Options.Create(loopOptions ?? new AgentLoopOptions { TimeoutSeconds = 5 }),
-                NullLogger<AgentLoopService>.Instance),
+            new AgentExecutionControlService(
+                Options.Create(loopOptions ?? new AgentExecutionControlOptions { TimeoutSeconds = 5 }),
+                NullLogger<AgentExecutionControlService>.Instance),
             traces,
             NullLoggerFactory.Instance,
             services,
@@ -259,7 +259,7 @@ public sealed class 轨迹与观测
     [Fact]
     public void 循环终止的记录里能读出观测次数与阈值()
     {
-        var guard = new AgentRunGuard(new AgentLoopOptions
+        var guard = new AgentRunGuard(new AgentExecutionControlOptions
         {
             MaxIterations = 6,
             MaxRepeatedToolCalls = 3,
@@ -283,7 +283,7 @@ public sealed class 轨迹与观测
     [Fact]
     public void 跑满迭代的记录里能读出轮次与预算()
     {
-        var guard = new AgentRunGuard(new AgentLoopOptions
+        var guard = new AgentRunGuard(new AgentExecutionControlOptions
         {
             MaxIterations = 2,
             MaxRepeatedToolCalls = 0
@@ -309,7 +309,7 @@ public sealed class 轨迹与观测
     {
         var usage = new FakeUsage(new AgentUsage(0, 0, 0));
         var guard = new AgentRunGuard(
-            new AgentLoopOptions { MaxIterations = 6, MaxRepeatedToolCalls = 0, MaxTokensPerRun = 10 },
+            new AgentExecutionControlOptions { MaxIterations = 6, MaxRepeatedToolCalls = 0, MaxTokensPerRun = 10 },
             usage);
 
         // 第一次 8，未超上限：不该停。
@@ -409,7 +409,7 @@ public sealed class 轨迹与观测
     {
         var llm = new ScriptedChatClient().Delay(TimeSpan.FromSeconds(3), "太慢了");
         var (harness, traces) = Build(
-            llm, loopOptions: new AgentLoopOptions { TimeoutSeconds = 1 });
+            llm, loopOptions: new AgentExecutionControlOptions { TimeoutSeconds = 1 });
 
         await Assert.ThrowsAsync<AgentRunTimeoutException>(
             () => harness.RunAsync(new HarnessRunRequest("t6", "你好")));

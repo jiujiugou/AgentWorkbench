@@ -5,7 +5,7 @@ namespace AgentWorkbench.Runtime.ExecutionControl;
 /// 迭代循环本体由 Microsoft.Extensions.AI 的 FunctionInvokingChatClient 承担，
 /// 本模块负责「允许循环多久、允许循环几次」，并在超时后抛出统一的 <see cref="TimeoutException"/>。
 /// </summary>
-public interface IAgentLoop
+public interface IAgentExecutionControl
 {
     /// <summary>工具环上限（传给执行层作为 MaximumIterations）。</summary>
     int MaxIterations { get; }

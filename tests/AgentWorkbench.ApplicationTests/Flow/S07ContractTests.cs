@@ -22,7 +22,7 @@ namespace AgentWorkbench.ApplicationTests.Flow;
 ///
 /// <b>边界</b>：起于「这次动作需要人批」这一判断，止于「审批有了结论并交给 S08」。
 /// <b>两种形态都在这一个格里</b>：01–08 是挂起式（<c>SubmitDeferredAsync</c>，等人来 approve），
-/// 09–10 是当场问式（<c>RunAsync</c>，模型直连工具时用，问不到人即拒）。
+/// 09–10 是当场问式（<c>RunAsync</c>，同步审批入口，问不到人即拒）。
 /// 四栏覆盖：①该审批的没审批就执行 → 01、08、09；②审批过了请求已被改动 → 04（只锁现状，见下）；
 /// ③审批卡住不返回 → 02；「交给下一格什么」→ 04、05、10；「不许留下什么」→ 02、03、06、07、09。
 /// <b>不归本格</b>：执行本身（S08）。
@@ -216,7 +216,7 @@ public sealed class S07ContractTests
         Assert.Single(await store.ListCheckpointsAsync(ActionRunStates.PendingApproval, CancellationToken.None));
     }
 
-    // [S07-09] 当场问式审批（<c>RunAsync</c>，模型直连工具走这条）：问不到人 / 被拒时，
+    // [S07-09] 当场问式审批（<c>RunAsync</c>，同步审批入口）：问不到人 / 被拒时，
     // 必须是明确终态、执行体零调用、审批门确实被问过一次。
     // 负控：RunAsync 不看 decision.Approved 直接执行 → 本条红。
     // 边界：不断言「待办队列被清空」—— 当前拒绝分支没收口，见头部登记 4。

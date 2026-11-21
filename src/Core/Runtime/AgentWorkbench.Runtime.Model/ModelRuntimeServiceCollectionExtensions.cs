@@ -5,7 +5,7 @@ namespace AgentWorkbench.Runtime.Model;
 /// <summary>ModelRuntime 模块（模型交互）：统一模型调用的超时 / 重试 / 并发 / 用量策略。</summary>
 /// <remarks>
 /// 模块职责见同目录 <c>README.md</c>：只负责「一次调用怎么被约束和度量」，
-/// 端点选择归 Providers，run 级预算归 AgentLoop。
+/// 端点选择归 Providers，run 级预算归 ExecutionControl。
 /// </remarks>
 public static class ModelRuntimeServiceCollectionExtensions
 {

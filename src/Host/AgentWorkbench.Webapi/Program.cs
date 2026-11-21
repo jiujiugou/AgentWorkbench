@@ -47,7 +47,7 @@ builder.Services.AddNitroDocuments(builder.Configuration);
 builder.Services.AddNitroMemory(builder.Configuration);
 builder.Services.AddNitroMemoryPersistence(builder.Configuration);
 builder.Services.AddNitroObservability();
-builder.Services.AddNitroAgentLoop(builder.Configuration);
+builder.Services.AddNitroExecutionControl(builder.Configuration);
 builder.Services.AddNitroAgentHarness(builder.Configuration);
 // M1 受控动作链：四道校验 → 挂起审批 → 执行 → 审计。换域只改 Actions:ActionSet。
 builder.Services.AddNitroActions(builder.Configuration);

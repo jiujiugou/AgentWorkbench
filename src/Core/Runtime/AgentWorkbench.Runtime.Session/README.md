@@ -1,5 +1,7 @@
 # 会话与记忆模块（Runtime.Session）
 
+- **适用侧**：底座 ｜ **寿命**：现状（就近维护） ｜ **最后校准**：2026-11-21
+
 这个模块干三件事：**让同一个 `sessionId` 在一段时间内复用同一个会话对象并把它存得住**、
 **给长期记忆一个载体（存 / 查 / 忘）**、**保证同一个 `sessionId` 同时只有一个 run 在推进**。
 
@@ -14,7 +16,7 @@
 
 本模块拥有的是**契约与不变量**（`ISessionStore`、`aw.session_id`、`ISessionRunGate`），不是实现：
 落库在 `Memory.Persistence`，注入形态与预算在 `Runtime.Context`，界面显示什么在 `Host`。
-本格不含业务语义，换动作域时 `src/Core` 一行不改。三段完整归属与判据见 `docs/core/runtime.md` §7.1。
+本格不含业务语义，换动作域时 `src/Core` 一行不改。三段完整归属与判据见 `docs/core/轨迹与观测.md`。
 
 ---
 
@@ -51,7 +53,7 @@
   和「这条会话正在回答」混在一起。
 
 - 进程崩溃时锁随进程消失，**不会留僵尸会话**；这是它相对数据库租约的唯一优势，也是它只在单进程成立的代价。
-  跨进程 / 跨机要 L2（`session_leases` + `fence`），见 `docs/core/runtime.md` §7.6。
+  跨进程 / 跨机要 L2（`session_leases` + `fence`），见 `docs/core/状态与记忆.md`。
 
 - `AgentHub.Generations`（键是 `ConnectionId`）是另一道闸，**只做连接级防抖、保 `Stop` 可用**，
   不承担会话互斥；两者不重叠也不能互相替代。
@@ -70,7 +72,7 @@
 `await using` 包住整个方法体，不可能有两个 run 并发写同一 `sessionId`。
 所以**加新 provider 往 StateBag 放实质状态不会触发 lost update**——那只放大后果，不是触发条件。
 剩余风险只有两个：L2 未实现（跨进程）、以及未来绕过 Harness 直接写 StateBag 的后台任务，
-都归 `docs/core/runtime.md` §7.6 管，不是本模块的独立待办。
+都归 `docs/core/状态与记忆.md` 管，不是本模块的独立待办。
 **别为了消除覆盖机制就顺手关掉 `SessionEnabled`**，理由见 §7.3 第 7 条。
 
 `sessionId` 的传递不走构造函数：Harness 在每次 run 前写
@@ -154,12 +156,12 @@ MAF 的 `AgentSession` 本身不带 id，这个键是唯一来源。
 | 长期记忆自动召回 | 记忆只在模型主动调 `recall` 时生效 | 只有显式工具（阶段 2） | Harness 取候选 → Context 注入（阶段 3） |
 | 记忆的语义召回 | 关键词召回命中率低 | `LIKE` 关键词 | 需先定 FTS5 / 向量口径与评测指标 |
 | 历史无限长 | 上下文窗口撑爆 | 落库存的是**完整**历史，不裁剪 | 裁剪/压缩归 `Context`，不在本模块做 |
-| 并发同 `sessionId` 的 run | ~~两个 run 共用一个会话，消息可能串~~ **已解决（单进程）** | 2026-11-09：历史改逐条追加落 `chat_messages`（解决「丢」）；`ISessionRunGate` 按 sessionId 互斥、抢不到回 `session_busy`（解决「乱」）。`agent_sessions` 仍整份覆盖，但只剩非历史状态 | 跨进程 / 跨机未覆盖，需 L2 数据库租约（`session_leases` + fence）；见 `docs/core/runtime.md` §7.6 |
+| 并发同 `sessionId` 的 run | ~~两个 run 共用一个会话，消息可能串~~ **已解决（单进程）** | 2026-11-09：历史改逐条追加落 `chat_messages`（解决「丢」）；`ISessionRunGate` 按 sessionId 互斥、抢不到回 `session_busy`（解决「乱」）。`agent_sessions` 仍整份覆盖，但只剩非历史状态 | 跨进程 / 跨机未覆盖，需 L2 数据库租约（`session_leases` + fence）；见 `docs/core/状态与记忆.md` |
 | 历史表没有保留期 | `chat_messages` 只增不减：不随会话 TTL 清理，会话删除也不连带删。磁盘无界增长，且「删了会话但模型还记着」 | 只有 `AppendAsync` / `LoadAsync`，没有 Delete | 二选一：并入 `MemoryRetentionService` 按最后活跃时间清；或定性为审计资料、永久保留 + 配额告警 |
 | 多实例共享会话/记忆 | SQLite 单文件不是分布式存储；且会话闸的锁在内存里，两个实例互相看不见 | 同机多进程可读，跨机不行；多实例下会话互斥等于没有 | 分布式后端另开模块，不改本契约；会话互斥需 L2 租约，不能靠进程内锁 |
 
 > 前三条（自动召回 / 语义召回 / 历史无限长）是**能力增强**，后三条是**缺陷或边界**。混在同一张表里
-> 排队，会让「重复下单」那种真缺陷被稀释成「六分之一待办」——分类见 `docs/core/runtime.md` §7.3。
+> 排队，会让「重复下单」那种真缺陷被稀释成「六分之一待办」——分类见 `docs/core/状态与记忆.md`。
 
 ---
 
@@ -227,7 +229,7 @@ Context 不查库、不引 `Memory`；历史只有一个策略点（Memory 存�
 - 两条路径的形状：`Runtime/HistoryDivergenceTests.cs` X1–X4——带工具的一轮条数不同、
   失败轮界面有孤问而模型零条、删除会话后模型历史仍在、注入的 system 指令不进历史。
   这四条是**事实锁定，不是功能验收，也不是缺陷清单**：X1/X4 是两个职责本来就不同的正常结果；
-  X2/X3 对应两个尚未定义的边界条件。见 `docs/core/runtime.md` §7.1 / §7.3 第 1 条。
+  X2/X3 对应两个尚未定义的边界条件。见 `docs/core/轨迹与观测.md` / `docs/core/状态与记忆.md`。
 
 - 会话互斥：`Runtime/SessionRunGateTests.cs` G1–G5——同会话第二个拿不到、不同会话可并行、
   重复释放不影响后来者、两个入口都回 `session_busy`。负控：去掉 `_released` 保护 → G3 红。

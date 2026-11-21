@@ -47,11 +47,11 @@ public static class LoopAssembly
     public const bool UseProvidedChatClientAsIs = true;
 
     /// <summary>
-    /// 产出 ④ 工具执行环的限额：迭代预算来自 ③（<see cref="IAgentLoop.MaxIterations"/>），
+    /// 产出 ④ 工具执行环的限额：迭代预算来自 ③（<see cref="IAgentExecutionControl.MaxIterations"/>），
     /// 循环驱动的四项决定来自本类。两条出口（RunAsync / StreamAsync）共用这一份。
     /// </summary>
     public static ToolExecutionLimits CreateLimits(
-        IAgentLoop loop, IAgentRunGuard guard, IToolApprover? approver, IToolResultVeto? veto)
+        IAgentExecutionControl loop, IAgentRunGuard guard, IToolApprover? approver, IToolResultVeto? veto)
         => new(
             loop.MaxIterations,
             guard,

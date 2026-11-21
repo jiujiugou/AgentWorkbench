@@ -177,7 +177,7 @@ public sealed class 循环驱动
     private static (IAgentHarness Harness, RecordingTraces Traces) Build(
         IChatClient client,
         CountingEcho tool,
-        AgentLoopOptions? loopOptions = null,
+        AgentExecutionControlOptions? loopOptions = null,
         int maxResultChars = 400)
     {
         var traces = new RecordingTraces();
@@ -203,12 +203,12 @@ public sealed class 循环驱动
             new SessionRunGate(),
             Options.Create(memory),
             new AsyncLocalMemoryScopeAccessor(),
-            new AgentLoopService(
-                Options.Create(loopOptions ?? new AgentLoopOptions
+            new AgentExecutionControlService(
+                Options.Create(loopOptions ?? new AgentExecutionControlOptions
                 {
                     MaxIterations = 6, TimeoutSeconds = 5, MaxRepeatedToolCalls = 0
                 }),
-                NullLogger<AgentLoopService>.Instance),
+                NullLogger<AgentExecutionControlService>.Instance),
             traces,
             NullLoggerFactory.Instance,
             services,
@@ -307,7 +307,7 @@ public sealed class 循环驱动
         var tool = new CountingEcho();
         var (harness, traces) = Build(
             llm, tool,
-            loopOptions: new AgentLoopOptions
+            loopOptions: new AgentExecutionControlOptions
             {
                 MaxIterations = 2, TimeoutSeconds = 5, MaxRepeatedToolCalls = 0
             });

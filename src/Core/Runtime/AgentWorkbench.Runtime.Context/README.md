@@ -1,5 +1,7 @@
 # 请求装配模块（Runtime.Context）
 
+- **适用侧**：底座 ｜ **寿命**：现状（就近维护） ｜ **最后校准**：2026-11-21
+
 - **编译单元**：`AgentWorkbench.Runtime.Context.csproj`（net10.0）
 - **依赖**：`Shared` + `Microsoft.Agents.AI` / `Microsoft.Extensions.AI` 抽象。**不反向依赖** `Runtime.Harness`、
   `Runtime.Session`、`Memory.Persistence`，也不认识工具 / 模型实现。

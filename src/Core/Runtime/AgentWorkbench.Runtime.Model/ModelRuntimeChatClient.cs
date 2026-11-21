@@ -86,7 +86,7 @@ internal sealed class ModelRuntimeChatClient : DelegatingChatClient
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 // 外部令牌没被取消却收到取消 → 只可能是本次请求超时（token 来自 CancelAfter）。
-                // 转成 TimeoutException，与 AgentLoop 的 run 级超时（AgentRunTimeoutException）区分开。
+                // 转成 TimeoutException，与 ExecutionControl 的 run 级超时（AgentRunTimeoutException）区分开。
                 throw TimedOut();
             }
             catch (Exception ex) when (attempt < _options.MaxRetries && IsTransient(ex))

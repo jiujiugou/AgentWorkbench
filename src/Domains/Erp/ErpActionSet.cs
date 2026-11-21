@@ -12,7 +12,7 @@ public sealed class ErpActionSet : IActionSet
 
     /// <summary>
     /// 无参构造：执行体指向内存假件。仅用于本地演练与判据测试，
-    /// 生产/真连路径必须由组合根传入真执行体（见 <see cref="ErpNext.ErpNextQueryAdapter"/>）。
+    /// 生产/真连路径必须由组合根传入真执行体（当前为 <c>McpActionExecutor</c>，见组合根装配）。
     /// </summary>
     public ErpActionSet() : this(null)
     {

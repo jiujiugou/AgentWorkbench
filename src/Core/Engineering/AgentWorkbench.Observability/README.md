@@ -1,22 +1,24 @@
 # 可观测与评估模块（Observability）
 
+- **适用侧**：底座 ｜ **寿命**：现状（就近维护） ｜ **最后校准**：2026-11-21
+
 这个模块只定义两样东西：**一次 run 的轨迹长什么样**（`ExecutionTrace` / `ExecutionStep`），
 以及**写出去与读回来的契约**（`IExecutionTraceStore`）。**落库不在这里。**
 
-实现住在 `Foundation/AgentWorkbench.Persistence/Traces/`（`ExecutionTraceStore` + DI 注册）——
+实现住在 `src/Implementations/AgentWorkbench.Persistence/Traces/`（`ExecutionTraceStore` + DI 注册）——
 `agent_runs` / `agent_steps` 是存储选型，属于应用侧；契约属于内核。
 所以本模块的编译期依赖只有 `Shared`（终态与归类码词表），**不引 Persistence / Domain / EF Core / DI / Logging**。
 方向是 `Persistence → Observability`，反过来就错了。
 
 它只存不算：终态和归类码怎么判定是 `AgentHarness` 的事，每一步怎么采集是 `ToolExecution` 的事，
-指标口径还没落地（当前只有模型用量计数在 `ModelRuntime`）。
+指标口径还没落地（只有模型用量计数在 `ModelRuntime`）。
 
 ### 这一格是什么（事实记录契约，不是功能开关）
 
 成功 / 失败 / 取消 / 超时**四条路径都**由 `AgentHarness` 调 `SaveAsync` 落库，只存不算。
 它回答的是「这次 run 到底干了什么」，与「下一轮模型该看到什么」（模型上下文，归
 `Runtime.Session`）、「刷新页面显示什么」（界面投影，归 `Host`）是三件不同的事。
-本模块只拥有这一件，不含业务语义，换动作域不改。三段归属见 `docs/core/runtime.md` §7.1。
+本模块只拥有这一件，不含业务语义，换动作域不改。三段归属见 `docs/core/轨迹与观测.md`。
 
 ---
 
@@ -69,7 +71,7 @@ DI 注册也在持久化层（`TraceStoreServiceCollectionExtensions.AddNitroObs
 | 轨迹没有保留期 | 表只涨不落 | 无归档、无清理 | 按天数 / 条数归档或清理 |
 | 成功率、工具失败率报表未落地 | 只有原始数据、没有结论 | 用量在 `ModelRuntime`，本模块无指标 | 定指标口径（成功 run / 总 run、P95、工具失败率） |
 | 没有落库往返测试 | 字段映射改坏没人发现 | 测试里只有 Fake / Recording 替身 | 临时 SQLite 上「写 → 读」往返 + 负控（不存在的 id 返回 `null`） |
-| 「模型当时看到了什么」无数据源 | §4.1 五字段之一答不上，无法复原当时用的指令与注入片段 | `chat_messages` 只记对话往返；`agent_runs` 只有 model / iterations / latency；指令由 `Context` 在 provider 下游注入、不落库 | 在 `ExecutionTrace` 加指令快照（正文或 hash + 片段 id），按 §三 五处一起改；**不要塞进 `chat_messages`**（一轮 run 可能有多次模型调用）。见 `docs/core/runtime.md` §7.3 第 9 条 |
+| 「模型当时看到了什么」无数据源 | §4.1 五字段之一答不上，无法复原当时用的指令与注入片段 | `chat_messages` 只记对话往返；`agent_runs` 只有 model / iterations / latency；指令由 `Context` 在 provider 下游注入、不落库 | 在 `ExecutionTrace` 加指令快照（正文或 hash + 片段 id），按 §三 五处一起改；**不要塞进 `chat_messages`**（一轮 run 可能有多次模型调用）。见 `docs/core/轨迹与观测.md` |
 
 ---
 
@@ -93,7 +95,7 @@ DI 注册也在持久化层（`TraceStoreServiceCollectionExtensions.AddNitroObs
 
 判定型用例必须正例能绿、负控能红；能由脚本判定的禁止用 AI 判。
 
-目前覆盖到的：轨迹在 Harness 测试里被替身记录（`RecordingTraceStore` / `FakeTraceStore`），
+已覆盖的：轨迹在 Harness 测试里被替身记录（`RecordingTraceStore` / `FakeTraceStore`），
 验证的是「失败也调用了 `SaveAsync`、状态与归类码传对了」—— **不是**本模块的落库行为。
 
 应该补上的（需要 SQLite 测试夹具）：

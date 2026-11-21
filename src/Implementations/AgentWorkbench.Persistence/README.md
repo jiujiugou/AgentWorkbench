@@ -1,5 +1,7 @@
 # 持久化模块（Persistence）
 
+- **适用侧**：底座 ｜ **寿命**：现状（就近维护） ｜ **最后校准**：2026-11-21
+
 这个模块只干一件事：**给「要活过重启」的东西提供表、迁移和仓储**。
 
 它不做业务判断：写什么、什么时候写由各模块决定；它只保证「说写就写进去了，重启也还在」。
@@ -11,7 +13,7 @@
 ### 连接怎么开
 
 - `IDbConnectionFactory.Create()` 返回**已打开**的连接，并已设 `journal_mode=WAL` 与 `foreign_keys=ON`。
-- 数据库路径由 `StoragePaths` 从配置与运行环境解析（生效的是 `src/AgentWorkbench.Webapi/data/agentworkbench.db`，
+- 数据库路径由 `StoragePaths` 从配置与运行环境解析（生效的是 `src/Host/AgentWorkbench.Webapi/data/agentworkbench.db`，
   根目录的 `data/` 是旧的）。
 
 ### 迁移怎么跑
@@ -53,7 +55,7 @@
 `chat_messages`（模型上下文）、`agent_runs` / `agent_steps`（审计轨迹）的建表与仓储都在这里，
 但「写什么、何时写、给谁看」分别由 `Host`、`Runtime.Session` / `Memory.Persistence`、
 `Engineering/Observability` 决定。本模块只保证「说写就写进去了，重启也还在」。
-三段归属见 `docs/core/runtime.md` §7.1。
+三段归属见 `docs/core/轨迹与观测.md`。
 
 ---
 
@@ -92,7 +94,7 @@
 
 判定型用例必须正例能绿、负控能红；能由脚本判定的禁止用 AI 判。
 
-目前覆盖到的：
+已覆盖的：
 
 - 依赖方向与无环：`DomainSwapAc01Tests`（在 `ApplicationTests` 内，仍在跑）。
 

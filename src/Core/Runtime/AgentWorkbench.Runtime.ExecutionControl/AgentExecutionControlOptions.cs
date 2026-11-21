@@ -1,11 +1,11 @@
 namespace AgentWorkbench.Runtime.ExecutionControl;
 
 /// <summary>
-/// 执行控制配置（配置节 <c>Harness:Loop</c>）：整个任务的迭代预算与总耗时上限。
+/// 执行控制配置（配置节 <c>Harness:ExecutionControl</c>）：整个任务的迭代预算与总耗时上限。
 /// </summary>
-public sealed class AgentLoopOptions
+public sealed class AgentExecutionControlOptions
 {
-    public const string SectionName = "Harness:Loop";
+    public const string SectionName = "Harness:ExecutionControl";
 
     /// <summary>单次 run 的最大迭代步数（= 工具环上限）。</summary>
     public int MaxIterations { get; set; } = 6;
@@ -26,7 +26,7 @@ public sealed class AgentLoopOptions
     /// <summary>单次 run 的 token 预算（输入 + 输出）；超出即终止。<c>0</c> = 不限制。</summary>
     /// <remarks>
     /// 墙钟超时管不住「钱」：一次 run 可以在超时窗口内把 token 烧光。默认不限制，
-    /// 需要限额的宿主自己在 <c>Harness:Loop:MaxTokensPerRun</c> 里给数字。
+    /// 需要限额的宿主自己在 <c>Harness:ExecutionControl:MaxTokensPerRun</c> 里给数字。
     /// </remarks>
     public int MaxTokensPerRun { get; set; }
 }

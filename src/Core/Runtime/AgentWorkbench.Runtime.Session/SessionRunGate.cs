@@ -13,7 +13,7 @@ namespace AgentWorkbench.Runtime.Session;
 /// 用户早已忘了上下文。抢不到时调用方应把 <c>session_busy</c> 如实回给用户。
 ///
 /// <b>覆盖范围只有单进程。</b>锁在内存里，跨进程 / 跨机不成立；
-/// 多实例部署需要数据库租约（session_leases + fence），见 docs/core/runtime.md §7.6。
+/// 多实例部署需要数据库租约（session_leases + fence），见 docs/core/状态与记忆.md。
 /// 进程崩溃时锁随进程消失，不会留下僵尸会话——这是相对数据库租约的唯一优势。
 /// </summary>
 public interface ISessionRunGate

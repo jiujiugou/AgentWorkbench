@@ -63,7 +63,7 @@ public sealed class ContextComposerTests
             new SessionRunGate(),                    // ISessionRunGate
             Options.Create(new MemoryOptions()),     // IOptions<MemoryOptions>
             null!,                                    // IMemoryScopeAccessor
-            null!,                                    // IAgentLoop
+            null!,                                    // IAgentExecutionControl
             null!,                                    // IExecutionTraceStore
             null!,                                    // ILoggerFactory
             null!,                                    // IServiceProvider

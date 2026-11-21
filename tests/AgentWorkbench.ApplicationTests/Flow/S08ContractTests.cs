@@ -16,7 +16,7 @@ namespace AgentWorkbench.ApplicationTests.Flow;
 /// 且散在各自主题下：<c>ActionRunSuccessTests.S3</c>（同 request_id 一张单、终态回放、
 /// ClearResults 后幂等领取）、<c>S4</c>（超时只查证不重放写动作）、
 /// <c>SqliteActionStoreTests.S2/S3/S6</c>（并发领取、回放、并发只一次副作用）、
-/// <c>ErpNextQueryAdapterTests.T11</c>、<c>GiteaConnectorTests.G12</c>（查证目标是只读能力）。
+/// <c>GiteaConnectorTests.G12</c>（查证目标是只读能力）。
 /// 搬走会拆散原组，重复抄一遍也没有增量。本组只补四栏里<b>确实还没有</b>的那几处。
 ///
 /// <b>边界</b>：起于幂等领取成功，止于终态落库交给 S09。四栏覆盖：

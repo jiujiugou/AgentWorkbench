@@ -15,7 +15,7 @@ public sealed class AgentRunGuardTests
     public void 跑满迭代_必须记_iteration_limit()
     {
         // MaxIterations = 2 → 最后一个允许的工具轮次是 1。
-        var guard = new AgentRunGuard(new AgentLoopOptions { MaxIterations = 2 });
+        var guard = new AgentRunGuard(new AgentExecutionControlOptions { MaxIterations = 2 });
         guard.InspectToolCall(new ToolCallObservation(1, "search_knowledge", "{}"));
 
         var stop = guard.InspectCompletion();
@@ -30,7 +30,7 @@ public sealed class AgentRunGuardTests
     public void 未跑满就收口_不得判为截断()
     {
         // 对照组：没有它，上面那条即便「永远返回 stop」也照样绿。
-        var guard = new AgentRunGuard(new AgentLoopOptions { MaxIterations = 6 });
+        var guard = new AgentRunGuard(new AgentExecutionControlOptions { MaxIterations = 6 });
         guard.InspectToolCall(new ToolCallObservation(0, "search_knowledge", "{}"));
 
         Assert.Null(guard.InspectCompletion());
@@ -40,7 +40,7 @@ public sealed class AgentRunGuardTests
     [Fact]
     public void 一次工具都没调用_谈不上一轮跑满()
     {
-        var guard = new AgentRunGuard(new AgentLoopOptions { MaxIterations = 1 });
+        var guard = new AgentRunGuard(new AgentExecutionControlOptions { MaxIterations = 1 });
 
         Assert.Null(guard.InspectCompletion());
         // 负控 [F1.1]：删掉 `_lastIteration < 0` 的提前返回 → 本条必须红。
@@ -49,7 +49,7 @@ public sealed class AgentRunGuardTests
     [Fact]
     public void 连续同参第三次_在发出前就停()
     {
-        var guard = new AgentRunGuard(new AgentLoopOptions { MaxRepeatedToolCalls = 3 });
+        var guard = new AgentRunGuard(new AgentExecutionControlOptions { MaxRepeatedToolCalls = 3 });
 
         Assert.Null(guard.InspectToolCall(new ToolCallObservation(0, "t", """{"q":1}""")));
         Assert.Null(guard.InspectToolCall(new ToolCallObservation(1, "t", """{"q":1}""")));
@@ -64,7 +64,7 @@ public sealed class AgentRunGuardTests
     [Fact]
     public void 中间夹了别的调用_重复计数重来()
     {
-        var guard = new AgentRunGuard(new AgentLoopOptions { MaxRepeatedToolCalls = 3 });
+        var guard = new AgentRunGuard(new AgentExecutionControlOptions { MaxRepeatedToolCalls = 3 });
 
         guard.InspectToolCall(new ToolCallObservation(0, "a", "{}"));
         guard.InspectToolCall(new ToolCallObservation(1, "a", "{}"));
@@ -77,7 +77,7 @@ public sealed class AgentRunGuardTests
     [Fact]
     public void 重复检测关闭时不判循环()
     {
-        var guard = new AgentRunGuard(new AgentLoopOptions { MaxRepeatedToolCalls = 0 });
+        var guard = new AgentRunGuard(new AgentExecutionControlOptions { MaxRepeatedToolCalls = 0 });
 
         for (var i = 0; i < 5; i++)
             Assert.Null(guard.InspectToolCall(new ToolCallObservation(i, "t", "{}")));
@@ -93,7 +93,7 @@ public sealed class AgentRunGuardTests
             .Returns(new AgentUsage(1, 60, 60));   // 判定时读数：本 run 已用 120
 
         var guard = new AgentRunGuard(
-            new AgentLoopOptions { MaxTokensPerRun = 100 }, usage.Object);
+            new AgentExecutionControlOptions { MaxTokensPerRun = 100 }, usage.Object);
 
         var stop = guard.InspectToolCall(new ToolCallObservation(0, "t", "{}"));
 
@@ -110,7 +110,7 @@ public sealed class AgentRunGuardTests
             .Returns(new AgentUsage(0, 0, 0))
             .Returns(new AgentUsage(1, 9999, 9999));
 
-        var guard = new AgentRunGuard(new AgentLoopOptions { MaxTokensPerRun = 0 }, usage.Object);
+        var guard = new AgentRunGuard(new AgentExecutionControlOptions { MaxTokensPerRun = 0 }, usage.Object);
 
         Assert.Null(guard.InspectToolCall(new ToolCallObservation(0, "t", "{}")));
         // 负控 [F1.4]：去掉 `<= 0` 的关闭判断 → 本条必须红。

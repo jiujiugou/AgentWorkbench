@@ -100,7 +100,7 @@ public sealed class DocRoutingGateTests
             | --- | --- |
             | 工具调度 | docs/core/循环驱动功能查询.md |
             普通正文行 | 不是表格 | 不解析
-            | 回填 | docs/README.md |
+            | 回填 | docs/验收映射.md |
             """;
         var entries = ParseRoutingTable(table);
         // 只有以 "| " 开头的行参与；src/ 与 docs/ 路径都收（查询文档已迁 docs/）

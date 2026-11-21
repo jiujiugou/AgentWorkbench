@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 
 namespace AgentWorkbench.Runtime.Tools;
 
-/// <summary>一次执行的工具预算（由执行控制 AgentLoop 决定）。</summary>
+/// <summary>一次执行的工具预算（由执行控制 ExecutionControl 决定）。</summary>
 /// <param name="MaxIterations">工具环上限（落到 MEA 的 <c>MaximumIterationsPerRequest</c>）。</param>
 /// <param name="Guard">
 /// 执行控制守卫（重复调用 / token 预算）；为 <c>null</c> 时环内不做任何提前终止判定。
@@ -209,28 +209,6 @@ public sealed class ToolExecutionPipeline : IToolExecutionPipeline
                 // 干净收口：这一轮不再回问模型（抛异常会被框架当成「工具失败」喂回模型）。
                 context.Terminate = true;
                 return null;
-            }
-
-            // 外部工具的动作闸：直连的工具调用在这里被归一成业务动作，交给唯一那份四道闸裁决。
-            // 放在守卫之后（守卫管「整轮要不要停」）、参数校验之前（那个校验按工具自己的 schema，
-            // 而走闸时该由动作的 Schema 判）。没登记的 mcp 工具不走这里 —— 它们由准入层挡在目录外。
-            var gateway = _services.GetService(typeof(IToolCallGateway)) as IToolCallGateway;
-            if (gateway is not null && gateway.Handles(context.Function.Name))
-            {
-                ToolCallOutcome outcome;
-                try
-                {
-                    outcome = await gateway.ExecuteAsync(context.Function.Name, arguments, token);
-                }
-                catch (OperationCanceledException) when (token.IsCancellationRequested)
-                {
-                    throw;
-                }
-
-                run.CompleteCall(index, Truncate(outcome.Payload),
-                    error: outcome.Ok ? null : outcome.Code, fullResult: outcome.Payload,
-                    truncated: IsTruncated(outcome.Payload));
-                return Truncate(outcome.Payload);
             }
 
             // 参数结构校验：按工具自己声明的形状，在执行体之前挡下缺必填 / 类型不符的调用。

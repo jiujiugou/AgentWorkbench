@@ -2,7 +2,6 @@ namespace AgentWorkbench.Webapi.Actions;
 
 using AgentWorkbench.ActionGateway;
 using AgentWorkbench.Erp;
-using AgentWorkbench.Erp.ErpNext;
 using AgentWorkbench.Gitea;
 using AgentWorkbench.LabBooking;
 using AgentWorkbench.Persistence;
@@ -27,13 +26,10 @@ public static class ActionServiceCollectionExtensions
     /// <summary>存储开关：Sqlite（默认，重启不丢）/ InMemory（仅本地演练与诊断）。</summary>
     public const string StoreConfigKey = "Actions:Store";
 
-    /// <summary>ERP 执行体的传输方式：Http（默认）或 Mcp。换手不换闸。</summary>
-    public const string ErpTransportConfigKey = "Actions:ErpTransport";
-
-    /// <summary>查 ERP 单据用的工具全名；只在 Mcp 传输下有意义。</summary>
+    /// <summary>查 ERP 单据用的工具全名。</summary>
     public const string ErpMcpToolConfigKey = "Actions:ErpNext:McpTool";
 
-    /// <summary>提交 ERP 单据用的工具全名；只在 Mcp 传输下有意义。</summary>
+    /// <summary>提交 ERP 单据用的工具全名。</summary>
     public const string ErpMcpSubmitToolConfigKey = "Actions:ErpNext:McpSubmitTool";
 
     /// <summary>
@@ -78,13 +74,6 @@ public static class ActionServiceCollectionExtensions
         services.AddSingleton<IActionSet>(sp => ResolveActionSet(configuration, sp));
         services.AddSingleton<ActionRunService>();
 
-        // 直连工具的动作闸：模型自己发起的 MCP 工具调用从这里进四道闸。
-        // 只翻译身份，判定全部在 ActionRunService —— 全仓只有一份「谁批准的」答案。
-        services.AddSingleton<IToolCallGateway>(sp => new ActionToolGateway(
-            sp.GetRequiredService<ActionRunService>(),
-            sp.GetRequiredService<IActionSubjectProvider>(),
-            ResolveToolPolicies(configuration)));
-
         // 方案第 4 步：一个「填单工具」。能力清单来自注入的 IActionSet.Specs，
         // 工具本身业务无关，换域时自动换成新域的能力描述。
         services.AddSingleton<IAgentToolProvider, ProposeActionTool>();
@@ -94,23 +83,6 @@ public static class ActionServiceCollectionExtensions
     /// <summary>默认落库；只有显式写 InMemory 才退回内存实现。</summary>
     private static bool UseSqliteStore(IConfiguration configuration)
         => !string.Equals(configuration[StoreConfigKey], "InMemory", StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// 直连工具的策略表，按当前动作域取。没有策略的域返回空表 ——
-    /// 空表意味着「所有直连工具都认不出来」，也就是一律拒，而不是一律放行。
-    /// </summary>
-    private static IReadOnlyList<ToolCallPolicy> ResolveToolPolicies(IConfiguration configuration)
-    {
-        var name = configuration[ActionSetConfigKey];
-
-        if (string.Equals(name, FakeActionSetName, StringComparison.OrdinalIgnoreCase))
-            return [];
-
-        if (string.Equals(name, GiteaActionSetName, StringComparison.OrdinalIgnoreCase))
-            return [];
-
-        return ErpToolPolicies.All();
-    }
 
     /// <summary>
     /// 换域只有这一处分支。三个域都实现同一个 <see cref="IActionSet"/>，
@@ -131,68 +103,32 @@ public static class ActionServiceCollectionExtensions
     }
 
     /// <summary>
-    /// ERP 域的执行路径选择。判据只有一处：<c>Actions:ErpNext:BaseUrl</c> 是否有值。
-    /// <list type="bullet">
-    /// <item>没配 → 内存假件（本地演练）；</item>
-    /// <item>配了 → 真执行体，<b>传输方式</b>由 <c>Actions:ErpTransport</c> 决定：</item>
-    /// </list>
-    /// <c>Http</c>（默认）走本仓的 <see cref="HttpErpTransport"/>；<c>Mcp</c> 走闸后面的
-    /// <see cref="McpActionExecutor"/> → <c>IToolInvoker</c> → 外部 MCP server。
-    /// 两者共用同一套 ActionSpec、同一套四道闸、同一套审计 —— 换的是手，不是判断。
+    /// ERP 域的执行体装配。<c>Actions:ErpNext:BaseUrl</c> 有值才走真执行体，没配就是内存假件。
+    /// 真执行体只有一条：<see cref="McpActionExecutor"/> → <c>IToolInvoker</c> → 外部 MCP server。
+    /// 判定仍在四道闸与审批，执行体只负责把动作翻译成工具调用。
     /// <para>
-    /// 配了一半（缺 key / secret / 时区）**仍然**走真执行体，由适配器以 <c>configuration_missing</c>
-    /// 明确拒绝 —— 不回落假件（M2 设计 §3.1 决定 3：最糟的不是「不能写」，而是
-    /// 「以为写了，其实写进了内存假 ERP」）。
+    /// 配了一半（缺 key / secret / 时区）仍然装配真执行体，由 MCP server 侧认证失败明确拒绝 ——
+    /// 不回落假件。最糟的不是「不能写」，而是「以为写了，其实写进了内存假 ERP」。
     /// </para>
     /// </summary>
     private static IActionSet ErpActionSetWithRealTransport(IConfiguration configuration, IServiceProvider services)
     {
-        var options = ReadErpNextOptions(configuration);
-        if (options is null)
+        if (!HasErpNextEndpoint(configuration))
             return new ErpActionSet();
 
-        if (UseMcpTransport(configuration))
-        {
-            var invoker = services.GetRequiredService<IToolInvoker>();
-            var bindings = ErpMcpBindings.All(
-                configuration[ErpMcpToolConfigKey],
-                configuration[ErpMcpSubmitToolConfigKey]);
-            return new ErpActionSet(new McpActionExecutor(invoker, bindings));
-        }
-
-        // 超时由 ErpNextOptions.EffectiveTimeout 逐次控制，HttpClient 自己不要再截一刀，
-        // 否则「超时归 Unknown」与「调用方取消」会混在一起。
-        var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
-        var transport = new HttpErpTransport(http, options);
-        return new ErpActionSet(new ErpNextQueryAdapter(transport, options));
+        var invoker = services.GetRequiredService<IToolInvoker>();
+        var bindings = ErpMcpBindings.All(
+            configuration[ErpMcpToolConfigKey],
+            configuration[ErpMcpSubmitToolConfigKey]);
+        return new ErpActionSet(new McpActionExecutor(invoker, bindings));
     }
 
-    /// <summary>ERP 执行体的传输方式：<c>Http</c>（默认）或 <c>Mcp</c>。写错名字按 Http 处理。</summary>
-    private static bool UseMcpTransport(IConfiguration configuration)
-        => string.Equals(configuration[ErpTransportConfigKey], "Mcp", StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>ERPNext 连接参数。只读 BaseUrl 判断「要不要真连」，四项齐不齐交给 IsConfigured 判。</summary>
-    private static ErpNextOptions? ReadErpNextOptions(IConfiguration configuration)
-    {
-        var baseUrl = configuration["Actions:ErpNext:BaseUrl"];
-        if (string.IsNullOrWhiteSpace(baseUrl))
-            return null;
-
-        var doctype = configuration["Actions:ErpNext:PurchaseOrderDoctype"];
-        return new ErpNextOptions(
-            BaseUrl: baseUrl.TrimEnd('/'),
-            ApiKey: configuration["Actions:ErpNext:ApiKey"],
-            ApiSecret: configuration["Actions:ErpNext:ApiSecret"],
-            TimeZoneId: configuration["Actions:ErpNext:TimeZoneId"],
-            PurchaseOrderDoctype: string.IsNullOrWhiteSpace(doctype) ? "Purchase Order" : doctype,
-            Timeout: ReadSeconds(configuration["Actions:ErpNext:TimeoutSeconds"]),
-            MaxReadRetries: int.TryParse(configuration["Actions:ErpNext:MaxReadRetries"], out var retries) && retries >= 0
-                ? retries
-                : 2);
-    }
-
-    private static TimeSpan? ReadSeconds(string? raw)
-        => int.TryParse(raw, out var seconds) && seconds > 0 ? TimeSpan.FromSeconds(seconds) : null;
+    /// <summary>
+    /// 真连判据：<c>Actions:ErpNext:BaseUrl</c> 有值才装真执行体，否则内存假件。
+    /// 凭据与站点参数由 MCP server 侧从 <c>FRAPPE_*</c> 环境变量读，C# 侧不再持有。
+    /// </summary>
+    private static bool HasErpNextEndpoint(IConfiguration configuration)
+        => !string.IsNullOrWhiteSpace(configuration["Actions:ErpNext:BaseUrl"]);
 
     /// <summary>
     /// Gitea 连接参数。缺 BaseUrl / Token 时返回 <see cref="GiteaOptions.Unconfigured"/>：

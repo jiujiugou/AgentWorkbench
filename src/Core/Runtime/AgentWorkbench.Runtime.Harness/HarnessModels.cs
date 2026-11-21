@@ -1,12 +1,12 @@
 namespace AgentWorkbench.Runtime.Harness;
 
 /// <summary>Harness 能力位（供前端/探活）。</summary>
-/// <param name="Loop">执行控制（迭代预算 / run 级超时）是否就绪。</param>
+/// <param name="ExecutionControl">执行控制（迭代预算 / run 级超时）是否就绪。</param>
 /// <param name="Llm">是否解析到可用的模型端点——为 <c>false</c> 时无法运行。</param>
 /// <param name="Context">上下文/RAG 组装是否启用。</param>
 /// <param name="Memory">会话（跨 run 记忆）是否启用。</param>
 /// <param name="Tools">当前白名单下可用的工具名。</param>
-public sealed record HarnessCapabilities(bool Loop, bool Llm, bool Context, bool Memory, IReadOnlyList<string> Tools);
+public sealed record HarnessCapabilities(bool ExecutionControl, bool Llm, bool Context, bool Memory, IReadOnlyList<string> Tools);
 
 /// <summary>一次 Harness run 请求。</summary>
 /// <param name="SessionId">会话标识；为空时本次调用使用随机会话（无跨 run 记忆）。</param>

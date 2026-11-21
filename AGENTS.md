@@ -46,7 +46,7 @@
 
 ## 3. 事实源与冻结
 
-- 文档入口与写法：`docs/README.md`（全仓唯一一处写法定义，写文档前先读 §6）。
+- 文档没有独立入口；状态位与路径引用的规矩由 `DocsHygieneTests` 的四个检查器直接执行，规则写在测试头部。
 - 正本 `docs/需求/产品目标与范围.md` **当前工作区是删除态**，`HEAD` 有全文：`git show "HEAD:docs/需求/产品目标与范围.md"`。
 - 过程记录：`docs/plans/`（每轮一份，做完归档，不删不改）。
 - ADR 0013–0018 与能力矩阵**不在本仓**，在 `D:\Code\AgentWorkbench.Py\docs\adr\` 与 `docs\架构\`；本仓 `docs/adr/` 只有 0001–0007（v1）。ADR 0013「双进程」是设计决定，**尚未实施**。
@@ -107,6 +107,6 @@ cd web && npm run build
 
 ## 9. 参考
 
-- `docs/README.md`（文档入口）、正本 `docs/需求/产品目标与范围.md`
+- 正本 `docs/需求/产品目标与范围.md`（当前删除态，取法见 §3）
 - ADR：`D:\Code\AgentWorkbench.Py\docs\adr\`、本仓 `docs/adr/README.md`
 - 历史与决策过程：`.workbuddy/memory/`（本地笔记，**不提交**）

@@ -8,7 +8,7 @@ using Xunit;
 namespace AgentWorkbench.CoreTests.Runtime.ExecutionControl;
 
 /// <summary>
-/// 七项职责的缺口补锁（现有 13 条见同目录 AgentLoopServiceTests / AgentRunGuardTests）：
+/// 七项职责的缺口补锁（现有 13 条见同目录 AgentExecutionControlServiceTests / AgentRunGuardTests）：
 /// ⑥ 终态与归类词表的完整性（配对 + 落库长度约束）、⑦ 停下来不能记成成功的正面锁定、
 /// ② 职责里「超时必须是真取消」的穿透验证（令牌链进动作，不是外层等时间后放弃）。
 ///
@@ -18,12 +18,12 @@ namespace AgentWorkbench.CoreTests.Runtime.ExecutionControl;
 /// </summary>
 public sealed class LoopGapTests
 {
-    private static AgentLoopService Loop(int timeoutSeconds = 30, int maxIterations = 6)
-        => new(Options.Create(new AgentLoopOptions
+    private static AgentExecutionControlService Loop(int timeoutSeconds = 30, int maxIterations = 6)
+        => new(Options.Create(new AgentExecutionControlOptions
         {
             TimeoutSeconds = timeoutSeconds,
             MaxIterations = maxIterations
-        }), NullLogger<AgentLoopService>.Instance);
+        }), NullLogger<AgentExecutionControlService>.Instance);
 
     // ── 职责 6 + 7：终止判定的词表纪律 ──────────────────────────────
 
@@ -31,18 +31,18 @@ public sealed class LoopGapTests
     public void 三种终止判定的状态与归类码一一配对且都不是成功()
     {
         // iteration_limit：顶到最后一轮（AgentRunGuardTests 只断言了 Status，这里加配对与「非成功」）
-        var guard1 = new AgentRunGuard(new AgentLoopOptions { MaxIterations = 2 });
+        var guard1 = new AgentRunGuard(new AgentExecutionControlOptions { MaxIterations = 2 });
         guard1.InspectToolCall(new ToolCallObservation(1, "t", "{}"));
         var s1 = guard1.InspectCompletion();
 
         // loop_detected：连续同参到阈值
-        var guard2 = new AgentRunGuard(new AgentLoopOptions { MaxRepeatedToolCalls = 2 });
+        var guard2 = new AgentRunGuard(new AgentExecutionControlOptions { MaxRepeatedToolCalls = 2 });
         guard2.InspectToolCall(new ToolCallObservation(0, "t", "{}"));
         var s2 = guard2.InspectToolCall(new ToolCallObservation(1, "t", "{}"));
 
         // budget_exceeded：读数 − 基线 超限
         var source = new FakeUsage(new AgentUsage(0, 0, 0), new AgentUsage(1, 500, 500));
-        var guard3 = new AgentRunGuard(new AgentLoopOptions { MaxTokensPerRun = 100 }, source);
+        var guard3 = new AgentRunGuard(new AgentExecutionControlOptions { MaxTokensPerRun = 100 }, source);
         var s3 = guard3.InspectToolCall(new ToolCallObservation(0, "t", "{}"));
 
         Assert.Multiple(

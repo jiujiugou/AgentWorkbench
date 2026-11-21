@@ -1,5 +1,7 @@
 # 状态与记忆的落库实现（Memory.Persistence）
 
+- **适用侧**：底座 ｜ **寿命**：现状（就近维护） ｜ **最后校准**：2026-11-21
+
 这个模块是 `Memory` 的**落库后端**：把契约模块里的 `ISessionStore` / `ILongTermMemoryStore` 换成 SQLite 版，
 让会话在进程重启后仍能续上、长期记忆有地方存。它不定义契约、不做历史策略，也不碰 prompt 组装。
 
@@ -12,9 +14,9 @@
 
 - 本模块负责：只追加、按自增 `id` 读回、单条消息序列化不丢 `functionCall`；不覆盖、不裁剪、不删除。
 - 不负责：契约（应在 `Runtime.Session`）、注入形态与预算（`Runtime.Context`）、界面显示、
-  `system` 指令（注入发生在 provider 下游，不落库——见 `docs/core/runtime.md` §7.3 第 9 条）。
+  `system` 指令（注入发生在 provider 下游，不落库——见 `docs/core/轨迹与观测.md`）。
 
-- 改动的动机、三段归属与连锁问题见 `docs/core/runtime.md` §7；**会话快照的并发写入归 §7.6 管**，
+- 改动的动机、三段归属与连锁问题见 `docs/core/状态与记忆.md`；**会话快照的并发写入同样归它管**，
   加新 provider 前先看那节的「L1 同时保护 `agent_sessions`」，不要当成独立缺陷。
 
 ---
@@ -25,7 +27,7 @@
   `SaveAsync` 用 MAF 序列化会话后 UPSERT。**快照里已经没有历史了**，只剩 StateBag 的非历史键。
   整份 Upsert 无 version，但**单进程内不构成缺陷**：`SaveAsync` 唯一调用点在 Harness 的
   `finally`，被 `ISessionRunGate` 的 `await using` 包住，同一 `sessionId` 不会有两个写入者。
-  剩余风险（L2 未实现的跨进程、未来绕过 Harness 的后台写入者）归 `docs/core/runtime.md` §7.6；
+  剩余风险（L2 未实现的跨进程、未来绕过 Harness 的后台写入者）归 `docs/core/状态与记忆.md`；
   真要修到多实例，是在**这里**给 `SaveAsync` 加 `version` + `UPDATE ... WHERE version=?`（CAS）。
 
 - `SqliteChatHistoryProvider`：`ChatHistoryProvider` 的落库实现。每次模型调用前按 `sessionId`

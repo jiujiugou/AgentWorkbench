@@ -1,4 +1,6 @@
-# ActionGateway — M1 受控动作内核（底座侧）
+# ActionGateway — 受控动作内核（底座侧）
+
+- **适用侧**：底座 ｜ **寿命**：现状（就近维护） ｜ **最后校准**：2026-11-21
 
 - **依赖**：只引用 `Core.Ports`。**不得引用 `Domains`**，不得出现业务词（AC-02）。换域时本工程一行不改（AC-01）。
 
@@ -14,4 +16,4 @@
 
 ## 没做什么
 
-真 ERPNext、真实权限四维、真实制度检索、最小审批页、独立 `ArchitectureTests` 工程 —— 分别是 M2 / M3 / 待用户裁决（M0 报告 L2）。四条依赖门禁暂落在 `ApplicationTests/ActionGateway/DomainSwapAc01Tests.cs`。
+四维权限（谁 / 对哪个对象 / 在什么条件下 / 依据哪条制度）目前只实现了「谁」这一维，其余三维是**本域自己欠的语义**，不是底座能力缺失——底座只定义 `PermissionQuery` 的形状。制度检索、审批页属应用侧。依赖方向门禁落在 `ApplicationTests/ActionGateway/DomainSwapAc01Tests.cs`。

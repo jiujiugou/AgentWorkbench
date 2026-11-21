@@ -32,7 +32,7 @@ namespace AgentWorkbench.ApplicationTests.Flow;
 /// 是另一段装配，本组一条都没验（与 S03 登记的「Harness 看不到循环中间态」是同一处缺口）。</item>
 /// <item>token 预算用的是本地递增用量替身，不是真实模型计量（<c>ModelUsageMeter</c>）；
 /// 「读数确实来自模型」不在这里验。</item>
-/// <item>三种终止之外的墙钟超时（<c>AgentLoopService</c>）由模块级单测覆盖，本组不重复。</item>
+/// <item>三种终止之外的墙钟超时（<c>AgentExecutionControlService</c>）由模块级单测覆盖，本组不重复。</item>
 /// <item><b>实测发现</b>：工具抛异常时，MEA 回填给模型的 <c>FunctionResultContent.Result</c>
 /// <b>不含原始异常文本</b>（04 用正常工具作绿对照证明提取器有效，仍读不到 <c>boom</c>）。
 /// 因此文档怕什么③「工具失败被模型当成成功」本组只验到「系统没把失败记成成功 +
@@ -203,7 +203,7 @@ public sealed class S09ContractTests
         int maxRepeated = 3,
         int maxTokens = 0,
         IAgentUsageSource? usage = null)
-        => new(new AgentLoopOptions
+        => new(new AgentExecutionControlOptions
         {
             MaxIterations = maxIterations,
             MaxRepeatedToolCalls = maxRepeated,

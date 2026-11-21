@@ -269,7 +269,7 @@ public sealed class 评测机制
     // ── 真 Harness 闭环：跑一次、落库、读回、评测 ───────────────────
 
     private static (IAgentHarness Harness, TraceStore Traces) Build(
-        ScriptedChatClient llm, Echo tool, AgentLoopOptions? loop = null)
+        ScriptedChatClient llm, Echo tool, AgentExecutionControlOptions? loop = null)
     {
         var traces = new TraceStore();
         var memory = new MemoryOptions { SessionEnabled = false };
@@ -294,12 +294,12 @@ public sealed class 评测机制
             new SessionRunGate(),
             Options.Create(memory),
             new AsyncLocalMemoryScopeAccessor(),
-            new AgentLoopService(
-                Options.Create(loop ?? new AgentLoopOptions
+            new AgentExecutionControlService(
+                Options.Create(loop ?? new AgentExecutionControlOptions
                 {
                     MaxIterations = 6, TimeoutSeconds = 5, MaxRepeatedToolCalls = 0
                 }),
-                NullLogger<AgentLoopService>.Instance),
+                NullLogger<AgentExecutionControlService>.Instance),
             traces,
             NullLoggerFactory.Instance,
             services,
@@ -341,7 +341,7 @@ public sealed class 评测机制
             .ToolCall("Echo", new Dictionary<string, object?> { ["text"] = "same" });
         llm.RepeatLast = true;
         var tool = new Echo();
-        var (harness, traces) = Build(llm, tool, new AgentLoopOptions
+        var (harness, traces) = Build(llm, tool, new AgentExecutionControlOptions
         {
             MaxIterations = 6, TimeoutSeconds = 5, MaxRepeatedToolCalls = 2
         });

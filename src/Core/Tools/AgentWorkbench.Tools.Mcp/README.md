@@ -1,5 +1,7 @@
 # AgentWorkbench.Tools.Mcp
 
+- **适用侧**：底座 ｜ **寿命**：现状（就近维护） ｜ **最后校准**：2026-11-21
+
 把外部 MCP server 的工具接进工具目录。**只做接入，不做治理**——白名单与闸门仍在原来的位置。
 
 ## 它做什么
@@ -84,6 +86,6 @@ HTTP 形态把 `Transport` 换成 `http` 并给 `Endpoint`：
 - **写工具**不进白名单。要写，走 `Domains/Erp` 的动作规格 + `propose_action`，
   让审批与审计留在链路上。
 
-这条约定目前靠配置，不靠代码——`AllowTools` 里写一个 `create_document` 是拦不住的。
+这条约定靠配置，不靠代码——`AllowTools` 里写一个 `create_document` 是拦不住的。
 要变成硬约束，得在 `ToolCatalog` 增加「副作用声明」维度，按 `AITool` 的来源拒绝写类工具。
 在那之前，改白名单的人必须知道自己在开什么。

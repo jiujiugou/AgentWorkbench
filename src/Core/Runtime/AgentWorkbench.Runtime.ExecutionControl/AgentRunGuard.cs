@@ -6,8 +6,8 @@ namespace AgentWorkbench.Runtime.ExecutionControl;
 /// <remarks>
 /// 环内信息只有到工具调用发出时才有，所以判定点放在 <see cref="InspectToolCall"/>：
 /// <list type="bullet">
-/// <item>重复调用：连续出现「同工具 + 同参数」达到 <see cref="AgentLoopOptions.MaxRepeatedToolCalls"/> 次即终止。</item>
-/// <item>token 预算：把用量来源的读数减去本 run 起点快照，超过 <see cref="AgentLoopOptions.MaxTokensPerRun"/> 即终止。</item>
+/// <item>重复调用：连续出现「同工具 + 同参数」达到 <see cref="AgentExecutionControlOptions.MaxRepeatedToolCalls"/> 次即终止。</item>
+/// <item>token 预算：把用量来源的读数减去本 run 起点快照，超过 <see cref="AgentExecutionControlOptions.MaxTokensPerRun"/> 即终止。</item>
 /// </list>
 /// 收尾分类放在 <see cref="InspectCompletion"/>：框架跑满 <c>MaximumIterationsPerRequest</c> 后不会报错，
 /// 而是清空工具、逼模型用文本收口再正常返回；若最后一次工具调用的轮次已经顶到预算，
@@ -15,7 +15,7 @@ namespace AgentWorkbench.Runtime.ExecutionControl;
 /// </remarks>
 public sealed class AgentRunGuard : IAgentRunGuard
 {
-    private readonly AgentLoopOptions _options;
+    private readonly AgentExecutionControlOptions _options;
     private readonly IAgentUsageSource? _usage;
     private readonly AgentUsage _baseline;
 
@@ -25,7 +25,7 @@ public sealed class AgentRunGuard : IAgentRunGuard
 
     /// <param name="options">执行控制策略（预算与阈值）。</param>
     /// <param name="usage">用量来源；为 <c>null</c> 时不判 token 预算。构造时取一次基线快照，作为本 run 的用量起点。</param>
-    public AgentRunGuard(AgentLoopOptions options, IAgentUsageSource? usage = null)
+    public AgentRunGuard(AgentExecutionControlOptions options, IAgentUsageSource? usage = null)
     {
         _options = options;
         _usage = usage;

@@ -22,7 +22,7 @@ namespace AgentWorkbench.Tools.Builtin;
 ///    算出的号必须相同，否则「原样重试」会因为序列化差异被当成新请求。
 /// 3. 拿不到客户端消息标识时回退为一次性 ID（行为与此前一致），
 ///    绝不退化成「所有请求同一个号」——那是把不重复执行变成不执行。
-    ///    <b>这条在 web 生产路径不可达</b>：Host 的三条入口都要求输入身份必填，缺了直接拒绝，
+    ///    <b>这条在 web 生产路径不可达</b>：Host 的两条入口都要求输入身份必填，缺了直接拒绝，
     ///    见 `src/Host/AgentWorkbench.Webapi/README.md`「输入身份契约」。
     ///    绕过 Host 直接调本函数仍会触发回退（现存一处：Workflow 的 `AgentStepExecutor`）。
 /// </summary>

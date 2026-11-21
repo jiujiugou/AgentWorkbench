@@ -1,5 +1,7 @@
 # AgentWorkbench.Webapi
 
+- **适用侧**：应用 ｜ **寿命**：现状（就近维护） ｜ **最后校准**：2026-11-21
+
 组合根模块：宿主 `Program.cs`、Controllers 与 SignalR Hub。
 
 ## 界面投影（本模块独有的职责）
@@ -16,7 +18,7 @@
   不认识 `messageId`、不认识「刷新」、不认识流式与前端展示结构。**代码在 Core ≠ 职责归 Core**。
 
 - 它和 `chat_messages`（模型上下文）**没有汇合点，也不做一致性承诺**。由此剩下的两个未定边界
-  （失败轮要不要留痕、删会话时模型上下文跟不跟着清）见 `docs/core/runtime.md` §7.3 第 1 条。
+  （失败轮要不要留痕、删会话时模型上下文跟不跟着清）见 `docs/core/状态与记忆.md`。
 
 ## 输入身份契约（web 传输模型带来的必答题）
 
@@ -38,7 +40,7 @@
   工具环里的 `IActionOriginProvider` 因而拿得到「这是哪一次输入」。
 
 **已关掉的一条入口**：v1 的 `POST /api/harness/run` 于 2026-11-09 移除。它能绕过会话直接起工具环，
-等于给动作执行开了一个没有对话上下文、也不需要审批的侧门。`HarnessController` 现在只剩
+等于给动作执行开了一个没有对话上下文、也不需要审批的侧门。`HarnessController` 只剩
 `GET /api/harness/health` 与 `GET /api/harness/runs/{id}` 两个只读口，H11 用反射锁住「该类不得再出现 `[HttpPost]`」。
 
 **没改什么**：`src/Core` 行为零改动。`ActionRequestId.Derive` 的「缺省回退随机号」保留，从这两条 web 入口
