@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AgentWorkbench.Ports;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Options;
 
 namespace AgentWorkbench.Tools.Mcp;
 
@@ -18,18 +19,28 @@ namespace AgentWorkbench.Tools.Mcp;
 /// 进不了模型目录的那些本来就是留给这条路径用的。
 /// </para>
 /// </remarks>
-public sealed class McpToolInvoker(McpToolRegistry registry) : IToolInvoker
+public sealed class McpToolInvoker : IToolInvoker
 {
+    private readonly McpToolRegistry _registry;
+    private readonly TimeSpan _timeout;
+
+    public McpToolInvoker(McpToolRegistry registry, IOptions<McpOptions>? options = null)
+    {
+        _registry = registry;
+        var seconds = options?.Value.ToolCallTimeoutSeconds ?? McpOptions.DefaultToolCallTimeoutSeconds;
+        _timeout = TimeSpan.FromSeconds(seconds > 0 ? seconds : McpOptions.DefaultToolCallTimeoutSeconds);
+    }
+
     public bool Has(string toolName)
         => !string.IsNullOrWhiteSpace(toolName)
-           && registry.Tools.Any(tool => string.Equals(tool.Name, toolName, StringComparison.Ordinal));
+           && _registry.Tools.Any(tool => string.Equals(tool.Name, toolName, StringComparison.Ordinal));
 
     public async ValueTask<ToolInvocationResult> InvokeAsync(
         string toolName,
         JsonElement arguments,
         CancellationToken ct)
     {
-        var tool = registry.Tools.FirstOrDefault(t => string.Equals(t.Name, toolName, StringComparison.Ordinal));
+        var tool = _registry.Tools.FirstOrDefault(t => string.Equals(t.Name, toolName, StringComparison.Ordinal));
         if (tool is null)
             return ToolInvocationResult.Failure(
                 ToolInvocationCodes.NotFound, $"工具不在当前目录：{toolName}");
@@ -51,7 +62,9 @@ public sealed class McpToolInvoker(McpToolRegistry registry) : IToolInvoker
 
         try
         {
-            var result = await function.InvokeAsync(callArguments, ct);
+            // 超时 = 不知道成没成（要查证）；外部取消 = 调用者主动停，原样上抛。
+            var result = await ToolCallTimeout.RunAsync(
+                token => function.InvokeAsync(callArguments, token), _timeout, ct);
             return Normalize(result?.ToString() ?? string.Empty);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -61,7 +74,7 @@ public sealed class McpToolInvoker(McpToolRegistry registry) : IToolInvoker
         }
         catch (Exception ex)
         {
-            // 传输层没通 = 我们不知道对方收到没有，不能当「明确失败」——否则上层不会去查证。
+            // 传输层没通 / 调用超时 = 我们不知道对方收到没有，不能当「明确失败」——否则上层不会去查证。
             var code = ToolFailureClassifier.IsTransportFailure(ex, ex.Message)
                 ? ToolInvocationCodes.Unavailable
                 : ToolInvocationCodes.Failed;

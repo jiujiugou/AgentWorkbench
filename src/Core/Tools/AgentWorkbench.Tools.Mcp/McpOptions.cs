@@ -22,6 +22,16 @@ public sealed class McpOptions
     /// ③ 两个 server 有同名工具时不会在 ToolCatalog 的去重里被悄悄丢掉一个。
     /// </remarks>
     public const string ToolNamePrefix = "mcp__";
+
+    /// <summary>单次工具调用超时（秒）。超时算「不知道成没成」，走查证，不当失败、不重放。</summary>
+    /// <remarks>
+    /// 没有这个超时，工具调用会无限等 server 返回——「超时只查证不重放」这条机制永远不会触发。
+    /// 默认 30s：足够覆盖正常的外部 API 延迟，又不会让一次卡死把请求永久挂住。
+    /// </remarks>
+    public const int DefaultToolCallTimeoutSeconds = 30;
+
+    /// <summary>见 <see cref="DefaultToolCallTimeoutSeconds"/>；配置可覆盖。</summary>
+    public int ToolCallTimeoutSeconds { get; set; } = DefaultToolCallTimeoutSeconds;
 }
 
 /// <summary>一个 MCP server 的连接参数。</summary>
