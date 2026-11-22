@@ -76,6 +76,11 @@ public interface IToolInvoker
 /// <param name="WritableFieldsArgument">承载「要写哪些字段」的那个对象参数名（如 <c>data</c>）。</param>
 /// <param name="WritableFields">允许出现在该对象参数里的字段名；空集 = 一个都不许由请求给。</param>
 /// <param name="FixedFieldsJson">每次都写死进去的字段（JSON 对象文本，如 <c>{"docstatus":1}</c>）。请求不能覆盖它。</param>
+/// <param name="DataFields">
+/// 业务参数名 → <see cref="WritableFieldsArgument"/> 内的字段名。用于「创建类」工具：
+/// 请求里的 <c>amount</c> 要变成 <c>data.grand_total</c>，但它既不是顶层工具参数、也不能由请求自带 data 对象。
+/// 被映射的参数从顶层移除、只出现在承载对象里；目标字段仍须在 <see cref="WritableFields"/> 白名单中。
+/// </param>
 public sealed record McpActionBinding(
     string ActionKey,
     string ToolName,
@@ -84,7 +89,8 @@ public sealed record McpActionBinding(
     string? BusinessKeyPath = null,
     string? WritableFieldsArgument = null,
     IReadOnlyList<string>? WritableFields = null,
-    string? FixedFieldsJson = null)
+    string? FixedFieldsJson = null,
+    IReadOnlyDictionary<string, string>? DataFields = null)
 {
     public static readonly IReadOnlyDictionary<string, string> NoRenames =
         new Dictionary<string, string>(StringComparer.Ordinal);
@@ -92,6 +98,8 @@ public sealed record McpActionBinding(
     public IReadOnlyDictionary<string, string> Names => ArgumentNames ?? NoRenames;
 
     public IReadOnlyDictionary<string, string> Constants => FixedArguments ?? NoRenames;
+
+    public IReadOnlyDictionary<string, string> DataFieldsMap => DataFields ?? NoRenames;
 
     /// <summary>是否声明了字段闸。没声明不代表放行，而是「这个工具没有可写的自由字段」。</summary>
     public bool GuardsFields => !string.IsNullOrWhiteSpace(WritableFieldsArgument);

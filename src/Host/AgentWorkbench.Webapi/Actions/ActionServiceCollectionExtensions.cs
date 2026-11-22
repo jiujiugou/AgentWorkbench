@@ -29,8 +29,14 @@ public static class ActionServiceCollectionExtensions
     /// <summary>查 ERP 单据用的工具全名。</summary>
     public const string ErpMcpToolConfigKey = "Actions:ErpNext:McpTool";
 
+    /// <summary>登记 ERP 草稿用的工具全名。</summary>
+    public const string ErpMcpDraftToolConfigKey = "Actions:ErpNext:McpDraftTool";
+
     /// <summary>提交 ERP 单据用的工具全名。</summary>
     public const string ErpMcpSubmitToolConfigKey = "Actions:ErpNext:McpSubmitTool";
+
+    /// <summary>取消 ERP 单据用的工具全名。</summary>
+    public const string ErpMcpCancelToolConfigKey = "Actions:ErpNext:McpCancelTool";
 
     /// <summary>
     /// 三个域名的唯一来源。写成常量而不是散落的字符串，
@@ -119,7 +125,9 @@ public static class ActionServiceCollectionExtensions
         var invoker = services.GetRequiredService<IToolInvoker>();
         var bindings = ErpMcpBindings.All(
             configuration[ErpMcpToolConfigKey],
-            configuration[ErpMcpSubmitToolConfigKey]);
+            configuration[ErpMcpDraftToolConfigKey],
+            configuration[ErpMcpSubmitToolConfigKey],
+            configuration[ErpMcpCancelToolConfigKey]);
         return new ErpActionSet(new McpActionExecutor(invoker, bindings));
     }
 

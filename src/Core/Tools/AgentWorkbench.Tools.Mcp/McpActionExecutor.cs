@@ -48,6 +48,10 @@ public sealed class McpActionExecutor : IActionExecutor
             if (!map.TryAdd(binding.ActionKey, binding))
                 throw new InvalidOperationException(
                     $"同一个动作只能有一条工具绑定：{binding.ActionKey}（{map[binding.ActionKey].ToolName} 与 {binding.ToolName}）");
+
+            if (binding.DataFieldsMap.Count > 0 && string.IsNullOrWhiteSpace(binding.WritableFieldsArgument))
+                throw new InvalidOperationException(
+                    $"绑定 {binding.ActionKey} 声明了 DataFields 却没有 WritableFieldsArgument，字段无处落地");
         }
 
         _bindings = map;
@@ -116,16 +120,25 @@ public sealed class McpActionExecutor : IActionExecutor
     /// <item>对方工具的 schema 大多写了 <c>additionalProperties:false</c>，多带一个字段就是一次被拒的调用；</item>
     /// <item>转发范围等于对外暴露面，它必须是可读的一行行声明，而不是「请求里有什么就发什么」。</item>
     /// </list>
+    /// 唯一的例外是 <see cref="McpActionBinding.DataFields"/>：被它点名的参数要落进承载对象，
+    /// 于是从顶层移走、换名字再放回去 —— 仍然是「只转发声明过的」，只是目的地不是顶层。
     /// </remarks>
     /// <returns>null 表示请求试图覆盖绑定里的常量。</returns>
     private static JsonElement? MapArguments(JsonElement source, McpActionBinding binding)
     {
         var mapped = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        var dataFields = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
 
         foreach (var property in source.EnumerateObject())
         {
             if (binding.Constants.ContainsKey(property.Name))
                 return null;
+
+            if (binding.DataFieldsMap.TryGetValue(property.Name, out var dataName))
+            {
+                dataFields[dataName] = property.Value.Clone();
+                continue;
+            }
 
             if (!binding.Names.TryGetValue(property.Name, out var name))
                 continue;
@@ -135,6 +148,9 @@ public sealed class McpActionExecutor : IActionExecutor
 
         foreach (var constant in binding.Constants)
             mapped[constant.Key] = JsonSerializer.SerializeToElement(constant.Value);
+
+        if (binding.DataFieldsMap.Count > 0)
+            mapped[binding.WritableFieldsArgument!] = JsonSerializer.SerializeToElement(dataFields);
 
         return JsonSerializer.SerializeToElement(mapped);
     }
