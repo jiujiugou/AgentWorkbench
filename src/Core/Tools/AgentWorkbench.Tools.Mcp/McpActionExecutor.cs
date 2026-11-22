@@ -14,6 +14,8 @@ public static class McpActionCodes
     public const string FieldDenied = "mcp_field_denied";
     /// <summary>取不到业务键。有副作用的动作拿不到业务键 = 事后无法查证，直接拒。</summary>
     public const string BusinessKeyMissing = "mcp_business_key_missing";
+    /// <summary>传输层没通：副作用可能已发生但我们不知道，交给上层查证，不重放。</summary>
+    public const string UnknownTransport = "mcp_unknown_transport";
     public const string InvalidArguments = "mcp_invalid_arguments";
     public const string Ok = "mcp_ok";
 }
@@ -93,7 +95,14 @@ public sealed class McpActionExecutor : IActionExecutor
         }
 
         if (!called.Ok)
+        {
+            // 传输故障 = 不知道对方收到没有。报 Unknown 让上层只查证、不重放；
+            // 判 Failed 会让「其实成功了却报失败」的盲区把人诱去重试，造成重复副作用。
+            if (called.Code == ToolInvocationCodes.Unavailable)
+                return Unknown(request.RequestId, McpActionCodes.UnknownTransport,
+                    called.Message ?? "工具传输不可用");
             return Fail(request.RequestId, called.Code, called.Message ?? "工具调用失败");
+        }
 
         var content = called.Content ?? string.Empty;
         var data = ToData(content);
@@ -297,5 +306,10 @@ public sealed class McpActionExecutor : IActionExecutor
 
     private static ActionResult Reject(string requestId, string code, string reason)
         => new(requestId, ActionStatuses.Rejected, code, null, code,
+            JsonSerializer.SerializeToElement(new { reason }));
+
+    /// <summary>不知道成没成。上层据此改用只读查证收口，绝不重放写动作。</summary>
+    private static ActionResult Unknown(string requestId, string code, string reason)
+        => new(requestId, ActionStatuses.Unknown, code, null, code,
             JsonSerializer.SerializeToElement(new { reason }));
 }

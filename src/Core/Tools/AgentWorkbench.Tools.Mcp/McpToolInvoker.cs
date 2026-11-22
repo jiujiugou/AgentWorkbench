@@ -61,8 +61,12 @@ public sealed class McpToolInvoker(McpToolRegistry registry) : IToolInvoker
         }
         catch (Exception ex)
         {
+            // 传输层没通 = 我们不知道对方收到没有，不能当「明确失败」——否则上层不会去查证。
+            var code = ToolFailureClassifier.IsTransportFailure(ex, ex.Message)
+                ? ToolInvocationCodes.Unavailable
+                : ToolInvocationCodes.Failed;
             return ToolInvocationResult.Failure(
-                ToolInvocationCodes.Failed, $"{ex.GetType().Name}: {Truncate(ex.Message)}");
+                code, $"{ex.GetType().Name}: {Truncate(ex.Message)}");
         }
     }
 
@@ -103,12 +107,20 @@ public sealed class McpToolInvoker(McpToolRegistry registry) : IToolInvoker
 
             var isError = root.TryGetProperty("isError", out var flag) && flag.ValueKind == JsonValueKind.True;
             if (isError)
-                return ToolInvocationResult.Failure(
-                    ToolInvocationCodes.Failed, Truncate(string.IsNullOrWhiteSpace(text) ? "工具返回 isError" : text));
+            {
+                var message = string.IsNullOrWhiteSpace(text) ? "工具返回 isError" : text;
+                // frappe_mcp 把网络故障也压成 isError 文本。传输故障 = 不知道对方收到没有，
+                // 必须区别于「对方明确拒绝」，上层才会走「只查证不重放」而不是直接判失败。
+                var code = ToolFailureClassifier.IsTransportFailure(null, message)
+                    ? ToolInvocationCodes.Unavailable
+                    : ToolInvocationCodes.Failed;
+                return ToolInvocationResult.Failure(code, Truncate(message));
+            }
 
             return ToolInvocationResult.Success(string.IsNullOrWhiteSpace(text) ? raw : text);
         }
     }
+
 
     private static string JoinTextParts(JsonElement content)
     {
