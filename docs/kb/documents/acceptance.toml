@@ -1,0 +1,16 @@
+# DOC-ACCEPT-001 · 验收映射（横向：六句 → 证据）
+# 字段含义见 scripts/kb_check.py 顶部说明。
+
+[[documents]]
+id = "DOC-ACCEPT-001"
+path = "docs/验收映射.md"
+watch = [
+  "src/Core/Runtime/AgentWorkbench.ActionGateway/**",
+  "src/Domains/**",
+]
+[[documents.evidence]]
+type = "source"
+path = "src/Core/Runtime/AgentWorkbench.ActionGateway/ActionRunService.cs"
+[[documents.evidence]]
+type = "test"
+path = "tests/AgentWorkbench.ApplicationTests/ActionGateway/DomainSwapAc01Tests.cs"

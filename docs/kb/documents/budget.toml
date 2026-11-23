@@ -1,0 +1,122 @@
+# DOC-BUDGET-001 · 终止与预算（六部件之③）
+# 字段含义见 scripts/kb_check.py 顶部说明。
+
+[[documents]]
+id = "DOC-BUDGET-001"
+path = "docs/core/终止与预算.md"
+watch = [
+  "src/Core/Runtime/AgentWorkbench.Runtime.ExecutionControl/**",
+]
+[[documents.evidence]]
+type = "source"
+path = "src/Core/Runtime/AgentWorkbench.Runtime.ExecutionControl/AgentExecutionControlService.cs"
+symbols = [
+  "IAgentExecutionControl",
+  "CreateGuard",
+  "ExecuteAsync",
+  "AgentRunTimeoutException",
+]
+[[documents.evidence]]
+type = "source"
+path = "src/Core/Runtime/AgentWorkbench.Runtime.ExecutionControl/AgentRunGuard.cs"
+symbols = [
+  "InspectToolCall",
+  "InspectCompletion",
+  "DetectLoop",
+  "DetectBudgetOverage",
+]
+[[documents.evidence]]
+type = "source"
+path = "src/Core/Runtime/AgentWorkbench.Runtime.ExecutionControl/AgentExecutionControlOptions.cs"
+symbols = [
+  "SectionName",
+  "MaxIterations",
+  "TimeoutSeconds",
+  "MaxRepeatedToolCalls",
+  "MaxTokensPerRun",
+]
+[[documents.evidence]]
+type = "source"
+path = "src/Core/Runtime/AgentWorkbench.Runtime.Harness/LoopAssembly.cs"
+symbols = [
+  "CreateLimits",
+  "MaxConsecutiveErrorsPerRequest",
+  "AllowConcurrentInvocation",
+  "TerminateOnUnknownCalls",
+]
+[[documents.evidence]]
+type = "source"
+path = "src/Core/Foundation/AgentWorkbench.Shared/Execution/AgentRunStop.cs"
+symbols = ["IAgentRunGuard", "AgentRunStop", "RunStopDetail"]
+[[documents.evidence]]
+type = "source"
+path = "src/Core/Foundation/AgentWorkbench.Shared/Execution/AgentRunStatus.cs"
+symbols = ["IterationLimit", "LoopDetected", "BudgetExceeded"]
+[[documents.evidence]]
+type = "test"
+path = "tests/AgentWorkbench.ApplicationTests/Flow/S09ContractTests.cs"
+[[documents.evidence]]
+type = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/ExecutionControl/AgentRunGuardTests.cs"
+
+# ── 配置口径：读 appsettings 对账，不在文档里抄一份
+[[documents.fact]]
+id = "FACT-BUDGET-CFG-01"
+claim = "启动配置迭代上限 6"
+check = "json"
+path = "src/Host/AgentWorkbench.Webapi/appsettings.json"
+json_path = "Harness:ExecutionControl:MaxIterations"
+expect = 6
+
+[[documents.fact]]
+id = "FACT-BUDGET-CFG-02"
+claim = "启动配置墙钟 300 秒（代码默认 30，被配置覆盖）"
+check = "json"
+path = "src/Host/AgentWorkbench.Webapi/appsettings.json"
+json_path = "Harness:ExecutionControl:TimeoutSeconds"
+expect = 300
+
+[[documents.fact]]
+id = "FACT-BUDGET-CFG-03"
+claim = "连续同参重复阈值 3"
+check = "json"
+path = "src/Host/AgentWorkbench.Webapi/appsettings.json"
+json_path = "Harness:ExecutionControl:MaxRepeatedToolCalls"
+expect = 3
+
+[[documents.fact]]
+id = "FACT-BUDGET-CFG-04"
+claim = "run 级 token 预算未设上限（0）"
+check = "json"
+path = "src/Host/AgentWorkbench.Webapi/appsettings.json"
+json_path = "Harness:ExecutionControl:MaxTokensPerRun"
+expect = 0
+
+# ── 测试规模：数 [Fact]/[Theory]，防止测试被删了文档还留着
+[[documents.fact]]
+id = "FACT-BUDGET-TEST-01"
+claim = "S09 运行结局 6 个测试方法"
+check = "test-count"
+path = "tests/AgentWorkbench.ApplicationTests/Flow/S09ContractTests.cs"
+expect = 6
+
+[[documents.fact]]
+id = "FACT-BUDGET-TEST-02"
+claim = "守卫判定 8 个测试方法"
+check = "test-count"
+path = "tests/AgentWorkbench.CoreTests/Runtime/ExecutionControl/AgentRunGuardTests.cs"
+expect = 8
+
+[[documents.fact]]
+id = "FACT-BUDGET-TEST-03"
+claim = "缺口（超时真取消、状态码配对）4 个测试方法"
+check = "test-count"
+path = "tests/AgentWorkbench.CoreTests/Runtime/ExecutionControl/ExecutionControlGapTests.cs"
+expect = 4
+
+[[documents.fact]]
+id = "FACT-BUDGET-TEST-04"
+claim = "循环驱动装配判据 5 个测试方法"
+check = "test-count"
+path = "tests/AgentWorkbench.CoreTests/Runtime/循环驱动装配.cs"
+expect = 5

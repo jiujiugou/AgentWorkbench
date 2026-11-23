@@ -1,0 +1,13 @@
+# DOC-HOST-001 · 运行期流程（横向：宿主侧）
+# 字段含义见 scripts/kb_check.py 顶部说明。
+
+[[documents]]
+id = "DOC-HOST-001"
+path = "docs/host/运行期流程.md"
+watch = [
+  "src/Host/**",
+  "src/Core/Runtime/AgentWorkbench.Runtime.Model/**",
+]
+[[documents.evidence]]
+type = "source"
+path = "src/Host/AgentWorkbench.Webapi/Controllers/ActionsController.cs"

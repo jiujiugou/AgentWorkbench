@@ -1,0 +1,150 @@
+# DOC-TRACE-001 · 轨迹与观测（六部件之⑥）
+# 字段含义见 scripts/kb_check.py 顶部说明。
+
+[[documents]]
+id = "DOC-TRACE-001"
+path = "docs/core/轨迹与观测.md"
+watch = [
+  "src/Core/Runtime/AgentWorkbench.Runtime.Harness/**",
+  "src/Core/Engineering/AgentWorkbench.Observability/**",
+]
+
+# ── 记录形状与写出口：内核拥有的那半边
+[[documents.evidence]]
+type = "source"
+path = "src/Core/Engineering/AgentWorkbench.Observability/ExecutionTrace.cs"
+symbols = [
+  "ExecutionTrace",
+  "ExecutionStep",
+  "Create",
+  "Success",
+  "Failure",
+  "InputTokens",
+  "OutputTokens",
+  "Complete",
+  "Stop",
+  "Truncated",
+]
+[[documents.evidence]]
+type = "source"
+path = "src/Core/Engineering/AgentWorkbench.Observability/IExecutionTraceStore.cs"
+symbols = [
+  "IExecutionTraceWriter",
+  "IExecutionTraceReader",
+  "IExecutionTraceStore",
+  "SaveAsync",
+  "ExecutionTraceQuery",
+]
+[[documents.evidence]]
+type = "source"
+path = "src/Implementations/AgentWorkbench.Domain/Observability/AgentRunRecords.cs"
+symbols = [
+  "AgentRunRecord",
+  "AgentStepRecord",
+  "StopObserved",
+  "StopLimit",
+  "Truncated",
+]
+
+# ── 谁产生：终态判定、组装、出口、失败归类
+[[documents.evidence]]
+type = "source"
+path = "src/Core/Runtime/AgentWorkbench.Runtime.Harness/AgentHarnessService.cs"
+symbols = [
+  "RunCoreAsync",
+  "FinishSucceededAsync",
+  "PersistQuietlyAsync",
+  "PrepareRunAsync",
+  "ClassifyFailure",
+  "BuildSteps",
+  "SessionBusyResult",
+]
+[[documents.evidence]]
+type = "source"
+path = "src/Core/Runtime/AgentWorkbench.Runtime.Harness/HarnessTraceMapping.cs"
+symbols = ["ToResult"]
+[[documents.evidence]]
+type = "source"
+path = "src/Core/Foundation/AgentWorkbench.Shared/Execution/AgentRunStatus.cs"
+symbols = [
+  "Succeeded",
+  "Failed",
+  "Timeout",
+  "Cancelled",
+  "IterationLimit",
+  "BudgetExceeded",
+  "LoopDetected",
+  "Refused",
+]
+[[documents.evidence]]
+type = "source"
+path = "src/Core/Foundation/AgentWorkbench.Shared/Execution/AgentRunCode.cs"
+symbols = [
+  "LoopDetected",
+  "BudgetExceeded",
+  "IterationLimit",
+  "RunTimeout",
+  "ModelTimeout",
+  "Cancelled",
+  "ModelUnavailable",
+  "ToolError",
+  "KnowledgeInsufficient",
+  "SessionBusy",
+  "Unhandled",
+]
+[[documents.evidence]]
+type = "source"
+path = "src/Core/Foundation/AgentWorkbench.Shared/Execution/AgentRunStop.cs"
+symbols = ["RunStopDetail", "AgentRunStop", "IAgentRunGuard"]
+
+# ── 谁保存：落库实现（不属于内核，但记录形状要靠它落地）
+[[documents.evidence]]
+type = "source"
+path = "src/Implementations/AgentWorkbench.Persistence/Traces/ExecutionTraceStore.cs"
+symbols = [
+  "InsertRunAsync",
+  "InsertStepsAsync",
+  "GetAsync",
+  "QueryAsync",
+  "Map",
+]
+
+# ── 判据：内核侧用例 + 记录形状与表结构的对照
+[[documents.evidence]]
+type = "test"
+path = "tests/AgentWorkbench.CoreTests/Engineering/Observability/轨迹与观测.cs"
+[[documents.evidence]]
+type = "test"
+path = "tests/AgentWorkbench.CoreTests/Engineering/Observability/轨迹落库迁移.cs"
+
+# ── 依赖基线：附录 A 说「版本以工程文件为准」，这里对账
+[[documents.fact]]
+id = "FACT-TRACE-DEP-01"
+claim = "循环驱动侧引用的 MEA 基线为 10.10.0"
+check = "csproj"
+path = "src/Core/Runtime/AgentWorkbench.Runtime.Harness/AgentWorkbench.Runtime.Harness.csproj"
+package = "Microsoft.Extensions.AI"
+expect = "10.10.0"
+
+[[documents.fact]]
+id = "FACT-TRACE-DEP-02"
+claim = "框架基线为 MAF 1.23.0"
+check = "csproj"
+path = "src/Core/Runtime/AgentWorkbench.Runtime.Harness/AgentWorkbench.Runtime.Harness.csproj"
+package = "Microsoft.Agents.AI"
+expect = "1.23.0"
+
+# ── 测试规模：数 [Fact]/[Theory]，防止用例被删了文档还留着
+[[documents.fact]]
+id = "FACT-TRACE-TEST-01"
+claim = "内核侧判据 14 个测试方法"
+check = "test-count"
+path = "tests/AgentWorkbench.CoreTests/Engineering/Observability/轨迹与观测.cs"
+expect = 14
+
+[[documents.fact]]
+id = "FACT-TRACE-TEST-02"
+claim = "记录形状与表结构的对照 2 个测试方法"
+check = "test-count"
+path = "tests/AgentWorkbench.CoreTests/Engineering/Observability/轨迹落库迁移.cs"
+expect = 2

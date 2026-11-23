@@ -58,11 +58,6 @@ def collect() -> list[tuple[str, int, str, str]]:
         if not path.exists():
             continue
         rel = path.relative_to(ROOT).as_posix()
-        # 只排除「记录冲突」的报告本身：它必然引用旧路径/旧章节号，
-        # 扫它等于把「报告提到了冲突」当成新冲突，制造假信号。
-        # 规范和索引仍参与扫描——它们若自己漂移，必须能被发现。
-        if rel == "docs/engineering/文档改造报告.md":
-            continue
         for no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             for name in scan_line(line):
                 found.append((rel, no, name, line.strip()[:120]))

@@ -1,0 +1,63 @@
+# 工程不变量：文档里声称的"必须成立"的东西，以及去哪验它
+#
+# 结构：
+#   claim    = 不变量本身（文字，给人读；机器验不了它的真假）
+#   document = 哪份文档在声称这条
+#   evidence = 证据来源（source 代码位置 / test 测试过滤器）
+#
+# 两个必须说清的限制（否则这张表会变成新的假绿来源）：
+# 1. claim 是**文字**，机器验不了它真假。机器只能验 evidence 里的文件存在、
+#    测试过滤器能匹配到真实方法。所以这张表的真实作用是**判据索引**，不是"不变量验证"。
+# 2. 不写 status。测试今天通过不代表下次提交仍通过；要现状就跑下面的测试，
+#    本文件不维护状态，kb_check.py 也不跑测试。
+
+[[invariant]]
+id = "INV-001"
+claim = "所有业务写操作必须经过 ActionGateway 的四道闸且 fail-closed"
+document = "docs/验收映射.md"
+[[invariant.evidence]]
+type = "test"
+project = "tests/AgentWorkbench.ApplicationTests"
+filter = "S06ContractTests"
+[[invariant.evidence]]
+type = "source"
+path = "src/Core/Runtime/AgentWorkbench.ActionGateway/ActionRunService.cs"
+
+[[invariant]]
+id = "INV-002"
+claim = "带副作用的工具调用不得绕过四道闸直连外部系统"
+document = "docs/core/工具执行.md"
+[[invariant.evidence]]
+type = "test"
+project = "tests/AgentWorkbench.ApplicationTests"
+filter = "S04ContractTests"
+[[invariant.evidence]]
+type = "source"
+path = "src/Core/Runtime/AgentWorkbench.Runtime.Tools/ToolExecutionPipeline.cs"
+
+[[invariant]]
+id = "INV-003"
+claim = "未审批的动作不产生任何外部调用"
+document = "docs/验收映射.md"
+[[invariant.evidence]]
+type = "test"
+project = "tests/AgentWorkbench.ApplicationTests"
+filter = "S07ContractTests"
+
+[[invariant]]
+id = "INV-004"
+claim = "同一 request_id 只产生一条外部效果，重放不重执行"
+document = "docs/验收映射.md"
+[[invariant.evidence]]
+type = "test"
+project = "tests/AgentWorkbench.ApplicationTests"
+filter = "S08ContractTests"
+
+[[invariant]]
+id = "INV-005"
+claim = "换一个业务域时底座五层 diff 为空（AC-01）"
+document = "docs/验收映射.md"
+[[invariant.evidence]]
+type = "test"
+project = "tests/AgentWorkbench.ApplicationTests"
+filter = "DomainSwapAc01Tests"

@@ -1,0 +1,4 @@
+# 跨平台换行：脚本与 hook 必须是 LF，否则 Git Bash 会因 \r 报错。
+*.sh text eol=lf
+.githooks/* text eol=lf
+docs/kb/**/*.toml text eol=lf
