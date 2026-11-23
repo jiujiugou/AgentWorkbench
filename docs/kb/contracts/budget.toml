@@ -1,0 +1,131 @@
+# 架构契约 · 终止与预算（六部件之③）
+#
+# 一份文档一个契约文件：docs/kb/contracts/<与 documents/ 同名>.toml。
+# 字段与禁令见 contracts/tools.toml 头部；这里只列本格契约。
+# 本格是「判定点」部件，边界天然分散在三处判定 + 一次收尾分类，因此 ID 比工具执行多；
+# 每条都对应正文一个小节，小节号由 kb_check 校验能定位到。
+
+[[contract]]
+id = "STOP-ITERATION-001"
+section = "5.2"
+document = "docs/core/终止与预算.md"
+statement = "跑满迭代上限必须记为 iteration_limit，不得当成模型主动收尾"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.ExecutionControl/AgentRunGuard.cs"
+impl_symbols = ["InspectCompletion"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.ApplicationTests/Flow/S09ContractTests.cs"
+cases = ["S09_02_迭代预算跑满时收尾带iteration_limit"]
+strength = "流程层：被逼出来的文本仍给出停因，且与正常收尾分开"
+mutation = "把 InspectCompletion 的停因改成 Succeeded → S09_02 红"
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/ExecutionControl/AgentRunGuardTests.cs"
+cases = ["跑满迭代_必须记_iteration_limit", "未跑满就收口_不得判为截断", "一次工具都没调用_谈不上一轮跑满"]
+strength = "纯判定层：含两条绿对照，防「恒返回停因」的假绿"
+mutation = "InspectCompletion 的 `< MaxIterations - 1` 改成 `<=`；或删掉 `_lastIteration < 0` 的提前返回"
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/ExecutionControl/ExecutionControlGapTests.cs"
+cases = ["三种终止判定的状态与归类码一一配对且都不是成功"]
+strength = "词表层：状态与归类码配对，且三种停都不是 Succeeded"
+mutation = "把任一判定路径的 Status 写成 Succeeded，或 Code 换成别的词表常量"
+
+[[contract]]
+id = "STOP-TIMEOUT-001"
+section = "5.1"
+document = "docs/core/终止与预算.md"
+statement = "墙钟到点必须把取消链进正在跑的动作，且与调用方取消的归类码分开"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.ExecutionControl/AgentExecutionControlService.cs"
+impl_symbols = ["ExecuteAsync", "AgentRunTimeoutException"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/ExecutionControl/ExecutionControlGapTests.cs"
+cases = ["超时是真取消_动作内部能观察到令牌被取消", "调用方取消也穿透_动作同样能观察到"]
+strength = "代码层：观察点在动作内部（非真工具）；第二条是绿对照，证明确实链了令牌"
+mutation = "ExecuteAsync 改成外层 Task.WhenAny 等待后放弃、不链 linked CTS → 第一条红；丢掉调用方令牌 → 第二条红"
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.ApplicationTests/Flow/S09ContractTests.cs"
+cases = ["S09_05_正常路径交给下一格的是最终文本且无停因"]
+strength = "绿对照：正常路径不得凭空出现停因"
+mutation = "让 InspectCompletion 不看轮次恒返回停因 → S09_05 红"
+
+[[contract]]
+id = "STOP-REPEAT-001"
+section = "4.1"
+document = "docs/core/终止与预算.md"
+statement = "只统计连续的同参调用；指纹按键名排序；阈值为零表示关闭检测"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.ExecutionControl/AgentRunGuard.cs"
+impl_symbols = ["DetectLoop"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.ApplicationTests/Flow/S09ContractTests.cs"
+cases = ["S09_01_重复调用到上限时强制收口且带归类码", "S09_06_夹了别的调用时重复计数重来"]
+strength = "流程层：第 3 次调用在发出前挡下；夹别的调用时计数重来"
+mutation = "DetectLoop 恒返回 null → S09_01 红；else 分支从「重置为 1」改成继续累加 → S09_06 红"
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/ExecutionControl/AgentRunGuardTests.cs"
+cases = ["连续同参第三次_在发出前就停", "中间夹了别的调用_重复计数重来", "重复检测关闭时不判循环"]
+strength = "纯判定层：含关闭态绿对照"
+mutation = "去掉指纹比较；或把指纹改成只记工具名；或去掉 `<= 0` 的关闭判断"
+
+[[contract]]
+id = "STOP-BUDGET-001"
+section = "4.2"
+document = "docs/core/终止与预算.md"
+statement = "token 预算按本 run 起点读增量；零表示不判，不把别的 run 的花费算进来"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.ExecutionControl/AgentRunGuard.cs"
+impl_symbols = ["DetectBudgetOverage"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.ApplicationTests/Flow/S09ContractTests.cs"
+cases = ["S09_03_预算耗尽时强制收口且带归类码"]
+strength = "流程层：本地递增用量替身，不是真实模型计量"
+mutation = "把 DetectBudgetOverage 的达标判断去掉 → S09_03 红"
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/ExecutionControl/AgentRunGuardTests.cs"
+cases = ["token预算_按本run起点快照计算", "token预算为0_不判"]
+strength = "纯判定层：证明用的是读数减基线，且零为关闭"
+mutation = "把「读数 − 基线」改成直接读累计值；或去掉 `<= 0` 的关闭判断"
+
+[[contract]]
+id = "STOP-CLEAN-001"
+section = "4.3"
+document = "docs/core/终止与预算.md"
+statement = "环内命中后跳过执行、记轨迹、置终止标志，不把终止抛成工具异常"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.ExecutionControl/AgentRunGuard.cs"
+impl_symbols = ["InspectToolCall"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.ApplicationTests/Flow/S09ContractTests.cs"
+cases = ["S09_01_重复调用到上限时强制收口且带归类码", "S09_03_预算耗尽时强制收口且带归类码"]
+strength = "流程层：执行体调用次数为 0、轨迹末条带归类码；无异常抛出"
+mutation = "守卫命中改成抛异常 → 两条都会被框架当工具失败，红"
+[[contract.evidence]]
+kind = "gap"
+reason = "「不抛异常」只由上面两条的 thrown == null 间接守住；没有一条专门断言守卫命中路径的异常类型与框架回填语义"
+
+[[contract]]
+id = "STOP-ISOLATION-001"
+section = "6.1"
+document = "docs/core/终止与预算.md"
+statement = "工具收到取消仍不返回时，运行必须能强制隔离它，而不是无限等待"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.ExecutionControl/AgentExecutionControlService.cs"
+impl_symbols = ["ExecuteAsync"]
+[[contract.evidence]]
+kind = "gap"
+reason = "当前没有强制出口：超时令牌只能链进动作，动作自己吞掉取消就只能等它返回。没有隔离机制，也就没有判据"
+
+[[contract]]
+id = "STOP-USAGE-001"
+section = "6.1"
+document = "docs/core/终止与预算.md"
+statement = "并发 run 的 token 口径按 run 隔离，不把别的 run 的花费算进来"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.ExecutionControl/AgentRunGuard.cs"
+impl_symbols = ["DetectBudgetOverage"]
+[[contract.evidence]]
+kind = "gap"
+reason = "读数依赖进程级 IAgentUsageSource；构造时取基线只在串行下成立。并发下口径失真，没有隔离实现也没有判据"

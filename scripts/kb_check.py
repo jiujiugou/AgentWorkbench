@@ -454,12 +454,16 @@ def self_test() -> int:
         ok = False
 
     # 事实对账不是恒真：同一个文件，正确 expect 过、错误 expect 必须失败
+    # 期望值不写死：S04 加过测试（15→19），写死会让自检自己漂成恒红。
+    # 这里读实际方法数，只验证 check_fact 确实在比较而不是恒过/恒红。
+    fixture = ROOT / "tests/AgentWorkbench.ApplicationTests/Flow/S04ContractTests.cs"
+    actual = len(re.findall(r"\[Fact\]|\[Theory\]", fixture.read_text(encoding="utf-8")))
     good = {
         "check": "test-count",
         "path": "tests/AgentWorkbench.ApplicationTests/Flow/S04ContractTests.cs",
-        "expect": 15,
+        "expect": actual,
     }
-    bad = dict(good, expect=999)
+    bad = dict(good, expect=actual + 999)
     print(f"  fact test-count 正确值 -> {check_fact(good) or 'PASS'} (期望 PASS)")
     if check_fact(good) is not None:
         ok = False
