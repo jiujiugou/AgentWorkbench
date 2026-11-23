@@ -1,0 +1,106 @@
+# 架构契约 · 工具执行（六部件之④）
+#
+# 一份文档一个契约文件：docs/kb/contracts/<与 documents/ 同名>.toml。
+# 契约 ID 跨仓唯一，kb_check 拼表时会查重；一条契约只属于一份文档（字段 document）。
+#
+# 字段：
+#   id           稳定身份。**不随实现文件、测试名、方法名变化**；主张不变，ID 就不变。
+#   section      文档里的小节号，kb_check 必须能在文档中定位到（`## 2.4` / `### 3.4 …`）
+#   document     哪份文档在声称这条
+#   statement    契约本身（一句话，可核对的行为，不写"较好/合理"这类判断）
+#   impl_path    实现位置
+#   impl_symbols 必须出现在该文件里的符号（防方法改名后指向失效）
+#   [[contract.evidence]]  一段证据，可多段：
+#       kind      test（有用例）/ gap（无判据）
+#       path      测试文件（kind=test）
+#       cases     用例名片段，每个都必须出现在该文件里（kind=test）
+#       strength  这段证据能证明到哪一层（"真实策略" / "Mock" / "代码层" …）
+#       mutation  预设变异点：改坏哪一处，这段证据应当变红
+#       reason    为什么没有判据（kind=gap）
+#
+# 两条禁令：
+# 1. **不写 status**。验证结果每次现算；写死就是第二种假绿。缺证据用 gap 登记，不用 status。
+# 2. 不给每条实现细节发 ID。ID 只给跨部件、属于安全默认值、或有已知缺口的主张；
+#    其余契约挂在文档小节号上就够——ID 一多就变成第五套编号，没人维护。
+
+[[contract]]
+id = "TOOL-ADMISSION-001"
+section = "2.4"
+document = "docs/core/工具执行.md"
+statement = "不符合准入策略的工具不得进入模型可见清单"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.Tools/Safety/ToolPolicy.cs"
+impl_symbols = ["IsAllowed"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.ApplicationTests/Flow/S04ContractTests.cs"
+cases = ["S04_08", "S04_09", "S04_10", "S04_11"]
+strength = "真实白名单策略；这是准入规则唯一的直接证据"
+mutation = "IsAllowed 改成无条件放行 / StartsWith 换成 Contains / 空表时返回 true"
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.ApplicationTests/Flow/S04ContractTests.cs"
+cases = ["S04_12", "S04_13"]
+strength = "Mock 策略：只证明目录去重与汇总后的过滤，不证明真实白名单"
+mutation = "删掉目录里的去重 / SelectMany 只取第一个提供方"
+
+[[contract]]
+id = "TOOL-APPROVAL-001"
+section = "3.4"
+document = "docs/core/工具执行.md"
+statement = "没有审批者时 Ask 必须拒绝（fail-closed）"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.Tools/ToolExecutionPipeline.cs"
+impl_symbols = ["InspectApprovalAsync"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.ApplicationTests/Flow/S04ContractTests.cs"
+cases = ["S04_16", "S04_17", "S04_18"]
+strength = "Ask 无审批者拒绝 / Deny 拒绝 / Auto 不打扰审批者——三态各有断言"
+mutation = "InspectApprovalAsync 的 Approver is null 分支 return null → S04_16 红；Deny 分支 return null → S04_17 红；Auto 分支也走 RequestAsync → S04_18 红（2026-11-23 前两条实测过）"
+
+[[contract]]
+id = "TOOL-RESULT-001"
+section = "3.6"
+document = "docs/core/工具执行.md"
+statement = "轨迹、完成事件、模型回填使用各自约定的数据版本"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.Tools/ToolExecutionPipeline.cs"
+impl_symbols = ["CompleteCall"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/Tools/ToolCallGapTests.cs"
+cases = ["结果进模型前有内容上界"]
+strength = "轨迹存截断版、回填用截断版——两个读者有判据"
+mutation = "Truncate(text) 改回 result"
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.ApplicationTests/Flow/S04ContractTests.cs"
+cases = ["S04_19"]
+strength = "事件里是全文、轨迹里是截断版 + 标志——两个读者分开断言"
+mutation = "CompleteCall 里 ToolCompleted 改传 completed（截断版）→ S04_19 红（2026-11-23 实测）"
+
+[[contract]]
+id = "TOOL-VETO-001"
+section = "3.7"
+document = "docs/core/工具执行.md"
+statement = "结果否决必须停止工具环，同时保留已产生的结果"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.Tools/ToolExecutionPipeline.cs"
+impl_symbols = ["Veto"]
+[[contract.evidence]]
+kind = "gap"
+reason = "否决分支无独立负控：删掉 context.Terminate = true 不会红；否决端口的领域实现也未被任何装配用例注入"
+
+[[contract]]
+id = "TOOL-RECOVERY-001"
+section = "5.2"
+document = "docs/core/工具执行.md"
+statement = "业务动作状态未知时不得直接重放，只能按业务键查证"
+impl_path = "src/Core/Runtime/AgentWorkbench.ActionGateway/ActionRunService.cs"
+impl_symbols = ["QuerySpec"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.ApplicationTests/ActionGateway/TimeoutReconciliationTests.cs"
+cases = ["传输故障后只查证不重放写动作", "对方明确拒绝不触发查证"]
+strength = "代码层：查证分支被走到、重放分支没被走到"
+mutation = "把查证后的判定改成直接重放"
+[[contract.evidence]]
+kind = "gap"
+reason = "外部闭环未验：没有真站点，第 4 句至今只到代码层（见 docs/验收映射.md 第 4 句）"

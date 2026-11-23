@@ -1,8 +1,7 @@
-# DOC-LOOP-001 · 循环驱动（六部件之②）
+# 循环驱动（六部件之②）
 # 字段含义见 scripts/kb_check.py 顶部说明。
 
 [[documents]]
-id = "DOC-LOOP-001"
 path = "docs/core/循环驱动.md"
 watch = [
   "src/Core/Runtime/AgentWorkbench.Runtime.Harness/**",
@@ -32,7 +31,6 @@ symbols = ["InspectToolCall", "InspectCompletion"]
 
 # ── 配置口径：读 appsettings 对账，不在文档里抄一份
 [[documents.fact]]
-id = "FACT-LOOP-CFG-01"
 claim = "迭代预算 6：③ 定义、② 经 CreateLimits 交给框架"
 check = "json"
 path = "src/Host/AgentWorkbench.Webapi/appsettings.json"
@@ -40,7 +38,6 @@ json_path = "Harness:ExecutionControl:MaxIterations"
 expect = 6
 
 [[documents.fact]]
-id = "FACT-LOOP-CFG-02"
 claim = "run 级墙钟生产配 300 秒（代码默认 30，宿主覆盖）"
 check = "json"
 path = "src/Host/AgentWorkbench.Webapi/appsettings.json"
@@ -48,7 +45,6 @@ json_path = "Harness:ExecutionControl:TimeoutSeconds"
 expect = 300
 
 [[documents.fact]]
-id = "FACT-LOOP-CFG-03"
 claim = "连续重复调用上限 3"
 check = "json"
 path = "src/Host/AgentWorkbench.Webapi/appsettings.json"
@@ -56,7 +52,6 @@ json_path = "Harness:ExecutionControl:MaxRepeatedToolCalls"
 expect = 3
 
 [[documents.fact]]
-id = "FACT-LOOP-CFG-04"
 claim = "token 上限 0 = 不限"
 check = "json"
 path = "src/Host/AgentWorkbench.Webapi/appsettings.json"
@@ -65,7 +60,6 @@ expect = 0
 
 # ── 依赖版本：装配常量按这两个版本的默认值取值，升级时要复核
 [[documents.fact]]
-id = "FACT-LOOP-DEP-01"
 claim = "② 所在程序集依赖 MEA 10.10.0"
 check = "csproj"
 path = "src/Core/Runtime/AgentWorkbench.Runtime.Harness/AgentWorkbench.Runtime.Harness.csproj"
@@ -73,7 +67,6 @@ package = "Microsoft.Extensions.AI"
 expect = "10.10.0"
 
 [[documents.fact]]
-id = "FACT-LOOP-DEP-02"
 claim = "② 所在程序集依赖 MAF 1.23.0"
 check = "csproj"
 path = "src/Core/Runtime/AgentWorkbench.Runtime.Harness/AgentWorkbench.Runtime.Harness.csproj"
@@ -82,14 +75,12 @@ expect = "1.23.0"
 
 # ── 测试规模：数 [Fact]/[Theory]，防止测试被删除后文档还留着
 [[documents.fact]]
-id = "FACT-LOOP-TEST-01"
 claim = "循环行为回归锁 8 个方法"
 check = "test-count"
 path = "tests/AgentWorkbench.CoreTests/Runtime/循环驱动.cs"
 expect = 8
 
 [[documents.fact]]
-id = "FACT-LOOP-TEST-02"
 claim = "装配判据 5 个方法"
 check = "test-count"
 path = "tests/AgentWorkbench.CoreTests/Runtime/循环驱动装配.cs"

@@ -1,9 +1,9 @@
 # AGENTS.md
 
-> **校准基线：`b4d5f2c`（2026-11-10）**。本文只写**工作规则、判断、约束**；不写「代码里有什么」。
-> 需要事实时查代码或运行 §1 的命令。**不要相信本文里的路径、数量、版本号、入口名**——它们会漂。
-> 重核方法：`git log b4d5f2c..HEAD --oneline`；非空只说明基线之后又有提交，按 §1 重核相关事实即可，
-> 不必通读全文。
+> **校准基线：`b4d5f2c`（2026-11-10）**。本文只写**工作规则、判断、约束**；不写「代码里有什么」。  
+> 需要事实时查代码或运行 §1 的命令。**不要相信本文里的路径、数量、版本号、入口名**——它们会漂。  
+> 重核方法：`git log b4d5f2c..HEAD --oneline`；非空只说明基线之后又有提交，按 §1 重核相关事实即可，  
+> 不必通读全文。  
 > 定位与范围以 `docs/产品目标与范围.md`（v4.1）为**唯一正本**；本文不重新定义需求。
 
 ## 0. 文档与代码冲突时（最高优先级，先读这条）
@@ -20,22 +20,22 @@
 
 判定标准一句话：**agent 能靠读代码或跑一条命令发现的，就不写进文档。**
 
-| 想知道什么 | 怎么取 |
-| --- | --- |
-| 项目清单 / 依赖方向 | `dotnet sln list`；解析 `*.csproj` 的 `ProjectReference`；门禁见 `DomainSwapAc01Tests` |
-| 目录布局 / 文件数 | `ls src`、`git ls-files` |
-| 迁移号、脚本清单 | `ls src/Core/Foundation/AgentWorkbench.Persistence/Migrations/`、`ls scripts/` |
-| 路由与端点 | 在 `Controllers/*.cs` 里 grep `[Route` / `[Http`；Hub 方法名看 `Hubs/AgentHub.cs` |
-| 工具清单与白名单 | `ToolCatalog`、`appsettings.json` 的 `Harness:Tools:Whitelist` |
-| MCP server 与开关 | `appsettings.json` 的 `Mcp:Servers` / `Mcp:Enabled` |
-| 种子账号 | `Program.cs` 的 `SeedDemoIdentityAsync` |
-| 当前校准点是否过期 | `git log b4d5f2c..HEAD --oneline` |
+| 想知道什么          | 怎么取                                                                            |
+| -------------- | ------------------------------------------------------------------------------ |
+| 项目清单 / 依赖方向    | `dotnet sln list`；解析 `*.csproj` 的 `ProjectReference`；门禁见 `DomainSwapAc01Tests` |
+| 目录布局 / 文件数     | `ls src`、`git ls-files`                                                        |
+| 迁移号、脚本清单       | `ls src/Core/Foundation/AgentWorkbench.Persistence/Migrations/`、`ls scripts/`  |
+| 路由与端点          | 在 `Controllers/*.cs` 里 grep `[Route` / `[Http`；Hub 方法名看 `Hubs/AgentHub.cs`     |
+| 工具清单与白名单       | `ToolCatalog`、`appsettings.json` 的 `Harness:Tools:Whitelist`                   |
+| MCP server 与开关 | `appsettings.json` 的 `Mcp:Servers` / `Mcp:Enabled`                             |
+| 种子账号           | `Program.cs` 的 `SeedDemoIdentityAsync`                                         |
+| 当前校准点是否过期      | `git log b4d5f2c..HEAD --oneline`                                              |
 
 `scripts/contract_matrix.py`、`scripts/schema_dump.py` 是现成的事实生成脚本；优先扩它们，不要手写结果表格。
 
 ## 2. 定位（判断，不是能力清单）
 
-**面向企业私有化部署的受控动作执行底座**：把「模型想做什么」变成「系统真的做了什么」，保证不越权、不重复执行、办错了能追回。
+**面向企业私有化部署的受控动作执行底座**：把「模型想做什么」变成「系统真的做了什么」，保证不越权、不重复执行、办错了能追回。  
 一句话方向：**不做「会聊 ERP 的 AI」，做「能让 AI 安全碰 ERP 的那一层」**。
 
 底座业务完全无关，动作域承载全部业务语义；底座不单独交付。AI 附加到现有产品的前提：**AI 对现有产品的理解必须来自现有产品本身**，手抄的语义会漂移且漂移时不报错。
@@ -63,17 +63,31 @@
 6. 改完跑一次测试。`DocsHygieneTests` 只校验 `docs/` 的**格式卫生**（状态位、相对链接、不重定义写法）；**通过它不等于文档与代码一致**，别拿绿灯当事实核对。
 7. 新增边界时**扩展 `ActionGateway/DomainSwapAc01Tests.cs`**，不要新建「检查文档有没有标题」这类门禁，也不要重建 `ArchitectureTests`（项目已空）。失败信息必须点名**被违反的那条边**，而不是「缺标签」。
 8. 每写一条新能力，先问「有没有能变红的负控」；没有就不写。
-9. **改完代码跑一次 `python scripts/kb_check.py --impact <改动的源码路径>`**：它读 `docs/kb/documents/*.toml`（一份文档一个文件），告诉你该核对哪份文档、关联哪条不变量、证据是否还在。这是提醒不是门禁；watch 映射只写在 TOML 里，不在文档或脚本里复制第二份。
+9. **改完代码跑一次 `python scripts/kb_check.py --impact <改动的源码路径>`**：它读 `docs/kb/documents/*.toml`（一份文档一个文件），告诉你该核对哪份文档、关联哪些契约（含缺口）、证据是否还在。这是提醒不是门禁；watch 映射只写在 TOML 里，不在文档或脚本里复制第二份。
 10. 文档结构检查（D1–D4）真身是 `DocsHygieneTests`，跑 `dotnet test ... --filter FullyQualifiedName~DocsHygieneTests`；口径漂移跑 `python scripts/doc_consistency_check.py`（WARN 需人裁决，**禁止拿数量当质量分**）。`docs/kb/**/*.toml` 只存关系、证据指针与**带 expect 的事实声明**，**不存 status**——验证结果是跑出来的，不是写进去的。
 11. **提交前跑 `./scripts/ci.sh`**（或 `--fast`，约 25 秒）：编译 → 全部测试 → `kb_check` 对账 → 引用漂移 → 口径漂移。它认得 5 条已知红（`KNOWN_REDS`），**只对名单外的红判失败**；修好一条就从名单删一行，别把新红直接加进去当"预期"。
-12. **core 六篇固定同一骨架**：`一、负责什么 / 不负责什么` → `二、机制形状` → `三、为什么这么定` → `四、配置口径` → `五、失败与恢复语义` → `六、怎么算验收通过` → `七、未决问题` → `八、与其他五个部件`。**不写附录、不新增编号节**；框架能力对比与选型材料并进第三节，写成判断句。新增 core 文档照此骨架，节名一字不差。
+12. **core 文档按「生命周期」组织，不按主题罗列**。两种形态，整篇择一、不得混用：
+    - **旧八节**（现存五篇）：`一、负责什么 / 不负责什么` → `二、机制形状` → `三、为什么这么定` → `四、配置口径` → `五、失败与恢复语义` → `六、怎么算验收通过` → `七、未决问题` → `八、与其他五个部件`。
+    - **生命周期体**（④ 工具执行 已迁移）：整体运行模型 → 能力准备 → 调用执行 → 与业务执行的分界 → 失败与恢复 → 配置与架构约束 → 契约验收 → 安全假设与未决问题 → 与其他五个部件。  
+      迁移时整篇一次改完，不为省事半篇混排；不写附录，选型材料写成判断句而不是能力清单。
+13. **往 core 文档加内容前先过四问**：
+    1. 它解释系统为什么这样设计？→ 留在架构文档。
+    2. 它定义跨模块的责任、行为或安全约束？→ 留在架构文档。
+    3. 它描述当前代码 / 配置 / 版本 / 符号 / 测试状态？→ 迁到 `docs/kb/` 或对应事实源（`appsettings`、`csproj`、测试）。
+    4. 它解释某个局部实现怎么写、怎么排查、还要做什么？→ 进代码注释、`docs/plans/` 或 runbook。
+    **「会变」不等于「该迁出」**：能被机器核对、且不属于架构判断的才迁。反过来，不要为减字数把必要的解释删掉——「为什么白名单和审批必须分离」必须留，「白名单现在有哪些工具」必须走。
+
+
+14. **改任何 core 文档之前，先读它自己的「本文为什么存在」段，并且只按它判断**：每份 core 文档服务于两件事——**交接边界**（告诉要改这段代码的人哪里不能碰）和**局部验收标准**（这一格做到什么算完成）。目的段写在文档头部，两者都留在文档里，不迁到别处。
+    **验证标准从文档写**：文档里的边界声明是源头，验收标准逐条从前面的契约推导；测试与 `docs/kb/contracts/*.toml` 是它的执行形式，不得反过来让测试定义边界，也不得从正本六句抄一套下来当部件验收。**部件级验收 ≠ 项目级成功判据**——正本六句回答「项目成了没有」，部件验收回答「这一格做完了没有」，层级不同，不冲突。
+    **不随提问重判**：问「会不会漂」就砍到只剩索引、问「能不能推测试」就写成规格书——都是被问题牵着走，不是按目的判断。目的段不随问题变化；如果目的真的变了，先改目的段，再改文档。
 
 ## 5. 架构红线（约束，不随代码漂移）
 
 - `Domains → Core.Ports` 单向；`Core` 下任何项目**不得** import `Domains`（ADR 0017）。跨边界不共享业务类型，`ActionSpec` 参数对底座是不透明 JSON。
 - 底座五层不得出现业务概念（AC-02 禁词扫描）；换域时底座五层 diff 为空（AC-01）。**这两条由 `DomainSwapAc01Tests` 承担架构门禁**（含源码哈希快照与负控自证）。
-- 四道闸门（Schema / Permission / BusinessRule / Audit）必经且 fail-closed；**人工审批按
-  `ActionSpec.RequiresApproval` 逐个配置，不是全局铁律**（草稿可能免审批）。
+- 四道闸门（Schema / Permission / BusinessRule / Audit）必经且 fail-closed；**人工审批按  
+  `ActionSpec.RequiresApproval` 逐个配置，不是全局铁律**（草稿可能免审批）。  
   **禁止自动重放带副作用的工具调用**。`RiskLevel` 只用于展示，不得参与决策。
 - 工具白名单默认拒绝。MCP 工具**直调、不走四道闸门、不入 `action_trace`**：只接只读工具，写工具必须包装成 `ActionSpec` 经 `propose_action` 提出。
 - `clientMessageId` 是动作判重的起点；新增任何动作入口前先回到 Host 的输入身份契约，把身份放进作用域。
@@ -89,7 +103,6 @@ cd web && npm run build
 
 - **两个测试项目的分法不是按大小，是按被验对象**：`CoreTests` 装 `src/Core` 里模块自己的行为（只引 Core，**不得**出现 Host / Domains 引用，加了就说明归属判错），目录**镜像 `src/Core`**（`Runtime/Tools`、`Runtime/Context`、`Memory/Persistence`…），一个测试目录对上一个项目；`ApplicationTests` 装运行期流程的逐格验收（`S01`–`S10`）、宿主、域与文档门禁。**流程验收一律在 `ApplicationTests`**，即使被测代码在 Core。
 - 两边共用的测试件（脚本化模型、工具环装配器）在 `tests/AgentWorkbench.TestKit`，不复制第二份。单格状态用 `python scripts/stage_gate.py Sxx`，它按 key 选项目。
-
 - 优先用普通 `build`；若本机 restore 环境异常再退回 `--no-restore`（**不要预先假定 restore 一定坏**，用一次试一次）。
 - 前端热更新走 `npm run dev`（5173），后端 `bash scripts/dev.sh`（8080），两者需同时在线；`curl` 打 localhost 加 `--noproxy '*'`。后端改动必须重启，热更新只管前端。
 - 测试双轨：判定型（正例绿 + **负控能红**）与度量型（指标 + 阈值 + 趋势）。LLM / 检索 / 生成类改动必须更新度量指标。**能由脚本判定的禁止用 AI 判定**，LLM 断言用 mock / 回放。

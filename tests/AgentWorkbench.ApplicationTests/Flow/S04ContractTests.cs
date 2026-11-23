@@ -288,6 +288,98 @@ public sealed class S04ContractTests
         Assert.Contains("工具结果", results[0].Result?.ToString());
     }
 
+    // ── 工具级审批：白名单之外的第二维，此前全格没有一个用例构造过 Ask / Deny ──
+
+    // [S04-16] TOOL-APPROVAL-001。负控：把 InspectApprovalAsync 里 limits.Approver is null
+    // 的分支改成 return null（没审批者也放行）→ 工具会被执行、轨迹无归类码 → 本条红。
+    [Fact]
+    public async Task S04_16_请求审批但没有审批者时拒绝且不执行工具()
+    {
+        var tool = CountingTool.NoArg("allowed_tool", () => "不该被执行");
+        var model = new ScriptedChatClient()
+            .ToolCall("allowed_tool")
+            .Reply("换路");
+
+        var result = await PipelineDriver.DriveAsync(
+            model, tool.Tool, new FixedApprovalPolicy(ToolApprovalMode.Ask));
+
+        Assert.Equal(0, tool.Executions);
+        Assert.Single(result.Run.Traces);
+        Assert.Equal(ToolApprovalCodes.Unavailable, result.Run.Traces[0].Error);
+        Assert.NotNull(result.Run.Traces[0].Result);
+        var results = model.Requests[1]
+            .SelectMany(m => m.Contents)
+            .OfType<FunctionResultContent>()
+            .ToList();
+        Assert.Single(results);
+        Assert.Contains(ToolApprovalCodes.Unavailable, results[0].Result?.ToString());
+    }
+
+    // [S04-17] TOOL-APPROVAL-001。负控：InspectApprovalAsync 的 Deny 分支改成 return null → 本条红。
+    [Fact]
+    public async Task S04_17_策略直接拒绝时不执行工具()
+    {
+        var tool = CountingTool.NoArg("allowed_tool", () => "不该被执行");
+        var model = new ScriptedChatClient()
+            .ToolCall("allowed_tool")
+            .Reply("换路");
+
+        var result = await PipelineDriver.DriveAsync(
+            model, tool.Tool, new FixedApprovalPolicy(ToolApprovalMode.Deny));
+
+        Assert.Equal(0, tool.Executions);
+        Assert.Single(result.Run.Traces);
+        Assert.Equal(ToolApprovalCodes.PolicyDenied, result.Run.Traces[0].Error);
+    }
+
+    // [S04-18] TOOL-APPROVAL-001。守的是「不打扰」：Auto 时审批者一次都不该被调用。
+    // 负控：把 Auto 分支改成也走 RequestAsync → approver.Calls == 1 → 本条红。
+    [Fact]
+    public async Task S04_18_自动放行时不打扰审批者()
+    {
+        var approver = new StubApprover(approved: true);
+        var tool = CountingTool.NoArg("allowed_tool", () => "已执行");
+        var model = new ScriptedChatClient()
+            .ToolCall("allowed_tool")
+            .Reply("完成");
+
+        await PipelineDriver.DriveAsync(
+            model, tool.Tool, new FixedApprovalPolicy(ToolApprovalMode.Auto), approver: approver);
+
+        Assert.Equal(1, tool.Executions);
+        Assert.Equal(0, approver.Calls);
+    }
+
+    // ── 完成事件：三个读者拿三个版本，此前只有轨迹那版有判据 ──────────
+
+    // [S04-19] TOOL-RESULT-001。负控：CompleteCall 里 ToolCompleted?.Invoke(completed with
+    // { Result = fullResult ?? result }) 改成 completed（截断版）→ 事件不再是全文 → 本条红。
+    [Fact]
+    public async Task S04_19_完成事件携带完整结果而轨迹存截断版()
+    {
+        const int bound = 20;
+        var payload = new string('X', 200);
+        var tool = CountingTool.NoArg("allowed_tool", () => payload);
+        var model = new ScriptedChatClient()
+            .ToolCall("allowed_tool")
+            .Reply("完成");
+
+        var pipeline = PipelineDriver.NewPipeline(
+            new FixedApprovalPolicy(ToolApprovalMode.Auto), maxResultChars: bound);
+        var run = pipeline.Create(model, new ToolExecutionLimits(MaxIterations: 4));
+        ToolCallTrace? completed = null;
+        run.ToolCompleted += trace => completed = trace;
+
+        await run.Client.GetResponseAsync(
+            [new ChatMessage(ChatRole.User, "开始")],
+            new ChatOptions { Tools = [tool.Tool] });
+
+        Assert.NotNull(completed);
+        Assert.Equal(payload, completed!.Result);
+        Assert.Equal(bound, run.Traces[0].Result!.Length);
+        Assert.True(run.Traces[0].Truncated);
+    }
+
     // ── 装配 ────────────────────────────────────────────────────────
 
     /// <summary>走流式入口跑一次工具环：生产路径是流式，非流式绿不代表这条绿。</summary>

@@ -1,12 +1,13 @@
-# DOC-TOOLS-001 · 工具执行（六部件之④）
+# 工具执行（六部件之④）
 # 字段含义见 scripts/kb_check.py 顶部说明；这里只存关系、证据与带 expect 的事实。
 
 [[documents]]
-id = "DOC-TOOLS-001"
 path = "docs/core/工具执行.md"
 watch = [
   "src/Core/Runtime/AgentWorkbench.Runtime.Tools/**",
   "src/Core/Tools/**",
+  # §4 与 §5.2 讲动作闸边界与「查证不重放」，改动作链会动到这两节的判断
+  "src/Core/Runtime/AgentWorkbench.ActionGateway/**",
 ]
 [[documents.evidence]]
 type = "source"
@@ -40,7 +41,6 @@ path = "tests/AgentWorkbench.ApplicationTests/Flow/S04ContractTests.cs"
 
 # ── 配置口径：读 appsettings 对账，不在文档里抄一份
 [[documents.fact]]
-id = "FACT-TOOLS-CFG-01"
 claim = "启动实际白名单 7 项，比代码默认 6 项多 propose_action"
 check = "json"
 path = "src/Host/AgentWorkbench.Webapi/appsettings.json"
@@ -49,7 +49,6 @@ expect_count = 7
 expect_contains = ["propose_action", "mcp__rag__*", "calculator"]
 
 [[documents.fact]]
-id = "FACT-TOOLS-CFG-02"
 claim = "审批默认 Auto"
 check = "json"
 path = "src/Host/AgentWorkbench.Webapi/appsettings.json"
@@ -57,7 +56,6 @@ json_path = "Harness:Approval:Default"
 expect = "Auto"
 
 [[documents.fact]]
-id = "FACT-TOOLS-CFG-03"
 claim = "审批 Overrides 为空"
 check = "json"
 path = "src/Host/AgentWorkbench.Webapi/appsettings.json"
@@ -65,7 +63,6 @@ json_path = "Harness:Approval:Overrides"
 expect_count = 0
 
 [[documents.fact]]
-id = "FACT-TOOLS-CFG-04"
 claim = "rag server 只放行 search_knowledge"
 check = "json"
 path = "src/Host/AgentWorkbench.Webapi/appsettings.json"
@@ -73,7 +70,6 @@ json_path = "Mcp:Servers:rag:AllowTools"
 expect = ["search_knowledge"]
 
 [[documents.fact]]
-id = "FACT-TOOLS-CFG-05"
 claim = "erpnext server 显式不暴露给模型"
 check = "json"
 path = "src/Host/AgentWorkbench.Webapi/appsettings.json"
@@ -81,7 +77,6 @@ json_path = "Mcp:Servers:erpnext:ExposeToModel"
 expect = false
 
 [[documents.fact]]
-id = "FACT-TOOLS-CFG-06"
 claim = "erpnext 放行 3 项，含 frappe_get_doc"
 check = "json"
 path = "src/Host/AgentWorkbench.Webapi/appsettings.json"
@@ -90,7 +85,6 @@ expect_count = 3
 expect_contains = ["frappe_get_doc", "frappe_create_doc", "frappe_update_doc"]
 
 [[documents.fact]]
-id = "FACT-TOOLS-CFG-07"
 claim = "rag 的 TrustedReadOnly 点名 search_knowledge"
 check = "json"
 path = "src/Host/AgentWorkbench.Webapi/appsettings.json"
@@ -99,7 +93,6 @@ expect = ["search_knowledge"]
 
 # ── 依赖版本：读 csproj 对账
 [[documents.fact]]
-id = "FACT-TOOLS-DEP-01"
 claim = "工具执行引用 MEA 10.10.0"
 check = "csproj"
 path = "src/Core/Runtime/AgentWorkbench.Runtime.Tools/AgentWorkbench.Runtime.Tools.csproj"
@@ -107,7 +100,6 @@ package = "Microsoft.Extensions.AI"
 expect = "10.10.0"
 
 [[documents.fact]]
-id = "FACT-TOOLS-DEP-02"
 claim = "上游循环驱动引用 MAF 1.23.0"
 check = "csproj"
 path = "src/Core/Runtime/AgentWorkbench.Runtime.Harness/AgentWorkbench.Runtime.Harness.csproj"
@@ -115,7 +107,6 @@ package = "Microsoft.Agents.AI"
 expect = "1.23.0"
 
 [[documents.fact]]
-id = "FACT-TOOLS-DEP-03"
 claim = "MCP 客户端 2.4.0"
 check = "csproj"
 path = "src/Core/Tools/AgentWorkbench.Tools.Mcp/AgentWorkbench.Tools.Mcp.csproj"
@@ -124,35 +115,30 @@ expect = "2.4.0"
 
 # ── 测试规模：数 [Fact]/[Theory]，防止测试被删了文档还留着
 [[documents.fact]]
-id = "FACT-TOOLS-TEST-01"
-claim = "S04 有 15 个测试方法"
+claim = "S04 有 19 个测试方法"
 check = "test-count"
 path = "tests/AgentWorkbench.ApplicationTests/Flow/S04ContractTests.cs"
-expect = 15
+expect = 19
 
 [[documents.fact]]
-id = "FACT-TOOLS-TEST-02"
 claim = "ToolCallGapTests 有 3 条"
 check = "test-count"
 path = "tests/AgentWorkbench.CoreTests/Runtime/Tools/ToolCallGapTests.cs"
 expect = 3
 
 [[documents.fact]]
-id = "FACT-TOOLS-TEST-03"
 claim = "超时归类 6 个方法"
 check = "test-count"
 path = "tests/AgentWorkbench.ApplicationTests/ActionGateway/TimeoutClassificationTests.cs"
 expect = 6
 
 [[documents.fact]]
-id = "FACT-TOOLS-TEST-04"
 claim = "超时查证 2 个方法"
 check = "test-count"
 path = "tests/AgentWorkbench.ApplicationTests/ActionGateway/TimeoutReconciliationTests.cs"
 expect = 2
 
 [[documents.fact]]
-id = "FACT-TOOLS-TEST-05"
 claim = "调用超时 4 个方法"
 check = "test-count"
 path = "tests/AgentWorkbench.ApplicationTests/ActionGateway/ToolCallTimeoutTests.cs"

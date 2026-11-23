@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""知识库元数据的读取与校验：documents/*.toml + invariants.toml。
+"""知识库元数据的读取与校验：documents/*.toml + contracts/*.toml。
 
 它只做三件事：
-1. 校验元数据本身没坏：文档 / 证据 / 符号 / 事实都还对得上真实仓库。
-2. --impact：给一个改动路径，按 doc-map 的 watch 列出该核对哪份文档、关联哪条不变量、有哪些事实要复核。
+1. 校验元数据本身没坏：文档 / 证据 / 符号 / 事实 / 契约用例都还对得上真实仓库。
+2. --impact：给一个改动路径，按 doc-map 的 watch 列出该核对哪份文档、关联哪些契约、有哪些事实要复核。
 3. --self-test：证明上面的判断不是空壳。
 
 事实对账（fact）支持三种 check：
@@ -37,6 +37,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 KB = ROOT / "docs" / "kb"
 DOCS_DIR = KB / "documents"
+CONTRACTS_DIR = KB / "contracts"
 
 
 def load(name: str) -> dict:
@@ -58,13 +59,34 @@ def load_documents() -> list[dict]:
         with f.open("rb") as fh:
             data = tomllib.load(fh)
         for d in data.get("documents", []):
-            did = d.get("id", "?")
-            if did in seen:
-                raise SystemExit(f"文档 id 重复：{did}（{seen[did]} 与 {f.name}）——一份文档只能有一个文件")
-            if not d.get("path"):
-                raise SystemExit(f"{f.name} 里的 {did} 缺 path")
-            seen[did] = f.name
+            dpath = d.get("path", "")
+            if not dpath:
+                raise SystemExit(f"{f.name} 缺 path —— 文档用路径做身份，不再发 DOC-* 编号")
+            if dpath in seen:
+                raise SystemExit(f"同一份文档出现在两个文件：{dpath}（{seen[dpath]} 与 {f.name}）")
+            seen[dpath] = f.name
             out.append(d)
+    return out
+
+
+def load_contracts() -> list[dict]:
+    """一份文档一个契约文件：docs/kb/contracts/*.toml，拼成一张表并校验 id 跨文件唯一。"""
+    files = sorted(CONTRACTS_DIR.glob("*.toml"))
+    if not files:
+        raise SystemExit(f"没有契约元数据：{CONTRACTS_DIR.as_posix()}/*.toml")
+    out: list[dict] = []
+    seen: dict[str, str] = {}
+    for f in files:
+        with f.open("rb") as fh:
+            data = tomllib.load(fh)
+        for c in data.get("contract", []):
+            cid = c.get("id", "")
+            if not cid:
+                raise SystemExit(f"{f.name} 里有契约缺 id —— 契约用 ID 做身份")
+            if cid in seen:
+                raise SystemExit(f"契约 id 重复：{cid}（{seen[cid]} 与 {f.name}）")
+            seen[cid] = f.name
+            out.append(c)
     return out
 
 
@@ -204,53 +226,116 @@ def check_symbols(ev: dict) -> str | None:
     return f"符号未出现在该文件：{miss}" if miss else None
 
 
+def section_exists(doc: Path, sec: str) -> bool:
+    """文档里是否存在 `## 2.4` / `### 3.4 …` 这样的小节标题。"""
+    if not sec:
+        return False
+    text = doc.read_text(encoding="utf-8", errors="ignore")
+    return re.search(rf"^#{{2,4}}\s*{re.escape(sec)}(?:\s|$)", text, re.MULTILINE) is not None
+
+
+def check_contract(c: dict) -> str | None:
+    """契约条目自洽性。返回 None = 通过；否则返回失败原因。
+
+    它只验「指向的东西还在」：文档在、小节能定位、实现符号在、有用例则用例名真的在，
+    无判据必须写 gap。不验主张真假——那是测试和人的事。
+    """
+    cid = c.get("id", "?")
+    if c.get("status"):
+        return f"{cid} 写了 status —— TOML 不存验证状态，缺证据用 gap 登记"
+    doc = c.get("document", "")
+    if not doc:
+        return f"{cid} 缺 document"
+    dp = ROOT / doc
+    if not dp.is_file():
+        return f"{cid} 声称所在文档不存在：{doc}"
+    if not section_exists(dp, c.get("section", "")):
+        return f"{cid} 文档里定位不到 §{c.get('section', '')}"
+    ip = c.get("impl_path", "")
+    if ip:
+        fp = ROOT / ip
+        if not fp.is_file():
+            return f"{cid} 实现位置不存在：{ip}"
+        text = fp.read_text(encoding="utf-8", errors="ignore")
+        miss = [s for s in c.get("impl_symbols", []) if s not in text]
+        if miss:
+            return f"{cid} 符号未出现在实现文件：{miss}（{ip}）"
+
+    evs = c.get("evidence", [])
+    if not evs:
+        return f"{cid} 没有任何 evidence —— 无判据必须写 gap，留空会被当成已验"
+    has_test = False
+    for ev in evs:
+        kind = ev.get("kind", "")
+        if kind == "gap":
+            if not ev.get("reason"):
+                return f"{cid} 的 gap 没写 reason —— 空着等于伪装成已验"
+            continue
+        if kind != "test":
+            return f"{cid} 有未知 evidence.kind：{kind!r}（只认 test / gap）"
+        has_test = True
+        tp = ROOT / ev.get("path", "")
+        if not ev.get("path") or not tp.is_file():
+            return f"{cid} 测试文件不存在：{ev.get('path')}"
+        src = tp.read_text(encoding="utf-8", errors="ignore")
+        miss = [x for x in ev.get("cases", []) if x not in src]
+        if miss:
+            return f"{cid} 用例未出现在 {ev['path']}：{miss}（测试改名或删了）"
+    if not has_test and not any(e.get("kind") == "gap" for e in evs):
+        return f"{cid} 既没有 test 也没写 gap —— 无判据必须写明原因"
+    return None
+
+
+def contract_doc_registered(c: dict, doc_paths: set[str]) -> str | None:
+    """契约只属于一份已登记文档。返回 None = 已登记。"""
+    if c.get("document") in doc_paths:
+        return None
+    return f"{c.get('id')} 声称所在文档未登记在 documents/：{c.get('document')}"
+
+
 def validate() -> int:
     doc_map = load_documents()
-    invs = load("invariants.toml").get("invariant", [])
+    contracts = load_contracts()
     bad = 0
     facts = sum(len(d.get("fact", [])) for d in doc_map)
 
-    print(f"documents/：{len(doc_map)} 份文档；invariants：{len(invs)} 条不变量；facts：{facts} 条\n")
+    print(f"documents/：{len(doc_map)} 份文档；contracts：{len(contracts)} 条；facts：{facts} 条\n")
 
     for d in doc_map:
-        did, dpath = d.get("id", "?"), d.get("path", "")
+        dpath = d.get("path", "")
         if not (ROOT / dpath).is_file():
-            print(f"FAIL {did} 文档不存在：{dpath}")
+            print(f"FAIL 文档不存在：{dpath}")
             bad += 1
             continue
         for ev in d.get("evidence", []):
             epath = ev.get("path", "")
             if not (ROOT / epath).is_file():
-                print(f"FAIL {did} 证据不存在：{epath}")
+                print(f"FAIL {dpath} 证据不存在：{epath}")
                 bad += 1
                 continue
             why = check_symbols(ev)
             if why:
-                print(f"FAIL {did} {why}（{epath}）")
+                print(f"FAIL {dpath} {why}")
                 bad += 1
         for fact in d.get("fact", []):
             why = check_fact(fact)
             if why:
-                print(f"FAIL {fact.get('id', '?')} {fact.get('claim', '')} → {why}")
+                print(f"FAIL {fact.get('claim', '')} → {why}")
                 print(f"     FIX：核对 {fact.get('path')}；别为了变绿改 expect，先判断是事实变了还是文档过时")
                 bad += 1
 
-    for inv in invs:
-        iid = inv.get("id", "?")
-        dpath = inv.get("document", "")
-        if dpath and not (ROOT / dpath).is_file():
-            print(f"FAIL {iid} 声称所在文档不存在：{dpath}")
+    for c in contracts:
+        why = check_contract(c)
+        if why:
+            print(f"FAIL {why}")
             bad += 1
-        for ev in inv.get("evidence", []):
-            if ev.get("type") == "source":
-                if not (ROOT / ev.get("path", "")).is_file():
-                    print(f"FAIL {iid} 源码证据不存在：{ev.get('path')}")
-                    bad += 1
-            elif ev.get("type") == "test":
-                ok, detail = test_filter_hits(ev.get("project", ""), ev.get("filter", ""))
-                if not ok:
-                    print(f"FAIL {iid} 测试证据失效：{detail}")
-                    bad += 1
+            continue
+        # 契约只属于一份已登记文档：文档在 documents/ 里没元数据，说明它根本没进映射，
+        # 契约就挂在一个没人维护 watch 的文档上。
+        why = contract_doc_registered(c, {d.get("path") for d in doc_map})
+        if why:
+            print(f"FAIL {why}")
+            bad += 1
 
     if bad:
         print(f"\n元数据坏了 {bad} 处。FIX：改正 path/symbol/expect，或删除已失效条目。")
@@ -263,7 +348,7 @@ def validate() -> int:
 
 def impact(path: str) -> int:
     doc_map = load_documents()
-    invs = load("invariants.toml").get("invariant", [])
+    contracts = load_contracts()
     norm = path.replace("\\", "/").lstrip("./")
 
     hits = [d for d in doc_map if any(match_watch(norm, w) for w in d.get("watch", []))]
@@ -280,28 +365,19 @@ def impact(path: str) -> int:
         return 0
 
     for d in hits:
-        print(f"需要核对：{d['path']}  ({d.get('id', '?')})")
+        print(f"需要核对：{d['path']}")
 
-        # 关联判定两条，任一成立：
-        # ① 不变量直接声称在这份文档里；
-        # ② 不变量的 source 证据落在本文档 watch 的目录范围内。
-        # 不能用「evidence.path 是否出现在文档路径里」——test 型证据没有 path 键，
-        # 空字符串 in 任意串恒为真，会把所有不变量都误关联（已实测踩过）。
-        related = []
-        for i in invs:
-            if i.get("document", "") == d["path"]:
-                related.append(i)
-                continue
-            if any(
-                ev.get("type") == "source"
-                and any(match_watch(ev.get("path", ""), w) for w in d.get("watch", []))
-                for ev in i.get("evidence", [])
-            ):
-                related.append(i)
-        if related:
-            print("  关联不变量：")
-            for i in related:
-                print(f"    {i['id']}  {i['claim']}")
+        own = [c for c in contracts if c.get("document") == d["path"]]
+        if own:
+            print("  关联契约：")
+            for c in own:
+                print(f"    {c['id']}  §{c.get('section')}  {c.get('statement')}")
+                for ev in c.get("evidence", []):
+                    if ev.get("kind") == "test":
+                        n = len(ev.get("cases", []))
+                        print(f"        [test] {Path(ev['path']).name} × {n} 用例 — {ev.get('strength', '')}")
+                    else:
+                        print(f"        [缺口] {ev.get('reason', '')}")
 
         print("  自动检查：")
         ok = (ROOT / d["path"]).is_file()
@@ -316,7 +392,7 @@ def impact(path: str) -> int:
             print(f"    [{mark}] {ev.get('type')}: {p}{extra}")
         for fact in d.get("fact", []):
             why = check_fact(fact)
-            print(f"    [{'PASS' if why is None else 'FAIL'}] {fact.get('id')}  {fact.get('claim')}")
+            print(f"    [{'PASS' if why is None else 'FAIL'}] {fact.get('claim')}")
             if why:
                 print(f"           {why}")
 
@@ -330,7 +406,7 @@ def impact(path: str) -> int:
 
 def list_all() -> int:
     for d in load_documents():
-        print(f"{d.get('id')}  {d['path']}")
+        print(f"{d['path']}")
         for w in d.get("watch", []):
             print(f"    watch  {w}")
         for ev in d.get("evidence", []):
@@ -338,10 +414,17 @@ def list_all() -> int:
             tail = f"  symbols={','.join(syms)}" if syms else ""
             print(f"    {ev.get('type'):6} {ev.get('path')}{tail}")
         for fact in d.get("fact", []):
-            print(f"    fact   {fact.get('id')}  [{fact.get('check')}]  {fact.get('claim')}")
+            print(f"    fact   [{fact.get('check')}]  {fact.get('claim')}")
     print()
-    for i in load("invariants.toml").get("invariant", []):
-        print(f"{i['id']}  {i['claim']}")
+    for c in load_contracts():
+        print(f"{c['id']}  §{c.get('section')}  {c.get('statement')}")
+        for ev in c.get("evidence", []):
+            if ev.get("kind") == "test":
+                print(f"    test  {Path(ev['path']).name}  {', '.join(ev.get('cases', []))}")
+                print(f"          {ev.get('strength', '')}")
+                print(f"          变异点：{ev.get('mutation', '未写')}")
+            else:
+                print(f"    gap   {ev.get('reason', '')}")
     return 0
 
 
@@ -392,13 +475,67 @@ def self_test() -> int:
 
     try:
         docs = load_documents()
-        load("invariants.toml")
-        ids = [d.get("id") for d in docs]
-        print(f"  documents/*.toml 可解析：{len(docs)} 份，id 唯一={len(ids) == len(set(ids))}")
-        if len(ids) != len(set(ids)):
+        cs = load_contracts()
+        paths = [d.get("path") for d in docs]
+        print(f"  documents/*.toml 可解析：{len(docs)} 份，path 唯一={len(paths) == len(set(paths))}")
+        print(f"  contracts/*.toml 可解析：{len(cs)} 条，id 唯一（重复会在加载时报错）")
+        if len(paths) != len(set(paths)):
             ok = False
     except SystemExit as e:
         print(f"  FAIL {e}")
+        ok = False
+
+    # 契约：小节定位不是恒真；无判据必须写 gap；用例名必须真的在测试文件里
+    doc = ROOT / "docs/core/工具执行.md"
+    hit, miss_sec = section_exists(doc, "3.4"), section_exists(doc, "99.9")
+    print(f"  契约小节定位 3.4 -> {hit}（期望 True） / 99.9 -> {miss_sec}（期望 False）")
+    if not hit or miss_sec:
+        ok = False
+
+    base = {
+        "id": "X-TEST-001",
+        "document": "docs/core/工具执行.md",
+        "section": "3.4",
+        "impl_path": "src/Core/Runtime/AgentWorkbench.Runtime.Tools/ToolExecutionPipeline.cs",
+        "impl_symbols": ["InspectApprovalAsync"],
+    }
+    no_ev = dict(base, evidence=[])
+    why = check_contract(no_ev)
+    print(f"  契约没有任何 evidence -> {why or 'PASS'}（期望 FAIL）")
+    if why is None:
+        ok = False
+
+    good_gap = dict(base, evidence=[{"kind": "gap", "reason": "占位缺口说明"}])
+    print(f"  契约只写 gap -> {check_contract(good_gap) or 'PASS'}（期望 PASS）")
+    if check_contract(good_gap) is not None:
+        ok = False
+
+    empty_gap = dict(base, evidence=[{"kind": "gap", "reason": ""}])
+    print(f"  契约 gap 不写原因 -> {'FAIL 被识别' if check_contract(empty_gap) else 'PASS'}（期望 FAIL）")
+    if check_contract(empty_gap) is None:
+        ok = False
+
+    with_status = dict(good_gap, status="verified")
+    print(f"  契约偷写 status -> {'FAIL 被识别' if check_contract(with_status) else 'PASS'}（期望 FAIL）")
+    if check_contract(with_status) is None:
+        ok = False
+
+    s04 = "tests/AgentWorkbench.ApplicationTests/Flow/S04ContractTests.cs"
+    good_case = dict(base, evidence=[{"kind": "test", "path": s04, "cases": ["S04_08"]}])
+    print(f"  契约用例真的存在 -> {check_contract(good_case) or 'PASS'}（期望 PASS）")
+    if check_contract(good_case) is not None:
+        ok = False
+
+    bad_case = dict(base, evidence=[{"kind": "test", "path": s04, "cases": ["S04_99_不存在"]}])
+    print(f"  契约用例写错 -> {'FAIL 被识别' if check_contract(bad_case) else 'PASS'}（期望 FAIL）")
+    if check_contract(bad_case) is None:
+        ok = False
+
+    registered = {"docs/core/工具执行.md"}
+    hit_reg = contract_doc_registered(good_gap, registered)
+    miss_reg = contract_doc_registered(dict(good_gap, document="docs/没登记.md"), registered)
+    print(f"  契约挂已登记文档 -> {hit_reg or 'PASS'}（期望 PASS） / 挂未登记 -> {'FAIL 被识别' if miss_reg else 'PASS'}（期望 FAIL）")
+    if hit_reg is not None or miss_reg is None:
         ok = False
 
     print("自检通过。" if ok else "自检失败。")

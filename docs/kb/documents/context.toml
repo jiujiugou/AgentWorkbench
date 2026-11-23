@@ -1,8 +1,7 @@
-# DOC-CONTEXT-001 · 请求装配（六部件之一）
+# 请求装配（六部件之一）
 # 字段含义见 scripts/kb_check.py 顶部说明。
 
 [[documents]]
-id = "DOC-CONTEXT-001"
 path = "docs/core/请求装配.md"
 watch = [
   "src/Core/Runtime/AgentWorkbench.Runtime.Context/**",
@@ -33,21 +32,18 @@ path = "tests/AgentWorkbench.ArchitectureTests/ContextBoundaryTests.cs"
 
 # ── 测试规模：数 [Fact]/[Theory]，防止测试被删了文档还留着
 [[documents.fact]]
-id = "FACT-CONTEXT-TEST-01"
 claim = "请求装配的注入等价判据 6 个方法"
 check = "test-count"
 path = "tests/AgentWorkbench.CoreTests/Runtime/请求装配.cs"
 expect = 6
 
 [[documents.fact]]
-id = "FACT-CONTEXT-TEST-02"
 claim = "装配产物形态判据 3 个方法"
 check = "test-count"
 path = "tests/AgentWorkbench.CoreTests/Runtime/Context/ContextComposerTests.cs"
 expect = 3
 
 [[documents.fact]]
-id = "FACT-CONTEXT-TEST-03"
 claim = "结构门禁 2 条（F37 业务词、F38 指令走请求选项）"
 check = "test-count"
 path = "tests/AgentWorkbench.ArchitectureTests/ContextBoundaryTests.cs"
