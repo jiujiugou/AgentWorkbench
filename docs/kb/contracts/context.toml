@@ -1,0 +1,98 @@
+# 架构契约 · 请求装配（六部件之①）
+#
+# 一份文档一个契约文件：docs/kb/contracts/<与 documents/ 同名>.toml。
+# 字段与禁令见 contracts/tools.toml 头部；这里只列本格契约。
+
+[[contract]]
+id = "CONTEXT-INJECT-001"
+section = "3.3"
+document = "docs/core/请求装配.md"
+statement = "指令每轮随请求下发、不写进会话历史，且两级选项不重复注入"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.Harness/AgentHarnessService.cs"
+impl_symbols = ["BuildAgent"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/请求装配.cs"
+cases = ["指令每轮都在模型请求里_且不写进会话历史", "生产装配形状_run级带Temperature时指令不丢也不重复"]
+strength = "最小装配：两轮请求都带指令、序列化历史里读不到；run 级只带温度时不丢也不重复"
+mutation = "把指令塞进 run.Messages → 第一条红；agent 与 run 两级都写 Instructions → 第二条红"
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/Context/ContextComposerTests.cs"
+cases = ["F36_无指令时Instructions为null"]
+strength = "装配产物层：无指令时是 null 而不是空串"
+mutation = "把 Compose 的指令三元表达式改成返回空串"
+
+[[contract]]
+id = "CONTEXT-SHAPE-001"
+section = "3.1"
+document = "docs/core/请求装配.md"
+statement = "本轮输入独立成一条 user 消息，不与历史拼成文本"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.Context/RequestContextComposer.cs"
+impl_symbols = ["Compose"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/请求装配.cs"
+cases = ["本轮输入独立成一条user消息_不与历史拼接"]
+strength = "最小装配：消息文本恰为本轮输入，历史另在会话里"
+mutation = "把历史与本轮输入拼成一个字符串再发 → 本条红"
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/Context/ContextComposerTests.cs"
+cases = ["F31_装配产物_消息只有本轮输入且不含system"]
+strength = "装配产物层：消息只有一条且无 system"
+mutation = "在 Compose 里追加一条 system 消息"
+
+[[contract]]
+id = "CONTEXT-NOWRAP-001"
+section = "3.3"
+document = "docs/core/请求装配.md"
+statement = "指令不挂 AIContextProviders、不自写装饰器，工具环外不包第二层"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.Harness/AgentHarnessService.cs"
+impl_symbols = ["BuildAgent"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.ArchitectureTests/ContextBoundaryTests.cs"
+cases = ["F38_指令走ChatOptions_不挂AIContextProviders_不自写装饰器"]
+strength = "代码行扫描：三个旧形态（provider / 装饰器 / Wrap）零命中，注入点唯一"
+mutation = "挂回 AIContextProviders 或 ContextInjectingChatClient → 门禁红"
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/请求装配.cs"
+cases = ["工具往返完整留在会话历史_守卫与轨迹不丢", "UseProvidedChatClientAsIs时工具环不另包一层_两轮模型请求"]
+strength = "最小装配：工具往返在历史里、守卫轨迹不丢；提供的客户端不被另包"
+mutation = "在装配入口包一层客户端 → 第二条红"
+[[contract.evidence]]
+kind = "gap"
+reason = "端到端负控未建立：上面跑在最小装配上，真实工具环下 ③ 的 loop_detected、④ 的 tool_error 归类仍只有单测证据"
+
+[[contract]]
+id = "CONTEXT-SWITCH-001"
+section = "4.1"
+document = "docs/core/请求装配.md"
+statement = "停用或空指令时零注入，能力位与真实接线一致"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.Context/ContextOptions.cs"
+impl_symbols = ["Enabled"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/Context/ContextComposerTests.cs"
+cases = ["F35_停用态零注入_且能力位与真实接线一致"]
+strength = "装配产物层：指令恒 null 且能力位同步关"
+mutation = "停用态仍返回指令，或能力位不跟着关 → 本条红"
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/请求装配.cs"
+cases = ["没有指令时请求里不出现system消息_空包对照"]
+strength = "最小装配：请求里无 system 消息、Instructions 为空"
+mutation = "给 ChatOptions.Instructions 塞值 → 本条红"
+
+[[contract]]
+id = "CONTEXT-SNAPSHOT-001"
+section = "7.1"
+document = "docs/core/请求装配.md"
+statement = "模型实际收到的完整输入应可独立回放，不从两份局部快照拼凑"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.Context/RequestContextComposer.cs"
+impl_symbols = ["Compose"]
+[[contract.evidence]]
+kind = "gap"
+reason = "没有一次请求的全量快照：现只有请求选项与落库历史两份局部证据，拼不出模型实际收到什么；未决问题第 2 条"

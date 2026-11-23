@@ -1,0 +1,100 @@
+# 架构契约 · 循环驱动（六部件之②）
+#
+# 一份文档一个契约文件：docs/kb/contracts/<与 documents/ 同名>.toml。
+# 字段与禁令见 contracts/tools.toml 头部；这里只列本格契约。
+
+[[contract]]
+id = "LOOP-FRAME-001"
+section = "3.1"
+document = "docs/core/循环驱动.md"
+statement = "循环由框架函数调用环驱动，本仓不自研 while；两条出口共用同一执行核心"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.Harness/AgentHarnessService.cs"
+impl_symbols = ["BuildAgent", "FinishSucceededAsync"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/循环驱动.cs"
+cases = ["两轮不同工具的回填_模型被再问一次且两轮都进轨迹", "一轮里两个工具调用_都执行且都留痕", "模型不再调工具时自然收尾_不多问一次"]
+strength = "真 run 回归锁：结果回填后模型被再问、批次调用都留痕、自然收尾不多问"
+mutation = "手写自己的 while / 把再问模型那步去掉 → 第一条红；丢掉批次中第二个调用 → 第二条红"
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/循环驱动.cs"
+cases = ["同步与流式两条出口_循环次数与终态一致", "流式文本分片不丢_拼成完整答复"]
+strength = "两条出口共用核心的证据：循环次数与终态一致、流式分片不丢"
+mutation = "给流式另建一条执行环 → 两条出口终态不一致时红"
+
+[[contract]]
+id = "LOOP-BUDGET-001"
+section = "3.4"
+document = "docs/core/循环驱动.md"
+statement = "迭代预算经限额对象交给框架的工具调用环，工具执行次数不超过上限"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.Harness/LoopAssembly.cs"
+impl_symbols = ["CreateLimits"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/循环驱动.cs"
+cases = ["MaximumIterations落地_工具执行次数不超过上限"]
+strength = "真 run 回归锁：限额真的落到环上"
+mutation = "CreateLimits 不把 MaxIterations 传给 MaximumIterationsPerRequest → 本条红"
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/循环驱动装配.cs"
+cases = ["四个选项真的落到框架的函数调用环上", "装配决定由Harness一处产出_预算来自Loop"]
+strength = "装配判据：读框架实例属性，不是扫源码字符串"
+mutation = "Harness 直接设 MaximumIterations、绕过 LoopAssembly → 后一条红"
+
+[[contract]]
+id = "LOOP-OPTIONS-001"
+section = "3.5"
+document = "docs/core/循环驱动.md"
+statement = "环上四项显式赋值，默认值与装配常量一致，不靠框架隐式默认"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.Harness/LoopAssembly.cs"
+impl_symbols = ["MaxConsecutiveErrorsPerRequest", "AllowConcurrentInvocation", "TerminateOnUnknownCalls"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/循环驱动装配.cs"
+cases = ["四个选项真的落到框架的函数调用环上", "限额的默认值与LoopAssembly的决定一致_两处不得漂移", "Harness的两处装配都走LoopAssembly_不再散着填框架选项", "装配约定的开关仍是代码行_不是只剩注释"]
+strength = "装配判据 + 代码行门禁：四项落到实例属性、常量与默认一致、装配一处产出、开关仍是代码行"
+mutation = "改 LoopAssembly 任一常量 → 默认值那条红；删掉 UseProvidedChatClientAsIs 代码行只留注释 → 门禁红（2026-11-23 实测过假绿已修）"
+
+[[contract]]
+id = "LOOP-FINISH-001"
+section = "3.6"
+document = "docs/core/循环驱动.md"
+statement = "跑满迭代时收尾主动问一次分类，不把被逼收口当成主动答完"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.Harness/AgentHarnessService.cs"
+impl_symbols = ["FinishSucceededAsync"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/循环驱动装配.cs"
+cases = ["装配决定由Harness一处产出_预算来自Loop"]
+strength = "装配层：收尾分类所需的预算来自 ③、经本格翻译，接口存在"
+mutation = "让收尾不再调用 InspectCompletion → ③ 的跑满判定判据红"
+[[contract.evidence]]
+kind = "gap"
+reason = "本格「主动问一次」这个动作本身没有独立判据；有的只是 ③ 的收尾判定测试，接线这一段没有断言"
+
+[[contract]]
+id = "LOOP-SHAPE-001"
+section = "3.3"
+document = "docs/core/循环驱动.md"
+statement = "普通与流式两条出口的循环次数与终态一致，流式分片不丢"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.Harness/AgentHarnessService.cs"
+impl_symbols = ["FinishSucceededAsync"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/循环驱动.cs"
+cases = ["同步与流式两条出口_循环次数与终态一致", "流式文本分片不丢_拼成完整答复", "中途取消_循环停下且记录声明不完整", "未知工具被回填而不是终止_框架默认行为回归锁"]
+strength = "真 run 回归锁：两出口一致、分片不丢、取消停下、未知工具回填"
+mutation = "给流式单独设不同的迭代上限 → 第一条红"
+
+[[contract]]
+id = "LOOP-SNAPSHOT-001"
+section = "3.7"
+document = "docs/core/循环驱动.md"
+statement = "一次 run 的中间轮次可观察，收尾分类不靠私有计数猜"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.Harness/AgentHarnessService.cs"
+impl_symbols = ["BuildAgent"]
+[[contract.evidence]]
+kind = "gap"
+reason = "框架响应只暴露正文与用量，中间轮次留在消息列表里；Harness 看不到循环中间态，「跑满」靠 ③ 私有迭代计数猜。缺口 A 是设计缺口，不是加测试能补的"
