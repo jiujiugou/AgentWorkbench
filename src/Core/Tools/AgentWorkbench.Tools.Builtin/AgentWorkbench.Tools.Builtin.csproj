@@ -18,6 +18,6 @@
       除此之外本工程仍只放「与业务无关的最小工具集」，不得出现任何能力名或参数含义判断。
     -->
     <ProjectReference Include="..\..\Ports\AgentWorkbench.Ports.csproj" />
-    <ProjectReference Include="..\..\Runtime\AgentWorkbench.ActionGateway\AgentWorkbench.ActionGateway.csproj" />
+    <ProjectReference Include="..\..\Actions\AgentWorkbench.ActionGateway\AgentWorkbench.ActionGateway.csproj" />
   </ItemGroup>
 </Project>

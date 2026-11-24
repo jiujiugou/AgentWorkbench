@@ -160,7 +160,9 @@ public sealed class 模块引用门禁
     private static bool IsPorts(string path) => path.StartsWith("src/Core/Ports/", StringComparison.OrdinalIgnoreCase);
     private static bool IsKernel(string path)
         => path.StartsWith("src/Core/Runtime/", StringComparison.OrdinalIgnoreCase)
-           || path.StartsWith("src/Core/Engineering/", StringComparison.OrdinalIgnoreCase);
+           || path.StartsWith("src/Core/Engineering/", StringComparison.OrdinalIgnoreCase)
+           // 动作执行内核：不驱动模型循环，但同样只该看见契约、不该看见存储。
+           || path.StartsWith("src/Core/Actions/", StringComparison.OrdinalIgnoreCase);
     private static bool IsStorage(string path)
         => path.EndsWith("AgentWorkbench.Persistence.csproj", StringComparison.OrdinalIgnoreCase)
            || path.EndsWith("AgentWorkbench.Domain.csproj", StringComparison.OrdinalIgnoreCase);
@@ -178,6 +180,9 @@ public sealed class 模块引用门禁
            || path.StartsWith("src/Core/Engineering/", StringComparison.OrdinalIgnoreCase)
            || path.StartsWith("src/Core/Ports/", StringComparison.OrdinalIgnoreCase)
            || path.StartsWith("src/Core/Tools/", StringComparison.OrdinalIgnoreCase)
+           // 动作执行内核不在一次 run 的链上，但同样是底座：换动作域不改（AC-01 已证），
+           // 且它实现的是 Ports 里的动作契约。按「性质」而非「目录」判，这条符合底座定义。
+           || path.StartsWith("src/Core/Actions/", StringComparison.OrdinalIgnoreCase)
            || path.Equals("src/Core/Foundation/AgentWorkbench.Shared/AgentWorkbench.Shared.csproj",
                StringComparison.OrdinalIgnoreCase)
            || path.Equals("src/Core/Knowledge/AgentWorkbench.Knowledge.Abstractions/AgentWorkbench.Knowledge.Abstractions.csproj",
