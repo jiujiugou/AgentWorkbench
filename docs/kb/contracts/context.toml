@@ -1,7 +1,7 @@
 # 架构契约 · 请求装配（六部件之①）
 #
 # 一份文档一个契约文件：docs/kb/contracts/<与 documents/ 同名>.toml。
-# 字段与禁令见 contracts/tools.toml 头部；这里只列本格契约。
+# 字段与禁令见 docs/TOML模板.md；这里只列本格契约。
 
 [[contract]]
 id = "CONTEXT-INJECT-001"

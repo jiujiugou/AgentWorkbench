@@ -1,0 +1,163 @@
+# 架构契约 · 状态与记忆（六部件之⑤）
+#
+# 一份文档一个契约文件：docs/kb/contracts/<与 documents/ 同名>.toml。
+# 字段与禁令见 docs/TOML模板.md；这里只列本格契约。
+# 本格多数失败是「记忆缺口」而非 run 失败，所以契约集中在三类状态的分界与降级；
+# 每条都对应正文一个小节，小节号由 kb_check 校验能定位到。
+
+[[contract]]
+id = "MEM-SOURCE-001"
+section = "2.6"
+document = "docs/core/状态与记忆.md"
+statement = "模型历史与界面消息是两个源，形状不同是正常结果；失败轮与删会话的边界按现状锁定"
+impl_path = "src/Implementations/AgentWorkbench.Memory.Persistence/ChatHistory/SqliteChatHistoryProvider.cs"
+impl_symbols = ["SqliteChatHistoryProvider", "ProvideChatHistoryAsync", "StoreChatHistoryAsync"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Memory/Persistence/HistoryDivergenceTests.cs"
+cases = ["X1_一轮带工具的对话_两个源条数不同且工具只在一个源里", "X4_指令随请求下发但不进会话历史"]
+strength = "事实锁定：一轮工具对话界面 2 条、模型 4 条；工具往返只在模型那份；指令不在落库历史"
+mutation = "把工具往返塞进界面消息 → X1 红；把指令塞进 run.Messages → X4 红"
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Memory/Persistence/HistoryDivergenceTests.cs"
+cases = ["X2_失败的run_界面留下孤立提问_模型历史里没有答复", "X3_删除会话_界面历史消失_模型历史留下"]
+strength = "边界锁定：只钉住现状形状（失败轮模型历史为空、删会话模型历史留下），不定义应该怎样"
+mutation = "StoreChatHistoryAsync 改成无条件下落库 → X2 红；给 chat_messages 加级联外键 → X3 红"
+
+[[contract]]
+id = "MEM-APPEND-001"
+section = "2.5"
+document = "docs/core/状态与记忆.md"
+statement = "对话历史只追加不覆盖，不逐轮强制落库；一轮结束时工具往返已在历史里"
+impl_path = "src/Implementations/AgentWorkbench.Memory.Persistence/ChatHistory/SqliteChatHistoryProvider.cs"
+impl_symbols = ["StoreChatHistoryAsync", "RequestMessages"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Memory/Persistence/HistoryDivergenceTests.cs"
+cases = ["X1_一轮带工具的对话_两个源条数不同且工具只在一个源里"]
+strength = "追加形状：RequestMessages + ResponseMessages 正好是本轮新增，不含旧历史"
+mutation = "把 StoreChatHistoryAsync 改成整份覆盖 → 第二轮后历史只剩最后一轮，X1 条数红"
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Memory/Persistence/HistoryProviderProbeTests.cs"
+cases = ["H1"]
+strength = "实测探针：一轮 run 结束时工具调用与结果都已在历史里，是不开逐轮强制落库的依据"
+mutation = "让 provider 只存 RequestMessages 不存 ResponseMessages → 探针读不到工具结果，红"
+
+[[contract]]
+id = "MEM-GATE-001"
+section = "4.1"
+document = "docs/core/状态与记忆.md"
+statement = "同一 sessionId 同一时刻只放一个 run，抢不到回拒绝码而不是排队；重复释放不影响后来者"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.Session/SessionRunGate.cs"
+impl_symbols = ["ISessionRunGate", "TryAcquireAsync", "Handle"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/Session/SessionRunGateTests.cs"
+cases = ["G1_同一会话只能有一个持有者_释放后可重抢", "G2_不同会话可以同时持有", "G3_重复释放不影响后来的持有者"]
+strength = "纯闸逻辑：占用/让位/会话隔离/重复释放幂等；G3 的 _released 守卫负控实测过"
+mutation = "TryAcquireAsync 恒返回句柄 → G1 红；字典键改常量 → G2 红；去掉 _released → G3 红"
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/Session/SessionRunGateTests.cs"
+cases = ["G4_会话被占用时_run返回session_busy而不执行", "G5_会话被占用时_流式入口只产出一个session_busy事件"]
+strength = "两个入口的拒绝语义：RunId=0 不落轨迹；流式产事件不抛异常"
+mutation = "删掉 RunAsync 抢闸分支 → 走到空依赖抛异常，G4 红；流式改成抛异常 → G5 红"
+
+[[contract]]
+id = "MEM-SCOPE-001"
+section = "4.2"
+document = "docs/core/状态与记忆.md"
+statement = "记忆作用域按当前 run 绑定、嵌套按栈恢复；并发 run 不串，模型不能指定别人的 id"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.Session/MemoryScopeAccessor.cs"
+impl_symbols = ["IMemoryScopeAccessor", "AsyncLocalMemoryScopeAccessor", "Begin"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Runtime/Session/MemoryScopeAccessorTests.cs"
+cases = ["S1_Begin期间有值_释放后回到null", "S2_嵌套按栈恢复", "S3_重复Dispose不破坏外层", "S4_并发run的作用域互不串"]
+strength = "纯作用域逻辑：嵌套恢复、幂等释放、并发隔离；S4 是「用 AsyncLocal 而非字段」的直接证据"
+mutation = "Dispose 直接置 null → S2 红；去掉 Interlocked → S3 红；换成私有字段 → S4 两条都变同一 id，红"
+[[contract.evidence]]
+kind = "gap"
+reason = "模型工具侧只暴露「本作用域 / 全局」粗粒度开关，没有针对「模型传 scope_id 被拒绝」的专门断言；MemoryToolScope.Resolve 的降级分支未被契约覆盖"
+
+[[contract]]
+id = "MEM-SNAPSHOT-001"
+section = "5.1"
+document = "docs/core/状态与记忆.md"
+statement = "会话快照损坏时降级重建而不永久卡死，取消不被降级分支误吞"
+impl_path = "src/Implementations/AgentWorkbench.Memory.Persistence/SqliteSessionStore.cs"
+impl_symbols = ["SqliteSessionStore", "GetOrCreateAsync", "DeserializeAsync"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.ApplicationTests/Runtime/SessionContractTests.cs"
+cases = ["F45_CorruptSnapshot_Degrades_WithoutThrowing"]
+strength = "半验：内存臂真跑（坏 factory 不抛、只新建、不碰序列化），落库臂只做源码结构断言（catch→LogWarning→Delete→新建顺序）"
+mutation = "删掉落库版 catch (Exception ex) 降级分支或删 LogWarning → 结构断言红；去掉 Clone → Clone 断言红"
+[[contract.evidence]]
+kind = "gap"
+reason = "落库臂从没真跑过：测试项目未引用 Memory.Persistence，「两臂同契约」实为内存版两个独立实例逐字段比；要真验需加 ProjectReference 并喂同一套用例给 SqliteSessionStore"
+
+[[contract]]
+id = "MEM-DEFAULT-001"
+section = "6.1"
+document = "docs/core/状态与记忆.md"
+statement = "长期记忆默认必须停用，且停用不删数据；工具注册表也不得默认放行"
+impl_path = "src/Core/Runtime/AgentWorkbench.Runtime.Session/MemoryOptions.cs"
+impl_symbols = ["LongTermEnabled"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.ApplicationTests/Runtime/SessionContractTests.cs"
+cases = ["F47_DefaultOptions_LongTermEnabledMustBeFalse", "F47_OptionsSource_DefaultMustBeFalse", "F47_ToolRegistration_FallbackMustBeFalse"]
+strength = "预期红：当前默认 true、注册表 fallback ?? true，与 ADR 0016 §五 A5/B7 相反；红是正确验收信号"
+mutation = "把 MemoryOptions 默认改 false、注册表 ?? true 改 ?? false → 三条转绿（这才是正确实现）"
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.ApplicationTests/Runtime/SessionContractTests.cs"
+cases = ["F46_TwoArms_SameContract"]
+strength = "绿对照：同一对象里 SessionEnabled 默认 true，证明「读默认值」的方式有效，不是恒红断言"
+mutation = "改成断言任何默认值都为 false → 绿对照应红"
+
+[[contract]]
+id = "MEM-RECALL-001"
+section = "3.4"
+document = "docs/core/状态与记忆.md"
+statement = "同覆盖键写入沿用标识与使用次数；召回候选上限只截断取库条数，回写使用次数不阻断召回"
+impl_path = "src/Implementations/AgentWorkbench.Memory.Persistence/SqliteLongTermMemoryStore.cs"
+impl_symbols = ["RememberAsync", "RecallAsync", "CandidateK"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Memory/Persistence/LongTermMemoryTests.cs"
+cases = ["L1_同作用域同覆盖键写两次_只留一条且标识与使用次数沿用", "L2_不带覆盖键的写入_每次都新增一条", "L10_候选上限真的截断取库条数"]
+strength = "结构化语义：覆盖只更新内容列、无键每次新增、CandidateK 截断取库（不是注入条数）"
+mutation = "UPSERT 改成先删后插 → L1 红；拿 content 当去重键 → L2 红；LIMIT 恒默认 → L10 红"
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Memory/Persistence/LongTermMemoryTests.cs"
+cases = ["L11_召回回写使用次数与最后使用时间"]
+strength = "回写使用次数与最后使用时间；写失败不阻断召回是代码层语义（Touch 后返回对象按命中补统计）"
+mutation = "删掉 TouchAsync 调用 → 仓储里 use_count 停在 0，L11 红"
+[[contract.evidence]]
+kind = "gap"
+reason = "「Touch 写失败不阻断召回」只有代码层结构（catch 后照常返回），没有一条测试注入会抛的仓储来验失败路径仍返回结果"
+
+[[contract]]
+id = "MEM-RETENTION-001"
+section = "5.2"
+document = "docs/core/状态与记忆.md"
+statement = "过期会话行与过保留期记忆行被真删，未过期与不过期的都不动；读路径过滤不算清理"
+impl_path = "src/Implementations/AgentWorkbench.Memory.Persistence/MemoryRetentionService.cs"
+impl_symbols = ["MemoryRetentionService", "SweepOnceAsync", "PurgeExpiredAsync"]
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Memory/Persistence/MemoryRetentionTests.cs"
+cases = ["R1_过期会话行被清_未过期与不过期的都保留", "R2_过保留期的记忆行被真删_未过期的保留", "R3_关掉会话TTL时不清会话行"]
+strength = "直接查仓储而非查召回——证明行真被删；TTL 关时不扫会话行"
+mutation = "DeleteExpiredAsync 的 <= 改 < → R1 边界行红；不调 PurgeExpiredAsync → R2 红；去掉 TTL>0 守卫 → R3 红"
+[[contract.evidence]]
+kind = "test"
+path = "tests/AgentWorkbench.CoreTests/Memory/Persistence/LongTermMemoryTests.cs"
+cases = ["L7_过保留期的记忆不再被召回"]
+strength = "读路径过滤：过保留期的记忆不进召回候选（与后台清理是两件事，各自有判据）"
+mutation = "去掉查询里的 expires_at 过滤 → L7 红"

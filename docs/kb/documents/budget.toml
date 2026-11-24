@@ -1,5 +1,5 @@
 # 终止与预算（六部件之③）
-# 字段含义见 scripts/kb_check.py 顶部说明。
+# 字段含义见 docs/TOML模板.md。
 
 [[documents]]
 path = "docs/core/终止与预算.md"

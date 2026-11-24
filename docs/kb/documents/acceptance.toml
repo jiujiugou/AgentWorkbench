@@ -1,15 +1,15 @@
 # 验收映射（横向：六句 → 证据）
-# 字段含义见 scripts/kb_check.py 顶部说明。
+# 字段含义见 docs/TOML模板.md。
 
 [[documents]]
 path = "docs/验收映射.md"
 watch = [
-  "src/Core/Runtime/AgentWorkbench.ActionGateway/**",
+  "src/Core/Actions/AgentWorkbench.ActionGateway/**",
   "src/Domains/**",
 ]
 [[documents.evidence]]
 type = "source"
-path = "src/Core/Runtime/AgentWorkbench.ActionGateway/ActionRunService.cs"
+path = "src/Core/Actions/AgentWorkbench.ActionGateway/ActionRunService.cs"
 [[documents.evidence]]
 type = "test"
 path = "tests/AgentWorkbench.ApplicationTests/ActionGateway/DomainSwapAc01Tests.cs"

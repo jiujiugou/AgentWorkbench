@@ -1,5 +1,5 @@
 # 状态与记忆（六部件之⑤）
-# 字段含义见 scripts/kb_check.py 顶部说明。
+# 字段含义见 docs/TOML模板.md。
 
 [[documents]]
 path = "docs/core/状态与记忆.md"

@@ -1,5 +1,5 @@
 # 运行期流程（横向：宿主侧）
-# 字段含义见 scripts/kb_check.py 顶部说明。
+# 字段含义见 docs/TOML模板.md。
 
 [[documents]]
 path = "docs/host/运行期流程.md"

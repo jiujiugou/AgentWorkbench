@@ -1,5 +1,5 @@
 # 轨迹与观测（六部件之⑥）
-# 字段含义见 scripts/kb_check.py 顶部说明。
+# 字段含义见 docs/TOML模板.md。
 
 [[documents]]
 path = "docs/core/轨迹与观测.md"

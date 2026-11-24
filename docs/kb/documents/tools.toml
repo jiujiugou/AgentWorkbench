@@ -1,5 +1,5 @@
 # 工具执行（六部件之④）
-# 字段含义见 scripts/kb_check.py 顶部说明；这里只存关系、证据与带 expect 的事实。
+# 字段含义见 docs/TOML模板.md；这里只存关系、证据与带 expect 的事实。
 
 [[documents]]
 path = "docs/core/工具执行.md"
@@ -7,7 +7,7 @@ watch = [
   "src/Core/Runtime/AgentWorkbench.Runtime.Tools/**",
   "src/Core/Tools/**",
   # §4 与 §5.2 讲动作闸边界与「查证不重放」，改动作链会动到这两节的判断
-  "src/Core/Runtime/AgentWorkbench.ActionGateway/**",
+  "src/Core/Actions/AgentWorkbench.ActionGateway/**",
 ]
 [[documents.evidence]]
 type = "source"

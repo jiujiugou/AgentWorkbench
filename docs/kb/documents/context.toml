@@ -1,5 +1,5 @@
 # 请求装配（六部件之一）
-# 字段含义见 scripts/kb_check.py 顶部说明。
+# 字段含义见 docs/TOML模板.md。
 
 [[documents]]
 path = "docs/core/请求装配.md"

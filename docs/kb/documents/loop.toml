@@ -1,5 +1,5 @@
 # 循环驱动（六部件之②）
-# 字段含义见 scripts/kb_check.py 顶部说明。
+# 字段含义见 docs/TOML模板.md。
 
 [[documents]]
 path = "docs/core/循环驱动.md"
